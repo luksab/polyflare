@@ -189,16 +189,16 @@ impl State {
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            let num_segments: u16 = 120;
+            let num_segments: u16 = 60;
 
             let mut vertexes = vec![Vertex {
                 position: [0.0, 0.0, 0.0],
-                color: [0.5, 0.0, 0.5],
+                color: [0.5, 0.5, 0.5],
             }];
             for i in 0..num_segments {
                 let angle = (1.0 - ((i as f32) / (num_segments as f32))) * 2.0 * PI;
                 vertexes.push(Vertex {
-                    position: [angle.sin(), angle.cos(), 0.0],
+                    position: [angle.sin() * 0.9, angle.cos() * 0.9, 0.0],
                     color: [0.5, 0.0, 0.5],
                 })
             }
