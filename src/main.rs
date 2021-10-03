@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, time::{Duration, SystemTime}};
 
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
@@ -22,7 +22,7 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 1.0,
 );
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
+const NUM_INSTANCES_PER_ROW: u32 = 100;
 
 struct Camera {
     eye: cgmath::Point3<f32>,
@@ -139,7 +139,7 @@ impl CameraController {
 
                     self.dx += x;
                     self.dy += y;
-                    println!("{}, {}", x, y);
+                    // println!("{}, {}", x, y);
                 }
                 false
             }
@@ -168,8 +168,9 @@ impl CameraController {
         let forward_mag = forward.magnitude();
 
         camera.eye =
-            camera.target - (forward + right * 0.01 * self.dx as f32).normalize() * forward_mag;
+            camera.target - (forward + right * 0.01 * self.dx as f32 + camera.up * 0.01 * self.dy as f32).normalize() * forward_mag;
         self.dx = 0.0;
+        self.dy = 0.0;
 
         if self.is_right_pressed {
             // Rescale the distance between the target and eye so
@@ -337,7 +338,7 @@ impl State {
             aspect: config.width as f32 / config.height as f32,
             fovy: 45.0,
             znear: 0.1,
-            zfar: 100.0,
+            zfar: 10000.0,
         };
         let camera_controller = CameraController::new(0.2);
 
@@ -521,7 +522,6 @@ impl State {
                 let is_pressed = *state == ElementState::Pressed;
                 match keycode {
                     VirtualKeyCode::Period => {
-                        println!("{}", is_pressed);
                         if !is_pressed {
                             self.mouse_grabbed = !self.mouse_grabbed;
                             self.window.set_cursor_grab(is_pressed).unwrap();
@@ -623,7 +623,17 @@ fn main() {
     // State::new uses async code, so we're going to wait for it to finish
     let mut state = pollster::block_on(State::new(window));
 
+
+    let mut last_sec = SystemTime::now();
+    let mut frames_since_last_sec = 0;
+
     event_loop.run(move |event, _, control_flow| {
+        if last_sec.elapsed().unwrap().as_secs() > 1 {
+            last_sec = SystemTime::now();
+            println!("fps: {}", frames_since_last_sec);
+            frames_since_last_sec = 0;
+        }
+
         *control_flow = ControlFlow::Poll;
         match event {
             Event::MainEventsCleared => state.window.request_redraw(),
@@ -656,7 +666,7 @@ fn main() {
             Event::RedrawRequested(_) => {
                 state.update();
                 match state.render() {
-                    Ok(_) => {}
+                    Ok(_) => {frames_since_last_sec += 1;}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                     // The system is out of memory, we should probably quit
