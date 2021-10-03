@@ -1768,6 +1768,7 @@ dependencies = [
  "image",
  "log",
  "pollster",
+ "rayon",
  "tobj",
  "wgpu",
  "winit",
