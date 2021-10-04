@@ -1,5 +1,3 @@
-use std::ops::Index;
-
 use cgmath::{Quaternion, Vector3};
 
 use crate::model;
