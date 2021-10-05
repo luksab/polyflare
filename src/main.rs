@@ -6,7 +6,7 @@ use std::{
     iter,
     time::{Instant, SystemTime},
 };
-use wgpu::{util::DeviceExt, Extent3d, SurfaceTexture, TextureView};
+use wgpu::{util::DeviceExt, Extent3d, TextureView};
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::{
     dpi::{PhysicalPosition, Position},
@@ -642,13 +642,6 @@ fn main() {
     //
     // Set up dear imgui wgpu renderer
     //
-    let clear_color = wgpu::Color {
-        r: 0.1,
-        g: 0.2,
-        b: 0.3,
-        a: 1.0,
-    };
-
     let renderer_config = RendererConfig {
         texture_format: state.config.format,
         ..Default::default()
@@ -657,7 +650,6 @@ fn main() {
     let mut renderer = Renderer::new(&mut imgui, &state.device, &state.queue, renderer_config);
 
     let mut last_frame = Instant::now();
-    let mut demo_open = true;
 
     let mut last_cursor = None;
 
