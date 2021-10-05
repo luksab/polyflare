@@ -7,9 +7,10 @@ use std::{
     time::{Instant, SystemTime},
 };
 use wgpu::{util::DeviceExt, Extent3d, SurfaceTexture, TextureView};
+use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::{
     dpi::{PhysicalPosition, Position},
-    event::*,
+    event::MouseButton,
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
@@ -51,6 +52,8 @@ struct State {
     camera_bind_group: wgpu::BindGroup,
     mouse_grabbed: bool,
     mouse_pressed: bool,
+    mouse_moved: bool,
+    last_mouse_pos: PhysicalPosition<f64>,
 
     obj_model: model::Model,
     instances: Vec<Instance>,
@@ -417,6 +420,8 @@ impl State {
             camera_bind_group,
             camera_uniform,
             mouse_grabbed: false,
+            mouse_moved: false,
+            last_mouse_pos: PhysicalPosition { x: 0., y: 0. },
             instances,
             instance_buffer,
             depth_texture,
@@ -443,35 +448,65 @@ impl State {
         }
     }
 
-    fn input(&mut self, event: &DeviceEvent) -> bool {
+    fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
-            DeviceEvent::Key(KeyboardInput {
-                virtual_keycode: Some(key),
-                state,
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(key),
+                        state,
+                        ..
+                    },
                 ..
-            }) => self.camera_controller.process_keyboard(*key, *state),
-            DeviceEvent::MouseWheel { delta, .. } => {
+            } => self.camera_controller.process_keyboard(*key, *state),
+            WindowEvent::MouseWheel { delta, .. } => {
                 self.camera_controller.process_scroll(delta);
                 true
             }
-            DeviceEvent::Button {
-                button: 1, // Left Mouse Button
+            WindowEvent::MouseInput {
+                button: MouseButton::Left, // Left Mouse Button
                 state,
+                ..
             } => {
                 self.mouse_pressed = *state == ElementState::Pressed;
                 true
             }
-            DeviceEvent::MouseMotion { delta } => {
-                if self.mouse_grabbed || self.mouse_pressed {
-                    self.camera_controller.process_mouse(delta.0, delta.1);
-                    if self.mouse_grabbed {
-                        self.window
-                            .set_cursor_position(Position::new(PhysicalPosition {
-                                x: self.size.width / 2,
-                                y: self.size.height / 2,
-                            }))
-                            .unwrap();
+            WindowEvent::CursorMoved { position, .. } => {
+                if self.mouse_pressed {
+                    let x = position.x - self.last_mouse_pos.x;
+                    let y = position.y - self.last_mouse_pos.y;
+                    self.last_mouse_pos = *position;
+                    self.camera_controller.process_mouse(x, y);
+                } else if self.mouse_grabbed {
+                    if self.mouse_moved {
+                        self.mouse_moved = false;
+                        return true;
                     }
+                    let x = (self.size.width / 2) as f64;
+                    let y = (self.size.height / 2) as f64;
+                    println!(
+                        "position: {:?} x:{} y:{} diff: {},{}",
+                        position,
+                        x,
+                        y,
+                        position.x - x,
+                        position.y - y
+                    );
+
+                    // self.last_mouse_pos = PhysicalPosition {
+                    //     x: position.x,
+                    //     y: position.y,
+                    // };
+                    self.last_mouse_pos = PhysicalPosition { x, y };
+                    self.camera_controller
+                        .process_mouse(position.x - x, position.y - y);
+                    self.window
+                        .set_cursor_position(Position::new(PhysicalPosition {
+                            x: self.size.width / 2,
+                            y: self.size.height / 2,
+                        }))
+                        .unwrap();
+                    self.mouse_moved = true;
                 }
                 true
             }
@@ -670,16 +705,12 @@ fn main() {
         *control_flow = ControlFlow::Poll;
         match event {
             Event::MainEventsCleared => state.window.request_redraw(),
-            Event::DeviceEvent {
-                ref event,
-                .. // We're not using device_id currently
-            } => {
-                state.input(event);
-            }
+
             Event::WindowEvent {
                 ref event,
                 window_id,
             } if window_id == state.window.id() => {
+                state.input(event);
                 match event {
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
@@ -756,16 +787,21 @@ fn main() {
                 let dt = now - last_render_time;
                 last_render_time = now;
                 state.update(dt);
-                let depth_texture =
-                        texture::Texture::create_depth_texture(&state.device, &wgpu::SurfaceConfiguration {
-                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                            format: state.surface.get_preferred_format(&state.adapter).unwrap(),
-                            width: state.size.width,
-                            height: state.size.height,
-                            present_mode: wgpu::PresentMode::Fifo,
-                        }, "depth_texture");
+                let depth_texture = texture::Texture::create_depth_texture(
+                    &state.device,
+                    &wgpu::SurfaceConfiguration {
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        format: state.surface.get_preferred_format(&state.adapter).unwrap(),
+                        width: state.size.width,
+                        height: state.size.height,
+                        present_mode: wgpu::PresentMode::Fifo,
+                    },
+                    "depth_texture",
+                );
                 match state.render(&view, &depth_texture.view) {
-                    Ok(_) => {frames_since_last_sec += 1;}
+                    Ok(_) => {
+                        frames_since_last_sec += 1;
+                    }
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                     // The system is out of memory, we should probably quit
@@ -824,25 +860,28 @@ fn main() {
                             TextureConfig {
                                 size: wgpu::Extent3d {
                                     width: (example_size[0] * scale[0]) as u32,
-                                height: (example_size[1] * scale[1]) as u32,
+                                    height: (example_size[1] * scale[1]) as u32,
                                     ..Default::default()
                                 },
-                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                    | wgpu::TextureUsages::TEXTURE_BINDING,
                                 format: Some(wgpu::TextureFormat::Depth32Float),
                                 ..Default::default()
                             },
                         );
-                        renderer.textures.replace(
-                            depth_texture_id,
-                            depth_texture,
-                        );
+                        renderer.textures.replace(depth_texture_id, depth_texture);
                     }
 
                     // Only render example to example_texture if thw window is not collapsed
                     state.update(dt);
 
-                    match state.render(&renderer.textures.get(example_texture_id).unwrap().view(), &renderer.textures.get(depth_texture_id).unwrap().view()) {
-                        Ok(_) => {frames_since_last_sec += 1;}
+                    match state.render(
+                        &renderer.textures.get(example_texture_id).unwrap().view(),
+                        &renderer.textures.get(depth_texture_id).unwrap().view(),
+                    ) {
+                        Ok(_) => {
+                            frames_since_last_sec += 1;
+                        }
                         // Reconfigure the surface if lost
                         Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                         // The system is out of memory, we should probably quit
@@ -852,8 +891,9 @@ fn main() {
                     }
                 }
 
-                let mut encoder: wgpu::CommandEncoder =
-                state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                let mut encoder: wgpu::CommandEncoder = state
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
                 if last_cursor != Some(ui.mouse_cursor()) {
                     last_cursor = Some(ui.mouse_cursor());
