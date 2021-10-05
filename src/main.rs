@@ -38,6 +38,7 @@ struct State {
     surface: wgpu::Surface,
     size: winit::dpi::PhysicalSize<u32>,
     device: wgpu::Device,
+    adapter: wgpu::Adapter,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
@@ -404,6 +405,7 @@ impl State {
             window,
             surface,
             device,
+            adapter,
             queue,
             config,
             render_pipeline,
@@ -500,7 +502,11 @@ impl State {
         );
     }
 
-    fn render(&mut self, view: &TextureView) -> Result<(), wgpu::SurfaceError> {
+    fn render(
+        &mut self,
+        view: &TextureView,
+        depth_view: &TextureView,
+    ) -> Result<(), wgpu::SurfaceError> {
         //let output = self.surface.get_current_frame()?.output;
         // let view = output
         //     .texture
@@ -529,7 +535,7 @@ impl State {
                     },
                 }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
+                    view: depth_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true,
@@ -637,6 +643,21 @@ fn main() {
 
     let texture = Texture::new(&state.device, &renderer, texture_config);
     let example_texture_id = renderer.textures.insert(texture);
+    let depth_texture = Texture::new(
+        &state.device,
+        &renderer,
+        TextureConfig {
+            size: wgpu::Extent3d {
+                width: example_size[0] as u32,
+                height: example_size[1] as u32,
+                ..Default::default()
+            },
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            format: Some(wgpu::TextureFormat::Depth32Float),
+            ..Default::default()
+        },
+    );
+    let depth_texture_id = renderer.textures.insert(depth_texture);
 
     event_loop.run(move |event, _, control_flow| {
         if last_sec.elapsed().unwrap().as_secs() > 1 {
@@ -735,7 +756,15 @@ fn main() {
                 let dt = now - last_render_time;
                 last_render_time = now;
                 state.update(dt);
-                match state.render(&view) {
+                let depth_texture =
+                        texture::Texture::create_depth_texture(&state.device, &wgpu::SurfaceConfiguration {
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                            format: state.surface.get_preferred_format(&state.adapter).unwrap(),
+                            width: state.size.width,
+                            height: state.size.height,
+                            present_mode: wgpu::PresentMode::Fifo,
+                        }, "depth_texture");
+                match state.render(&view, &depth_texture.view) {
                     Ok(_) => {frames_since_last_sec += 1;}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
@@ -751,16 +780,17 @@ fn main() {
                 imgui::Window::new("Hello World")
                     .size([512.0, 512.0], Condition::FirstUseEver)
                     .build(&ui, || {
+                        // new_example_size = Some(ui.content_region_avail());
+                        // ui.text("Hello world!");
+                        // ui.text("This...is...imgui-rs on WGPU!");
+                        // ui.separator();
+                        // let mouse_pos = ui.io().mouse_pos;
+                        // ui.text(format!(
+                        //     "Mouse Position: ({:.1},{:.1})",
+                        //     mouse_pos[0], mouse_pos[1]
+                        // ));
                         new_example_size = Some(ui.content_region_avail());
-                        ui.text("Hello world!");
-                        ui.text("This...is...imgui-rs on WGPU!");
-                        ui.separator();
-                        let mouse_pos = ui.io().mouse_pos;
-                        ui.text(format!(
-                            "Mouse Position: ({:.1},{:.1})",
-                            mouse_pos[0], mouse_pos[1]
-                        ));
-                        //imgui::Image::new(example_texture_id, new_example_size.unwrap()).build(&ui);
+                        imgui::Image::new(example_texture_id, new_example_size.unwrap()).build(&ui);
                     });
                 imgui::Window::new("Hello too")
                     .size([400.0, 200.0], Condition::FirstUseEver)
@@ -788,19 +818,38 @@ fn main() {
                             example_texture_id,
                             Texture::new(&state.device, &renderer, texture_config),
                         );
+                        let depth_texture = Texture::new(
+                            &state.device,
+                            &renderer,
+                            TextureConfig {
+                                size: wgpu::Extent3d {
+                                    width: (example_size[0] * scale[0]) as u32,
+                                height: (example_size[1] * scale[1]) as u32,
+                                    ..Default::default()
+                                },
+                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                                format: Some(wgpu::TextureFormat::Depth32Float),
+                                ..Default::default()
+                            },
+                        );
+                        renderer.textures.replace(
+                            depth_texture_id,
+                            depth_texture,
+                        );
                     }
 
-                    // // Only render example to example_texture if thw window is not collapsed
-                    // state.update(dt);
-                    // match state.render(&renderer.textures.get(example_texture_id).unwrap().view()) {
-                    //     Ok(_) => {frames_since_last_sec += 1;}
-                    //     // Reconfigure the surface if lost
-                    //     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                    //     // The system is out of memory, we should probably quit
-                    //     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    //     // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    //     Err(e) => eprintln!("{:?}", e),
-                    // }
+                    // Only render example to example_texture if thw window is not collapsed
+                    state.update(dt);
+
+                    match state.render(&renderer.textures.get(example_texture_id).unwrap().view(), &renderer.textures.get(depth_texture_id).unwrap().view()) {
+                        Ok(_) => {frames_since_last_sec += 1;}
+                        // Reconfigure the surface if lost
+                        Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                        // The system is out of memory, we should probably quit
+                        Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                        // All other errors (Outdated, Timeout) should be resolved by the next frame
+                        Err(e) => eprintln!("{:?}", e),
+                    }
                 }
 
                 let mut encoder: wgpu::CommandEncoder =
