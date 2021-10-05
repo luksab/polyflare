@@ -20,3 +20,6 @@ pollster = "0.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 anyhow = "1.0"
 tobj = "3.0"
+imgui = "0.8"
+imgui-winit-support = "0.8"
+imgui-wgpu = "0.17.1"

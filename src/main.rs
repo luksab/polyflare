@@ -1,7 +1,12 @@
 use cgmath::prelude::*;
+use imgui::*;
+use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use rayon::prelude::*;
-use std::{iter, time::SystemTime};
-use wgpu::util::DeviceExt;
+use std::{
+    iter,
+    time::{Instant, SystemTime},
+};
+use wgpu::{util::DeviceExt, Extent3d, SurfaceTexture, TextureView};
 use winit::{
     dpi::{PhysicalPosition, Position},
     event::*,
@@ -51,7 +56,7 @@ struct State {
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
     depth_texture: texture::Texture,
-    
+
     light_uniform: LightUniform,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
@@ -495,11 +500,11 @@ impl State {
         );
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_frame()?.output;
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+    fn render(&mut self, view: &TextureView) -> Result<(), wgpu::SurfaceError> {
+        //let output = self.surface.get_current_frame()?.output;
+        // let view = output
+        //     .texture
+        //     .create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoder = self
             .device
@@ -567,10 +572,77 @@ fn main() {
     let mut last_render_time = std::time::Instant::now();
     let mut last_sec = SystemTime::now();
     let mut frames_since_last_sec = 0;
+    let mut fps = 0;
+
+    // Set up dear imgui
+    let mut imgui = imgui::Context::create();
+    let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
+    platform.attach_window(
+        imgui.io_mut(),
+        &state.window,
+        imgui_winit_support::HiDpiMode::Default,
+    );
+    imgui.set_ini_filename(None);
+
+    let hidpi_factor = 1.; //state.window.scale_factor();
+
+    let font_size = (13.0 * hidpi_factor) as f32;
+    imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+
+    imgui.fonts().add_font(&[FontSource::DefaultFontData {
+        config: Some(imgui::FontConfig {
+            oversample_h: 1,
+            pixel_snap_h: true,
+            size_pixels: font_size,
+            ..Default::default()
+        }),
+    }]);
+
+    //
+    // Set up dear imgui wgpu renderer
+    //
+    let clear_color = wgpu::Color {
+        r: 0.1,
+        g: 0.2,
+        b: 0.3,
+        a: 1.0,
+    };
+
+    let renderer_config = RendererConfig {
+        texture_format: state.config.format,
+        ..Default::default()
+    };
+
+    let mut renderer = Renderer::new(&mut imgui, &state.device, &state.queue, renderer_config);
+
+    let mut last_frame = Instant::now();
+    let mut demo_open = true;
+
+    let mut last_cursor = None;
+
+    let mut example_size: [f32; 2] = [640.0, 480.0];
+
+    // Stores a texture for displaying with imgui::Image(),
+    // also as a texture view for rendering into it
+
+    let texture_config = TextureConfig {
+        size: wgpu::Extent3d {
+            width: example_size[0] as u32,
+            height: example_size[1] as u32,
+            ..Default::default()
+        },
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        ..Default::default()
+    };
+
+    let texture = Texture::new(&state.device, &renderer, texture_config);
+    let example_texture_id = renderer.textures.insert(texture);
+
     event_loop.run(move |event, _, control_flow| {
         if last_sec.elapsed().unwrap().as_secs() > 1 {
             last_sec = SystemTime::now();
-            println!("fps: {}", frames_since_last_sec);
+            fps = frames_since_last_sec;
+            // println!("fps: {}", frames_since_last_sec);
             frames_since_last_sec = 0;
         }
 
@@ -621,12 +693,49 @@ fn main() {
                     _ => {}
                 }
             }
-            Event::RedrawRequested(_) => {
+            // Event::RedrawRequested(_) => {
+            //     let now = std::time::Instant::now();
+            //     let dt = now - last_render_time;
+            //     last_render_time = now;
+            //     state.update(dt);
+            //     match state.render() {
+            //         Ok(_) => {frames_since_last_sec += 1;}
+            //         // Reconfigure the surface if lost
+            //         Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+            //         // The system is out of memory, we should probably quit
+            //         Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+            //         // All other errors (Outdated, Timeout) should be resolved by the next frame
+            //         Err(e) => eprintln!("{:?}", e),
+            //     }
+            // }
+            Event::RedrawEventsCleared => {
+                let now = Instant::now();
+                imgui.io_mut().update_delta_time(now - last_frame);
+                last_frame = now;
+
+                let frame = match state.surface.get_current_frame() {
+                    Ok(frame) => frame,
+                    Err(e) => {
+                        eprintln!("dropped frame: {:?}", e);
+                        return;
+                    }
+                };
+                platform
+                    .prepare_frame(imgui.io_mut(), &state.window)
+                    .expect("Failed to prepare frame");
+                let ui = imgui.frame();
+
+                let view = frame
+                    .output
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+
+                // Render example normally at background
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
                 state.update(dt);
-                match state.render() {
+                match state.render(&view) {
                     Ok(_) => {frames_since_last_sec += 1;}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
@@ -635,8 +744,97 @@ fn main() {
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
                     Err(e) => eprintln!("{:?}", e),
                 }
+
+                // Store the new size of Image() or None to indicate that the window is collapsed.
+                let mut new_example_size: Option<[f32; 2]> = None;
+
+                imgui::Window::new("Hello World")
+                    .size([512.0, 512.0], Condition::FirstUseEver)
+                    .build(&ui, || {
+                        new_example_size = Some(ui.content_region_avail());
+                        ui.text("Hello world!");
+                        ui.text("This...is...imgui-rs on WGPU!");
+                        ui.separator();
+                        let mouse_pos = ui.io().mouse_pos;
+                        ui.text(format!(
+                            "Mouse Position: ({:.1},{:.1})",
+                            mouse_pos[0], mouse_pos[1]
+                        ));
+                        //imgui::Image::new(example_texture_id, new_example_size.unwrap()).build(&ui);
+                    });
+                imgui::Window::new("Hello too")
+                    .size([400.0, 200.0], Condition::FirstUseEver)
+                    .position([400.0, 200.0], Condition::FirstUseEver)
+                    .build(&ui, || {
+                        ui.text(format!("Framerate: {:?}", fps));
+                    });
+
+                if let Some(size) = new_example_size {
+                    // Resize render target, which is optional
+                    if size != example_size && size[0] >= 1.0 && size[1] >= 1.0 {
+                        example_size = size;
+                        let scale = &ui.io().display_framebuffer_scale;
+                        let texture_config = TextureConfig {
+                            size: Extent3d {
+                                width: (example_size[0] * scale[0]) as u32,
+                                height: (example_size[1] * scale[1]) as u32,
+                                ..Default::default()
+                            },
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                                | wgpu::TextureUsages::TEXTURE_BINDING,
+                            ..Default::default()
+                        };
+                        renderer.textures.replace(
+                            example_texture_id,
+                            Texture::new(&state.device, &renderer, texture_config),
+                        );
+                    }
+
+                    // // Only render example to example_texture if thw window is not collapsed
+                    // state.update(dt);
+                    // match state.render(&renderer.textures.get(example_texture_id).unwrap().view()) {
+                    //     Ok(_) => {frames_since_last_sec += 1;}
+                    //     // Reconfigure the surface if lost
+                    //     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    //     // The system is out of memory, we should probably quit
+                    //     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    //     // All other errors (Outdated, Timeout) should be resolved by the next frame
+                    //     Err(e) => eprintln!("{:?}", e),
+                    // }
+                }
+
+                let mut encoder: wgpu::CommandEncoder =
+                state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+                if last_cursor != Some(ui.mouse_cursor()) {
+                    last_cursor = Some(ui.mouse_cursor());
+                    platform.prepare_render(&ui, &state.window);
+                }
+
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load, // Do not clear
+                            // load: wgpu::LoadOp::Clear(clear_color),
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                });
+
+                renderer
+                    .render(ui.render(), &state.queue, &state.device, &mut rpass)
+                    .expect("Rendering failed");
+
+                drop(rpass);
+
+                state.queue.submit(Some(encoder.finish()));
             }
             _ => {}
         }
+        platform.handle_event(imgui.io_mut(), &state.window, &event);
     });
 }
