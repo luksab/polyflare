@@ -653,38 +653,42 @@ fn main() {
 
     let mut last_cursor = None;
 
-    let mut example_size: [f32; 2] = [640.0, 480.0];
+    let mut window_render_size: [f32; 2] = [640.0, 480.0];
 
     // Stores a texture for displaying with imgui::Image(),
     // also as a texture view for rendering into it
-
-    let texture_config = TextureConfig {
-        size: wgpu::Extent3d {
-            width: example_size[0] as u32,
-            height: example_size[1] as u32,
-            ..Default::default()
-        },
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        ..Default::default()
-    };
-
-    let texture = Texture::new(&state.device, &renderer, texture_config);
-    let example_texture_id = renderer.textures.insert(texture);
-    let depth_texture = Texture::new(
-        &state.device,
-        &renderer,
-        TextureConfig {
+    let window_texture_id = {
+        let texture_config = TextureConfig {
             size: wgpu::Extent3d {
-                width: example_size[0] as u32,
-                height: example_size[1] as u32,
+                width: window_render_size[0] as u32,
+                height: window_render_size[1] as u32,
                 ..Default::default()
             },
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            format: Some(wgpu::TextureFormat::Depth32Float),
             ..Default::default()
-        },
-    );
-    let depth_texture_id = renderer.textures.insert(depth_texture);
+        };
+
+        let texture = Texture::new(&state.device, &renderer, texture_config);
+        renderer.textures.insert(texture)
+    };
+
+    let depth_texture_id = {
+        let depth_texture = Texture::new(
+            &state.device,
+            &renderer,
+            TextureConfig {
+                size: wgpu::Extent3d {
+                    width: window_render_size[0] as u32,
+                    height: window_render_size[1] as u32,
+                    ..Default::default()
+                },
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                format: Some(wgpu::TextureFormat::Depth32Float),
+                ..Default::default()
+            },
+        );
+        renderer.textures.insert(depth_texture)
+    };
 
     event_loop.run(move |event, _, control_flow| {
         if last_sec.elapsed().unwrap().as_secs() > 1 {
@@ -774,7 +778,7 @@ fn main() {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                // Render example normally at background
+                // Render normally at background
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
@@ -803,7 +807,7 @@ fn main() {
                 }
 
                 // Store the new size of Image() or None to indicate that the window is collapsed.
-                let mut new_example_size: Option<[f32; 2]> = None;
+                let mut new_window_size: Option<[f32; 2]> = None;
 
                 imgui::Window::new("Hello World")
                     .size([512.0, 512.0], Condition::FirstUseEver)
@@ -817,8 +821,8 @@ fn main() {
                         //     "Mouse Position: ({:.1},{:.1})",
                         //     mouse_pos[0], mouse_pos[1]
                         // ));
-                        new_example_size = Some(ui.content_region_avail());
-                        imgui::Image::new(example_texture_id, new_example_size.unwrap()).build(&ui);
+                        new_window_size = Some(ui.content_region_avail());
+                        imgui::Image::new(window_texture_id, new_window_size.unwrap()).build(&ui);
                     });
                 imgui::Window::new("Hello too")
                     .size([400.0, 200.0], Condition::FirstUseEver)
@@ -827,15 +831,15 @@ fn main() {
                         ui.text(format!("Framerate: {:?}", fps));
                     });
 
-                if let Some(size) = new_example_size {
+                if let Some(size) = new_window_size {
                     // Resize render target, which is optional
-                    if size != example_size && size[0] >= 1.0 && size[1] >= 1.0 {
-                        example_size = size;
+                    if size != window_render_size && size[0] >= 1.0 && size[1] >= 1.0 {
+                        window_render_size = size;
                         let scale = &ui.io().display_framebuffer_scale;
                         let texture_config = TextureConfig {
                             size: Extent3d {
-                                width: (example_size[0] * scale[0]) as u32,
-                                height: (example_size[1] * scale[1]) as u32,
+                                width: (window_render_size[0] * scale[0]) as u32,
+                                height: (window_render_size[1] * scale[1]) as u32,
                                 ..Default::default()
                             },
                             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
@@ -843,7 +847,7 @@ fn main() {
                             ..Default::default()
                         };
                         renderer.textures.replace(
-                            example_texture_id,
+                            window_texture_id,
                             Texture::new(&state.device, &renderer, texture_config),
                         );
                         let depth_texture = Texture::new(
@@ -851,8 +855,8 @@ fn main() {
                             &renderer,
                             TextureConfig {
                                 size: wgpu::Extent3d {
-                                    width: (example_size[0] * scale[0]) as u32,
-                                    height: (example_size[1] * scale[1]) as u32,
+                                    width: (window_render_size[0] * scale[0]) as u32,
+                                    height: (window_render_size[1] * scale[1]) as u32,
                                     ..Default::default()
                                 },
                                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
@@ -868,7 +872,7 @@ fn main() {
                     state.update(dt);
 
                     match state.render(
-                        &renderer.textures.get(example_texture_id).unwrap().view(),
+                        &renderer.textures.get(window_texture_id).unwrap().view(),
                         &renderer.textures.get(depth_texture_id).unwrap().view(),
                     ) {
                         Ok(_) => {
