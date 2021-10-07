@@ -15,6 +15,7 @@ in pkgs.mkShell {
     pkgs.vulkan-headers
     pkgs.vulkan-loader
     pkgs.vulkan-validation-layers
+    pkgs.renderdoc
   ];
 
   LD_LIBRARY_PATH = with pkgs.xlibs; "${pkgs.mesa}/lib:${libX11}/lib:${libXcursor}/lib:${libXxf86vm}/lib:${libXi}/lib:${pkgs.xorg.libXrandr}/lib";
