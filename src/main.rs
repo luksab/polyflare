@@ -625,29 +625,33 @@ fn main() {
     );
     imgui.set_ini_filename(None);
 
-    let hidpi_factor = 1.; //state.window.scale_factor();
+    {
+        let hidpi_factor = state.window.scale_factor();
 
-    let font_size = (13.0 * hidpi_factor) as f32;
-    imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+        let font_size = (13.0 * hidpi_factor) as f32;
+        imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
 
-    imgui.fonts().add_font(&[FontSource::DefaultFontData {
-        config: Some(imgui::FontConfig {
-            oversample_h: 1,
-            pixel_snap_h: true,
-            size_pixels: font_size,
-            ..Default::default()
-        }),
-    }]);
+        imgui.fonts().add_font(&[FontSource::DefaultFontData {
+            config: Some(imgui::FontConfig {
+                oversample_h: 1,
+                pixel_snap_h: true,
+                size_pixels: font_size,
+                ..Default::default()
+            }),
+        }]);
+    }
 
     //
     // Set up dear imgui wgpu renderer
     //
-    let renderer_config = RendererConfig {
-        texture_format: state.config.format,
-        ..Default::default()
-    };
 
-    let mut renderer = Renderer::new(&mut imgui, &state.device, &state.queue, renderer_config);
+    let mut renderer = {
+        let renderer_config = RendererConfig {
+            texture_format: state.config.format,
+            ..Default::default()
+        };
+        Renderer::new(&mut imgui, &state.device, &state.queue, renderer_config)
+    };
 
     let mut last_frame = Instant::now();
 
