@@ -1,10 +1,7 @@
 use cgmath::prelude::*;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
-use rand::{
-    distributions::{Distribution, Uniform},
-    SeedableRng,
-};
+use rand::random;
 use rayon::prelude::*;
 use std::mem;
 use std::{
@@ -31,10 +28,10 @@ use model::{DrawLight, DrawModel, Vertex};
 const NUM_INSTANCES_PER_ROW: u32 = 10;
 
 // number of boid particles to simulate
-const NUM_PARTICLES: u32 = 1500;
+const SIDE_LEN: u32 = 128;
 
 // number of single-particle calculations (invocations) in each gpu work group
-const PARTICLES_PER_GROUP: u32 = 64;
+const CELLS_PER_GROUP: u32 = 64;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -83,6 +80,7 @@ struct State {
     vertices_buffer: wgpu::Buffer,
 
     particle_bind_groups: Vec<wgpu::BindGroup>,
+    render_bind_group: wgpu::BindGroup,
     particle_buffers: Vec<wgpu::Buffer>,
     compute_pipeline: wgpu::ComputePipeline,
     work_group_count: u32,
@@ -434,16 +432,7 @@ impl State {
         });
 
         // buffer for simulation parameters uniform
-        let sim_param_data = [
-            0.04f32, // deltaT
-            0.1,     // rule1Distance
-            0.025,   // rule2Distance
-            0.025,   // rule3Distance
-            0.02,    // rule1Scale
-            0.05,    // rule2Scale
-            0.005,   // rule3Scale
-        ]
-        .to_vec();
+        let sim_param_data = [SIDE_LEN].to_vec();
         let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
             contents: bytemuck::cast_slice(&sim_param_data),
@@ -461,7 +450,7 @@ impl State {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: wgpu::BufferSize::new(
-                                (sim_param_data.len() * mem::size_of::<f32>()) as _,
+                                (sim_param_data.len() * mem::size_of::<u32>()) as _,
                             ),
                         },
                         count: None,
@@ -472,7 +461,7 @@ impl State {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new((NUM_PARTICLES * 16) as _),
+                            min_binding_size: wgpu::BufferSize::new((2 * SIDE_LEN * SIDE_LEN) as _),
                         },
                         count: None,
                     },
@@ -482,7 +471,7 @@ impl State {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new((NUM_PARTICLES * 16) as _),
+                            min_binding_size: wgpu::BufferSize::new((2 * SIDE_LEN * SIDE_LEN) as _),
                         },
                         count: None,
                     },
@@ -496,12 +485,29 @@ impl State {
                 push_constant_ranges: &[],
             });
 
-        // create render pipeline with empty bind group layout
+        // create render pipeline with simProps as bind group layout
+
+        let render_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(
+                            (sim_param_data.len() * mem::size_of::<f32>()) as _,
+                        ),
+                    },
+                    count: None,
+                }],
+                label: None,
+            });
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&render_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -513,9 +519,9 @@ impl State {
                 entry_point: "main",
                 buffers: &[
                     wgpu::VertexBufferLayout {
-                        array_stride: 4 * 4,
+                        array_stride: 2 * 4,
                         step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2],
+                        attributes: &wgpu::vertex_attr_array![0 => Uint32, 1 => Uint32],
                     },
                     wgpu::VertexBufferLayout {
                         array_stride: 2 * 4,
@@ -542,15 +548,11 @@ impl State {
             entry_point: "main",
         });
 
-        // buffer for all particles data of type [(posx,posy,velx,vely),...]
-        let mut initial_particle_data = vec![0.0f32; (4 * NUM_PARTICLES) as usize];
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-        let unif = Uniform::new_inclusive(-1.0, 1.0);
-        for particle_instance_chunk in initial_particle_data.chunks_mut(4) {
-            particle_instance_chunk[0] = unif.sample(&mut rng); // posx
-            particle_instance_chunk[1] = unif.sample(&mut rng); // posy
-            particle_instance_chunk[2] = unif.sample(&mut rng) * 0.1; // velx
-            particle_instance_chunk[3] = unif.sample(&mut rng) * 0.1; // vely
+        // buffer for all particles data of type [bool,...]
+        let mut initial_particle_data = vec![0 as u32; (2 * SIDE_LEN * SIDE_LEN) as usize];
+        for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
+            particle_instance_chunk[0] = i as u32; // bool??
+            particle_instance_chunk[1] = random::<u32>() / 3000000000; // bool??
         }
 
         let mut particle_buffers = Vec::<wgpu::Buffer>::new();
@@ -592,13 +594,25 @@ impl State {
 
         // calculates number of work groups from PARTICLES_PER_GROUP constant
         let work_group_count =
-            ((NUM_PARTICLES as f32) / (PARTICLES_PER_GROUP as f32)).ceil() as u32;
+            (((SIDE_LEN * SIDE_LEN) as f32) / (CELLS_PER_GROUP as f32)).ceil() as u32;
 
-        let vertex_buffer_data = [-0.01f32, -0.02, 0.01, -0.02, 0.00, 0.02];
+        let vertex_buffer_data = [
+            -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
+        ];
+        // let vertex_buffer_data = [-1.0f32, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
         let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::bytes_of(&vertex_buffer_data),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &render_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: sim_param_buffer.as_entire_binding(),
+            }],
+            label: None,
         });
 
         Self {
@@ -639,6 +653,7 @@ impl State {
             work_group_count,
             frame_num: 0,
             vertices_buffer,
+            render_bind_group,
         }
     }
 
@@ -748,6 +763,7 @@ impl State {
         view: &TextureView,
         depth_view: &TextureView,
         boids: bool,
+        update_cells: bool,
     ) -> Result<(), wgpu::SurfaceError> {
         //let output = self.surface.get_current_frame()?.output;
         // let view = output
@@ -804,7 +820,7 @@ impl State {
         }
 
         if boids {
-            {
+            if update_cells {
                 // compute pass
                 let mut cpass =
                     encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -833,16 +849,18 @@ impl State {
                 let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
                 rpass.set_pipeline(&self.boid_render_pipeline);
                 // render dst particles
-                rpass.set_vertex_buffer(
-                    0,
-                    self.particle_buffers[(self.frame_num + 1) % 2].slice(..),
-                );
+                rpass.set_vertex_buffer(0, self.particle_buffers[(self.frame_num) % 2].slice(..));
                 // the three instance-local vertices
                 rpass.set_vertex_buffer(1, self.vertices_buffer.slice(..));
-                rpass.draw(0..3, 0..NUM_PARTICLES);
+
+                rpass.set_bind_group(0, &self.render_bind_group, &[]);
+                rpass.draw(0..6, 0..SIDE_LEN * SIDE_LEN);
             }
-            // update frame count
-            self.frame_num += 1;
+
+            if update_cells {
+                // update frame count
+                self.frame_num += 1;
+            }
         }
 
         self.queue.submit(iter::once(encoder.finish()));
@@ -944,12 +962,15 @@ fn main() {
         renderer.textures.insert(depth_texture)
     };
 
+    let mut update_cells = false;
+
     event_loop.run(move |event, _, control_flow| {
         if last_sec.elapsed().unwrap().as_secs() > 1 {
             last_sec = SystemTime::now();
             fps = frames_since_last_sec;
             // println!("fps: {}", frames_since_last_sec);
             frames_since_last_sec = 0;
+            update_cells = true;
         }
 
         *control_flow = ControlFlow::Poll;
@@ -985,6 +1006,18 @@ fn main() {
                         state.window.set_cursor_grab(state.mouse_grabbed).unwrap();
                         state.window.set_cursor_visible(!state.mouse_grabbed);
                         println!("mouse grabbed: {}", state.mouse_grabbed);
+                    }
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Released,
+                                virtual_keycode: Some(VirtualKeyCode::Space),
+                                ..
+                            },
+                        ..
+                    } => {
+                        update_cells = true;
+                        println!("updating cells");
                     }
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
@@ -1048,7 +1081,7 @@ fn main() {
                     },
                     "depth_texture",
                 );
-                match state.render(&view, &depth_texture.view, false) {
+                match state.render(&view, &depth_texture.view, false, false) {
                     Ok(_) => {
                         frames_since_last_sec += 1;
                     }
@@ -1129,6 +1162,7 @@ fn main() {
                         &renderer.textures.get(window_texture_id).unwrap().view(),
                         &renderer.textures.get(depth_texture_id).unwrap().view(),
                         true,
+                        true,
                     ) {
                         Ok(_) => {
                             frames_since_last_sec += 1;
@@ -1140,6 +1174,7 @@ fn main() {
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
                         Err(e) => eprintln!("{:?}", e),
                     }
+                    update_cells = false;
                 }
 
                 let mut encoder: wgpu::CommandEncoder = state

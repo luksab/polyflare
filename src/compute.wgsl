@@ -1,106 +1,75 @@
-struct Particle {
-  pos : vec2<f32>;
-  vel : vec2<f32>;
+struct Cell {
+  number: u32;
+  alive : u32;
 };
 
 [[block]]
 struct SimParams {
-  deltaT : f32;
-  rule1Distance : f32;
-  rule2Distance : f32;
-  rule3Distance : f32;
-  rule1Scale : f32;
-  rule2Scale : f32;
-  rule3Scale : f32;
+  side_len: u32;
 };
 
 [[block]]
-struct Particles {
-  particles : [[stride(16)]] array<Particle>;
+struct Cells {
+  cells : [[stride(8)]] array<Cell>;
 };
 
 [[group(0), binding(0)]] var<uniform> params : SimParams;
-[[group(0), binding(1)]] var<storage, read> particlesSrc : Particles;
-[[group(0), binding(2)]] var<storage, read_write> particlesDst : Particles;
+[[group(0), binding(1)]] var<storage, read> cellsSrc : Cells;
+[[group(0), binding(2)]] var<storage, read_write> cellsDst : Cells;
 
-// https://github.com/austinEng/Project6-Vulkan-Flocking/blob/master/data/shaders/computeparticles/particle.comp
+fn grid_to_index(grid_pos: vec2<u32>) -> u32 {
+  return grid_pos[0] + grid_pos[1] * params.side_len;
+}
+
+fn index_to_grid(index: u32) -> vec2<u32> {
+  let grid_pos = vec2<u32>(index%params.side_len, index/params.side_len);
+  return grid_pos;
+}
+
+fn count_neighbours(pos: vec2<i32>) -> u32 {
+  var count = 0u32;
+  for (var i: i32 = -1; i <= 1; i = i + 1) {
+    for (var j: i32 = -1; j <= 1; j = j + 1) {
+      if (i != 0 || j != 0) {
+        if (cellsSrc.cells[grid_to_index(vec2<u32>(pos - vec2<i32>(i,j)))].alive > 0u32) {
+          count = count + 1u32;
+        }
+      }
+    }
+  }
+  return count;
+}
+
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
-  let total = arrayLength(&particlesSrc.particles);
+  let total = arrayLength(&cellsSrc.cells);
   let index = global_invocation_id.x;
   if (index >= total) {
     return;
   }
 
-  var vPos : vec2<f32> = particlesSrc.particles[index].pos;
-  var vVel : vec2<f32> = particlesSrc.particles[index].vel;
+  var old : u32 = cellsSrc.cells[index].alive;
 
-  var cMass : vec2<f32> = vec2<f32>(0.0, 0.0);
-  var cVel : vec2<f32> = vec2<f32>(0.0, 0.0);
-  var colVel : vec2<f32> = vec2<f32>(0.0, 0.0);
-  var cMassCount : i32 = 0;
-  var cVelCount : i32 = 0;
+  var alive = 0u32;
 
-  var i : u32 = 0u;
-  loop {
-    if (i >= total) {
-      break;
-    }
-    if (i == index) {
-      continue;
-    }
+  let neighbours = count_neighbours(vec2<i32>(index_to_grid(index)));
+  // if (neighbours < 2u32) {
+  //   alive = 0u32;
+  // } else { if (neighbours == 3u32 && old == 0u32) {
+  //   alive = 100u32;
+  // } else { if (neighbours == 2u32 || neighbours == 3u32) {
+  //   alive = old;
+  // } else { if (neighbours > 3u32) {
+  //   alive = 0u32;
+  // }}}}
 
-    let pos = particlesSrc.particles[i].pos;
-    let vel = particlesSrc.particles[i].vel;
-
-    if (distance(pos, vPos) < params.rule1Distance) {
-      cMass = cMass + pos;
-      cMassCount = cMassCount + 1;
-    }
-    if (distance(pos, vPos) < params.rule2Distance) {
-      colVel = colVel - (pos - vPos);
-    }
-    if (distance(pos, vPos) < params.rule3Distance) {
-      cVel = cVel + vel;
-      cVelCount = cVelCount + 1;
-    }
-
-    continuing {
-      i = i + 1u;
-    }
-  }
-  if (cMassCount > 0) {
-    cMass = cMass * (1.0 / f32(cMassCount)) - vPos;
-  }
-  if (cVelCount > 0) {
-    cVel = cVel * (1.0 / f32(cVelCount));
-  }
-
-  vVel = vVel + (cMass * params.rule1Scale) +
-      (colVel * params.rule2Scale) +
-      (cVel * params.rule3Scale);
-
-  // clamp velocity for a more pleasing simulation
-  vVel = normalize(vVel) * clamp(length(vVel), 0.0, 0.1);
-
-  // kinematic update
-  vPos = vPos + (vVel * params.deltaT);
-
-  // Wrap around boundary
-  if (vPos.x < -1.0) {
-    vPos.x = 1.0;
-  }
-  if (vPos.x > 1.0) {
-    vPos.x = -1.0;
-  }
-  if (vPos.y < -1.0) {
-    vPos.y = 1.0;
-  }
-  if (vPos.y > 1.0) {
-    vPos.y = -1.0;
+  if ((old != 0u32 && neighbours == 2u32 || neighbours == 3u32) || 
+      (old == 0u32 && neighbours == 3u32)) {
+    alive = 1u32;
+  } else {
+    alive = 0u32;
   }
 
   // Write back
-  particlesDst.particles[index].pos = vPos;
-  particlesDst.particles[index].vel = vVel;
+  cellsDst.cells[index].alive = alive;
 }
