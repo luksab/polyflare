@@ -28,7 +28,7 @@ use model::{DrawLight, DrawModel, Vertex};
 const NUM_INSTANCES_PER_ROW: u32 = 10;
 
 // number of boid particles to simulate
-const SIDE_LEN: u32 = 128;
+const SIDE_LEN: u32 = 256;
 
 // number of single-particle calculations (invocations) in each gpu work group
 const CELLS_PER_GROUP: u32 = 64;
@@ -820,15 +820,6 @@ impl State {
         }
 
         if boids {
-            if update_cells {
-                // compute pass
-                let mut cpass =
-                    encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-                cpass.set_pipeline(&self.compute_pipeline);
-                cpass.set_bind_group(0, &self.particle_bind_groups[self.frame_num % 2], &[]);
-                cpass.dispatch(self.work_group_count, 1, 1);
-            }
-
             // create render pass descriptor and its color attachments
             let color_attachments = [wgpu::RenderPassColorAttachment {
                 view,
@@ -856,16 +847,30 @@ impl State {
                 rpass.set_bind_group(0, &self.render_bind_group, &[]);
                 rpass.draw(0..6, 0..SIDE_LEN * SIDE_LEN);
             }
-
-            if update_cells {
-                // update frame count
-                self.frame_num += 1;
-            }
         }
 
         self.queue.submit(iter::once(encoder.finish()));
 
         Ok(())
+    }
+
+    fn update_cells(&mut self) {
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+        {
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.compute_pipeline);
+            cpass.set_bind_group(0, &self.particle_bind_groups[self.frame_num % 2], &[]);
+            cpass.dispatch(self.work_group_count, 1, 1);
+        }
+        self.queue.submit(iter::once(encoder.finish()));
+
+        // update frame count
+        self.frame_num += 1;
     }
 }
 
@@ -880,6 +885,7 @@ fn main() {
     let mut state = pollster::block_on(State::new(window)); // NEW!
     let mut last_render_time = std::time::Instant::now();
     let mut last_sec = SystemTime::now();
+    let mut cell_timer = SystemTime::now();
     let mut frames_since_last_sec = 0;
     let mut fps = 0;
 
@@ -973,10 +979,14 @@ fn main() {
             update_cells = true;
         }
 
+        if cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
+            cell_timer = SystemTime::now();
+            state.update_cells();
+        }
+
         *control_flow = ControlFlow::Poll;
         match event {
             Event::MainEventsCleared => state.window.request_redraw(),
-
             Event::WindowEvent {
                 ref event,
                 window_id,
@@ -1096,8 +1106,15 @@ fn main() {
                 // Store the new size of Image() or None to indicate that the window is collapsed.
                 let mut new_window_size: Option<[f32; 2]> = None;
 
+                imgui::Window::new("Hello too")
+                    .size([400.0, 200.0], Condition::FirstUseEver)
+                    .position([600.0, 200.0], Condition::FirstUseEver)
+                    .build(&ui, || {
+                        ui.text(format!("Framerate: {:?}", fps));
+                    });
+
                 imgui::Window::new("Hello World")
-                    .size([512.0, 512.0], Condition::FirstUseEver)
+                    .size([1024.0, 1024.0], Condition::FirstUseEver)
                     .build(&ui, || {
                         // new_example_size = Some(ui.content_region_avail());
                         // ui.text("Hello world!");
@@ -1110,12 +1127,6 @@ fn main() {
                         // ));
                         new_window_size = Some(ui.content_region_avail());
                         imgui::Image::new(window_texture_id, new_window_size.unwrap()).build(&ui);
-                    });
-                imgui::Window::new("Hello too")
-                    .size([400.0, 200.0], Condition::FirstUseEver)
-                    .position([400.0, 200.0], Condition::FirstUseEver)
-                    .build(&ui, || {
-                        ui.text(format!("Framerate: {:?}", fps));
                     });
 
                 if let Some(size) = new_window_size {
