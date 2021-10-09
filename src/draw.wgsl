@@ -7,7 +7,7 @@ struct SimParams {
 
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(3)]] alive: bool;
+    [[location(3)]] alive: u32;
 };
 
 [[stage(vertex)]]
@@ -24,13 +24,13 @@ fn main(
 
     var out: VertexOutput;
     out.clip_position = vec4<f32>(pos, 0.0, 1.0);
-    out.alive = cell_alive != 0u32;
+    out.alive = cell_alive;
     return out;
 }
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    if (in.alive){
+    if (in.alive != 0u32){
         return vec4<f32>(1.0,1.0,1.0,1.0);
     } else {
         return vec4<f32>(0.0,0.0,0.0,1.0);
