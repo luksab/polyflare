@@ -763,7 +763,6 @@ impl State {
         view: &TextureView,
         depth_view: &TextureView,
         boids: bool,
-        update_cells: bool,
     ) -> Result<(), wgpu::SurfaceError> {
         //let output = self.surface.get_current_frame()?.output;
         // let view = output
@@ -968,15 +967,12 @@ fn main() {
         renderer.textures.insert(depth_texture)
     };
 
-    let mut update_cells = false;
-
     event_loop.run(move |event, _, control_flow| {
         if last_sec.elapsed().unwrap().as_secs() > 1 {
             last_sec = SystemTime::now();
             fps = frames_since_last_sec;
             // println!("fps: {}", frames_since_last_sec);
             frames_since_last_sec = 0;
-            update_cells = true;
         }
 
         if cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
@@ -1016,18 +1012,6 @@ fn main() {
                         state.window.set_cursor_grab(state.mouse_grabbed).unwrap();
                         state.window.set_cursor_visible(!state.mouse_grabbed);
                         println!("mouse grabbed: {}", state.mouse_grabbed);
-                    }
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Released,
-                                virtual_keycode: Some(VirtualKeyCode::Space),
-                                ..
-                            },
-                        ..
-                    } => {
-                        update_cells = true;
-                        println!("updating cells");
                     }
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
@@ -1091,7 +1075,7 @@ fn main() {
                     },
                     "depth_texture",
                 );
-                match state.render(&view, &depth_texture.view, false, false) {
+                match state.render(&view, &depth_texture.view, false) {
                     Ok(_) => {
                         frames_since_last_sec += 1;
                     }
@@ -1173,7 +1157,6 @@ fn main() {
                         &renderer.textures.get(window_texture_id).unwrap().view(),
                         &renderer.textures.get(depth_texture_id).unwrap().view(),
                         true,
-                        true,
                     ) {
                         Ok(_) => {
                             frames_since_last_sec += 1;
@@ -1185,7 +1168,6 @@ fn main() {
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
                         Err(e) => eprintln!("{:?}", e),
                     }
-                    update_cells = false;
                 }
 
                 let mut encoder: wgpu::CommandEncoder = state
