@@ -15,10 +15,14 @@ in pkgs.mkShell {
     pkgs.vulkan-headers
     pkgs.vulkan-loader
     pkgs.vulkan-validation-layers
+
+    pkgs.libGL
+    pkgs.libglvnd
+    pkgs.mesa
     pkgs.renderdoc
   ];
 
-  LD_LIBRARY_PATH = with pkgs.xlibs; "${pkgs.mesa}/lib:${libX11}/lib:${libXcursor}/lib:${libXxf86vm}/lib:${libXi}/lib:${pkgs.xorg.libXrandr}/lib";
+  LD_LIBRARY_PATH = with pkgs.xlibs; "${pkgs.mesa}/lib:${libX11}/lib:${libXcursor}/lib:${libXxf86vm}/lib:${libXi}/lib:${pkgs.xorg.libXrandr}/lib:${pkgs.libGL}/lib:/run/opengl-driver/lib:/run/opengl-driver-32/lib";
 
   # Certain Rust tools won't work without this
   # This can also be fixed by using oxalica/rust-overlay and specifying the rust-src extension
