@@ -150,7 +150,7 @@ impl State {
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
+        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
         let surface = unsafe { instance.create_surface(&window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -164,7 +164,26 @@ impl State {
                 &wgpu::DeviceDescriptor {
                     label: None,
                     features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
+                    limits: wgpu::Limits {
+                        max_texture_dimension_1d: 4096,
+                        max_texture_dimension_2d: 4096,
+                        max_texture_dimension_3d: 4096,
+                        max_texture_array_layers: 2048, // default
+                        max_bind_groups: 4, // default
+                        max_dynamic_uniform_buffers_per_pipeline_layout: 8, // default
+                        max_dynamic_storage_buffers_per_pipeline_layout: 4, // default
+                        max_sampled_textures_per_shader_stage: 16, // default
+                        max_samplers_per_shader_stage: 16, // default
+                        max_storage_buffers_per_shader_stage: 4, // default
+                        max_storage_textures_per_shader_stage: 4, // default
+                        max_uniform_buffers_per_shader_stage: 12, // default
+                        max_uniform_buffer_binding_size: 16384, // default
+                        max_storage_buffer_binding_size: 128 << 20, // default
+                        max_vertex_buffers: 8, // default
+                        max_vertex_attributes: 16, // default
+                        max_vertex_buffer_array_stride: 2048, // default
+                        max_push_constant_size: 0, // default
+                    },
                 },
                 None, // Trace path
             )
