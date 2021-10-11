@@ -10,7 +10,7 @@ build = "build.rs"
 
 [dependencies]
 image = "0.23"
-winit = "0.25"
+winit = { version = "0.25", features = [ "web-sys" ] }
 cgmath = "0.18"
 env_logger = "0.9"
 log = "0.4"

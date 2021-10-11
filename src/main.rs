@@ -80,8 +80,8 @@ struct State {
     vertices_buffer: wgpu::Buffer,
 
     particle_bind_groups: Vec<wgpu::BindGroup>,
-    render_bind_group: wgpu::BindGroup,
-    particle_buffers: Vec<wgpu::Buffer>,
+    render_bind_groups: Vec<wgpu::BindGroup>,
+    sim_param_buffer: wgpu::Buffer,
     compute_pipeline: wgpu::ComputePipeline,
     work_group_count: u32,
     frame_num: usize,
@@ -169,7 +169,7 @@ impl State {
                         max_texture_dimension_2d: 4096,
                         max_texture_dimension_3d: 4096,
                         max_texture_array_layers: 2048, // default
-                        max_bind_groups: 4, // default
+                        max_bind_groups: 4,             // default
                         max_dynamic_uniform_buffers_per_pipeline_layout: 8, // default
                         max_dynamic_storage_buffers_per_pipeline_layout: 4, // default
                         max_sampled_textures_per_shader_stage: 16, // default
@@ -179,10 +179,10 @@ impl State {
                         max_uniform_buffers_per_shader_stage: 12, // default
                         max_uniform_buffer_binding_size: 16384, // default
                         max_storage_buffer_binding_size: 128 << 20, // default
-                        max_vertex_buffers: 8, // default
-                        max_vertex_attributes: 16, // default
+                        max_vertex_buffers: 8,          // default
+                        max_vertex_attributes: 16,      // default
                         max_vertex_buffer_array_stride: 2048, // default
-                        max_push_constant_size: 0, // default
+                        max_push_constant_size: 0,      // default
                     },
                 },
                 None, // Trace path
@@ -451,7 +451,7 @@ impl State {
         });
 
         // buffer for simulation parameters uniform
-        let sim_param_data = [SIDE_LEN].to_vec();
+        let sim_param_data = [SIDE_LEN, 512, 512].to_vec();
         let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
             contents: bytemuck::cast_slice(&sim_param_data),
@@ -508,18 +508,30 @@ impl State {
 
         let render_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            (sim_param_data.len() * mem::size_of::<f32>()) as _,
-                        ),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (sim_param_data.len() * mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new((2 * SIDE_LEN * SIDE_LEN) as _),
+                        },
+                        count: None,
+                    },
+                ],
                 label: None,
             });
 
@@ -536,18 +548,18 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &draw_shader,
                 entry_point: "main",
-                buffers: &[
-                    wgpu::VertexBufferLayout {
-                        array_stride: 2 * 4,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &wgpu::vertex_attr_array![0 => Uint32, 1 => Uint32],
-                    },
-                    wgpu::VertexBufferLayout {
-                        array_stride: 2 * 4,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![2 => Float32x2],
-                    },
-                ],
+                buffers: &[wgpu::VertexBufferLayout {
+                    // array_stride: 2 * 4,
+                    // step_mode: wgpu::VertexStepMode::Vertex,
+                    // attributes: &wgpu::vertex_attr_array![2 => Float32x2],
+                    array_stride: 2 * 4,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[wgpu::VertexAttribute {
+                        offset: 0,
+                        shader_location: 0,
+                        format: wgpu::VertexFormat::Float32x2,
+                    }],
+                }],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &draw_shader,
@@ -625,14 +637,23 @@ impl State {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
 
-        let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &render_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: sim_param_buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
+        let mut render_bind_groups = Vec::<wgpu::BindGroup>::new();
+        for i in 0..2 {
+            render_bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &render_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: sim_param_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: particle_buffers[i].as_entire_binding(),
+                    },
+                ],
+                label: None,
+            }));
+        }
 
         Self {
             window,
@@ -667,12 +688,12 @@ impl State {
             boid_render_pipeline,
 
             particle_bind_groups,
-            particle_buffers,
+            sim_param_buffer,
             compute_pipeline,
             work_group_count,
             frame_num: 0,
             vertices_buffer,
-            render_bind_group,
+            render_bind_groups,
         }
     }
 
@@ -857,13 +878,13 @@ impl State {
                 // render pass
                 let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
                 rpass.set_pipeline(&self.boid_render_pipeline);
-                // render dst particles
-                rpass.set_vertex_buffer(0, self.particle_buffers[(self.frame_num) % 2].slice(..));
+                //rpass.set_bind_group(1, &self.particle_bind_groups[self.frame_num % 2], &[]);
                 // the three instance-local vertices
-                rpass.set_vertex_buffer(1, self.vertices_buffer.slice(..));
+                rpass.set_vertex_buffer(0, self.vertices_buffer.slice(..));
+                //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-                rpass.set_bind_group(0, &self.render_bind_group, &[]);
-                rpass.draw(0..6, 0..SIDE_LEN * SIDE_LEN);
+                rpass.set_bind_group(0, &self.render_bind_groups[self.frame_num % 2], &[]);
+                rpass.draw(0..6, 0..1);
             }
         }
 
@@ -917,8 +938,10 @@ fn main() {
     );
     imgui.set_ini_filename(None);
 
+    let hidpi_factor = state.window.scale_factor();
+
     {
-        let hidpi_factor = state.window.scale_factor();
+        println!("scaling factor: {}", hidpi_factor);
 
         let font_size = (13.0 * hidpi_factor) as f32;
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
@@ -1171,6 +1194,16 @@ fn main() {
 
                     // Only render example to example_texture if thw window is not collapsed
                     state.update(dt);
+
+                    state.queue.write_buffer(
+                        &state.sim_param_buffer,
+                        0,
+                        bytemuck::cast_slice(&[
+                            SIDE_LEN,
+                            (size[0] * hidpi_factor as f32) as u32,
+                            (size[1] * hidpi_factor as f32) as u32,
+                        ]),
+                    );
 
                     match state.render(
                         &renderer.textures.get(window_texture_id).unwrap().view(),
