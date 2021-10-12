@@ -35,7 +35,7 @@ fn main(
 
     var out: VertexOutput;
     out.clip_position = vec4<f32>(position, 0.0, 0.1);
-    out.alive = 1u32;
+    out.alive = u32(1);
     return out;
 }
 
@@ -43,7 +43,7 @@ fn main(
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let x = u32(in.clip_position.x * f32(params.side_len) / f32(params.width));
     let y = u32(in.clip_position.y * f32(params.side_len) / f32(params.height));
-    if (cellsSrc.cells[(x + y * params.side_len) % (params.side_len*params.side_len)].alive != 0u32){
+    if (cellsSrc.cells[(x + y * params.side_len) % (params.side_len*params.side_len)].alive != u32(0)){
         return vec4<f32>(1.0,1.0,1.0,1.0);
     } else {
         return vec4<f32>(0.0,0.0,0.0,1.0);

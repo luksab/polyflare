@@ -27,12 +27,12 @@ fn index_to_grid(index: u32) -> vec2<u32> {
 }
 
 fn count_neighbours(pos: vec2<i32>) -> u32 {
-  var count = 0u32;
+  var count = u32(0);
   for (var i: i32 = -1; i <= 1; i = i + 1) {
     for (var j: i32 = -1; j <= 1; j = j + 1) {
       if (i != 0 || j != 0) {
-        if (cellsSrc.cells[grid_to_index(vec2<u32>(pos - vec2<i32>(i,j)))].alive > 0u32) {
-          count = count + 1u32;
+        if (cellsSrc.cells[grid_to_index(vec2<u32>(pos - vec2<i32>(i,j)))].alive > u32(0)) {
+          count = count + u32(1);
         }
       }
     }
@@ -50,24 +50,24 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
   var old : u32 = cellsSrc.cells[index].alive;
 
-  var alive = 0u32;
+  var alive = u32(0);
 
   let neighbours = count_neighbours(vec2<i32>(index_to_grid(index)));
   // if (neighbours < 2u32) {
-  //   alive = 0u32;
-  // } else { if (neighbours == 3u32 && old == 0u32) {
-  //   alive = 100u32;
+  //   alive = u32(0);
+  // } else { if (neighbours == 3u32 && old == u32(0)) {
+  //   alive = u32(1);
   // } else { if (neighbours == 2u32 || neighbours == 3u32) {
   //   alive = old;
   // } else { if (neighbours > 3u32) {
-  //   alive = 0u32;
+  //   alive = u32(0);
   // }}}}
 
-  if ((old != 0u32 && neighbours == 2u32 || neighbours == 3u32) || 
-      (old == 0u32 && neighbours == 3u32)) {
-    alive = 1u32;
+  if ((old != u32(0) && neighbours == u32(2) || neighbours == u32(3)) || 
+      (old == u32(0) && neighbours == u32(3))) {
+    alive = u32(1);
   } else {
-    alive = 0u32;
+    alive = u32(0);
   }
 
   // Write back

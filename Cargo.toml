@@ -14,7 +14,7 @@ winit = { version = "0.25", features = [ "web-sys" ] }
 cgmath = "0.18"
 env_logger = "0.9"
 log = "0.4"
-wgpu = "0.10"
+wgpu = "0.11"
 rayon = "1.4"
 pollster = "0.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
@@ -22,5 +22,5 @@ anyhow = "1.0"
 tobj = "3.0"
 imgui = "0.8"
 imgui-winit-support = "0.8"
-imgui-wgpu = "0.17.1"
-rand = { version = "0.7.2", features = ["wasm-bindgen"] }
+imgui-wgpu = "0.18"
+fastrand = "1.5"

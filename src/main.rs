@@ -1,7 +1,6 @@
 use cgmath::prelude::*;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
-use rand::random;
 use rayon::prelude::*;
 use std::mem;
 use std::{
@@ -156,6 +155,7 @@ impl State {
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
             })
             .await
             .unwrap();
@@ -178,11 +178,13 @@ impl State {
                         max_storage_textures_per_shader_stage: 4, // default
                         max_uniform_buffers_per_shader_stage: 12, // default
                         max_uniform_buffer_binding_size: 16384, // default
-                        max_storage_buffer_binding_size: 128 << 20, // default
+                        max_storage_buffer_binding_size: 128 << 24, // default
                         max_vertex_buffers: 8,          // default
                         max_vertex_attributes: 16,      // default
                         max_vertex_buffer_array_stride: 2048, // default
-                        max_push_constant_size: 0,      // default
+                        max_push_constant_size: 0,
+                        min_uniform_buffer_offset_alignment: 256,
+                        min_storage_buffer_offset_alignment: 256,      // default
                     },
                 },
                 None, // Trace path
@@ -583,7 +585,7 @@ impl State {
         let mut initial_particle_data = vec![0 as u32; (2 * SIDE_LEN * SIDE_LEN) as usize];
         for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
             particle_instance_chunk[0] = i as u32; // bool??
-            particle_instance_chunk[1] = random::<u32>() / 3000000000; // bool??
+            particle_instance_chunk[1] = fastrand::u32(0..6)/5; // bool??
         }
 
         let mut particle_buffers = Vec::<wgpu::Buffer>::new();
@@ -1084,7 +1086,7 @@ fn main() {
                 imgui.io_mut().update_delta_time(now - last_frame);
                 last_frame = now;
 
-                let frame = match state.surface.get_current_frame() {
+                let frame = match state.surface.get_current_texture() {
                     Ok(frame) => frame,
                     Err(e) => {
                         eprintln!("dropped frame: {:?}", e);
@@ -1097,7 +1099,6 @@ fn main() {
                 let ui = imgui.frame();
 
                 let view = frame
-                    .output
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -1250,8 +1251,9 @@ fn main() {
                     .expect("Rendering failed");
 
                 drop(rpass);
-
+                
                 state.queue.submit(Some(encoder.finish()));
+                frame.present();
             }
             _ => {}
         }
