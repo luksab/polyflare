@@ -73,28 +73,7 @@ struct Demo3d {
     debug_material: model::Material,
 }
 
-struct State {
-    window: Window,
-    surface: wgpu::Surface,
-    size: winit::dpi::PhysicalSize<u32>,
-    device: wgpu::Device,
-    adapter: wgpu::Adapter,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-
-    boid_render_pipeline: wgpu::RenderPipeline,
-    vertices_buffer: wgpu::Buffer,
-
-    particle_bind_groups: Vec<wgpu::BindGroup>,
-    render_bind_groups: Vec<wgpu::BindGroup>,
-    sim_param_buffer: wgpu::Buffer,
-    compute_pipeline: wgpu::ComputePipeline,
-    work_group_count: u32,
-    frame_num: usize,
-}
-
-#[async_trait]
-impl scene::Scene for Demo3d {
+impl Demo3d {
     async fn new(device: &wgpu::Device, queue: &Queue, config: &SurfaceConfiguration) -> Self {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -361,7 +340,10 @@ impl scene::Scene for Demo3d {
             render_pipeline,
         }
     }
+}
 
+#[async_trait]
+impl scene::Scene for Demo3d {
     fn resize(
         &mut self,
         new_size: winit::dpi::PhysicalSize<u32>,
@@ -374,7 +356,39 @@ impl scene::Scene for Demo3d {
     }
 
     fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
-        todo!()
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(key),
+                        state,
+                        ..
+                    },
+                ..
+            } => self.camera_controller.process_keyboard(*key, *state),
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.camera_controller.process_scroll(delta);
+                true
+            }
+            WindowEvent::MouseInput {
+                button: winit::event::MouseButton::Left, // Left Mouse Button
+                state,
+                ..
+            } => {
+                self.mouse_pressed = *state == ElementState::Pressed;
+                true
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                let x = position.x - self.last_mouse_pos.x;
+                let y = position.y - self.last_mouse_pos.y;
+                self.last_mouse_pos = *position;
+                if self.mouse_pressed {
+                    self.camera_controller.process_mouse(x, y);
+                }
+                true
+            }
+            _ => false,
+        }
     }
 
     fn update(&mut self, dt: std::time::Duration, queue: &Queue) {
@@ -516,13 +530,34 @@ fn create_render_pipeline(
     })
 }
 
+struct State {
+    window: Window,
+    surface: wgpu::Surface,
+    size: winit::dpi::PhysicalSize<u32>,
+    device: wgpu::Device,
+    adapter: wgpu::Adapter,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+
+    scenes: Vec<Box<dyn Scene>>,
+    boid_render_pipeline: wgpu::RenderPipeline,
+    vertices_buffer: wgpu::Buffer,
+
+    particle_bind_groups: Vec<wgpu::BindGroup>,
+    render_bind_groups: Vec<wgpu::BindGroup>,
+    sim_param_buffer: wgpu::Buffer,
+    compute_pipeline: wgpu::ComputePipeline,
+    work_group_count: u32,
+    frame_num: usize,
+}
+
 impl State {
     async fn new(window: Window) -> Self {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+        let instance = wgpu::Instance::new(wgpu::Backends::all());
         let surface = unsafe { instance.create_surface(&window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -540,7 +575,7 @@ impl State {
                     limits: wgpu::Limits {
                         max_texture_dimension_1d: 4096,
                         max_texture_dimension_2d: 4096,
-                        max_texture_dimension_3d: 4096,
+                        max_texture_dimension_3d: 2048,
                         max_texture_array_layers: 2048, // default
                         max_bind_groups: 4,             // default
                         max_dynamic_uniform_buffers_per_pipeline_layout: 8, // default
@@ -551,7 +586,7 @@ impl State {
                         max_storage_textures_per_shader_stage: 4, // default
                         max_uniform_buffers_per_shader_stage: 12, // default
                         max_uniform_buffer_binding_size: 16384, // default
-                        max_storage_buffer_binding_size: 128 << 24, // default
+                        max_storage_buffer_binding_size: 128 << 20, // default
                         max_vertex_buffers: 8,          // default
                         max_vertex_attributes: 16,      // default
                         max_vertex_buffer_array_stride: 2048, // default
@@ -789,6 +824,12 @@ impl State {
             }));
         }
 
+        let mut scenes: Vec<Box<dyn Scene>> = Vec::new();
+
+        let demo = Demo3d::new(&device, &queue, &config).await;
+
+        scenes.push(Box::new(demo));
+
         Self {
             window,
             surface,
@@ -807,6 +848,7 @@ impl State {
             vertices_buffer,
             render_bind_groups,
             size,
+            scenes,
         }
     }
 
@@ -817,76 +859,25 @@ impl State {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
         }
+        for scene in &mut self.scenes {
+            scene.resize(self.size, &self.device, &self.config)
+        }
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        // match event {
-        //     WindowEvent::KeyboardInput {
-        //         input:
-        //             KeyboardInput {
-        //                 virtual_keycode: Some(key),
-        //                 state,
-        //                 ..
-        //             },
-        //         ..
-        //     } => self.camera_controller.process_keyboard(*key, *state),
-        //     WindowEvent::MouseWheel { delta, .. } => {
-        //         self.camera_controller.process_scroll(delta);
-        //         true
-        //     }
-        //     WindowEvent::MouseInput {
-        //         button: MouseButton::Left, // Left Mouse Button
-        //         state,
-        //         ..
-        //     } => {
-        //         self.mouse_pressed = *state == ElementState::Pressed;
-        //         true
-        //     }
-        //     WindowEvent::CursorMoved { position, .. } => {
-        //         if self.mouse_pressed {
-        //             let x = position.x - self.last_mouse_pos.x;
-        //             let y = position.y - self.last_mouse_pos.y;
-        //             self.last_mouse_pos = *position;
-        //             self.camera_controller.process_mouse(x, y);
-        //         } else if self.mouse_grabbed {
-        //             if self.mouse_moved {
-        //                 self.mouse_moved = false;
-        //                 return true;
-        //             }
-        //             let x = (self.size.width / 2) as f64;
-        //             let y = (self.size.height / 2) as f64;
-        //             println!(
-        //                 "position: {:?} x:{} y:{} diff: {},{}",
-        //                 position,
-        //                 x,
-        //                 y,
-        //                 position.x - x,
-        //                 position.y - y
-        //             );
-
-        //             // self.last_mouse_pos = PhysicalPosition {
-        //             //     x: position.x,
-        //             //     y: position.y,
-        //             // };
-        //             self.last_mouse_pos = PhysicalPosition { x, y };
-        //             self.camera_controller
-        //                 .process_mouse(position.x - x, position.y - y);
-        //             self.window
-        //                 .set_cursor_position(Position::new(PhysicalPosition {
-        //                     x: self.size.width / 2,
-        //                     y: self.size.height / 2,
-        //                 }))
-        //                 .unwrap();
-        //             self.mouse_moved = true;
-        //         }
-        //         true
-        //     }
-        //     _ => false,
-        // }
-        false
+        for scene in &mut self.scenes {
+            scene.input(event);
+        }
+        match event {
+            _ => false,
+        }
     }
 
-    fn update(&mut self, dt: std::time::Duration) {}
+    fn update(&mut self, dt: std::time::Duration) {
+        for scene in &mut self.scenes {
+            scene.update(dt, &self.queue);
+        }
+    }
 
     fn render(
         &mut self,
@@ -967,8 +958,6 @@ fn main() {
         .unwrap();
 
     let mut state = pollster::block_on(State::new(window)); // NEW!
-
-    let mut demo = pollster::block_on(Demo3d::new(&state.device, &state.queue, &state.config));
 
     let mut last_render_time = std::time::Instant::now();
     let mut last_sec = SystemTime::now();
@@ -1098,10 +1087,10 @@ fn main() {
                     //         },
                     //     ..
                     // } => {
-                    //     state.mouse_grabbed = !state.mouse_grabbed;
-                    //     state.window.set_cursor_grab(state.mouse_grabbed).unwrap();
-                    //     state.window.set_cursor_visible(!state.mouse_grabbed);
-                    //     println!("mouse grabbed: {}", state.mouse_grabbed);
+                    //     state.scenes[0].mouse_grabbed = !state.scenes[0].mouse_grabbed;
+                    //     state.window.set_cursor_grab(demo.mouse_grabbed).unwrap();
+                    //     state.window.set_cursor_visible(!demo.mouse_grabbed);
+                    //     println!("mouse grabbed: {}", demo.mouse_grabbed);
                     // }
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
@@ -1176,7 +1165,7 @@ fn main() {
                 //     Err(e) => eprintln!("{:?}", e),
                 // }
 
-                match demo.render(
+                match state.scenes[0].render(
                     &view,
                     Some(&depth_texture.view),
                     &state.device,
@@ -1257,7 +1246,6 @@ fn main() {
                     }
 
                     // Only render example to example_texture if thw window is not collapsed
-                    demo.update(dt, &state.queue);
 
                     state.queue.write_buffer(
                         &state.sim_param_buffer,
@@ -1279,7 +1267,6 @@ fn main() {
                         // Reconfigure the surface if lost
                         Err(wgpu::SurfaceError::Lost) => {
                             state.resize(state.size);
-                            demo.resize(state.size, &state.device, &state.config)
                         }
                         // The system is out of memory, we should probably quit
                         Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
