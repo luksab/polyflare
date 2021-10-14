@@ -230,7 +230,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "polinomial_optics"
+name = "polynomial_optics"
 version = "0.1.0"
 dependencies = [
  "num",

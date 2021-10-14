@@ -36,12 +36,12 @@ struct Polynom<N> {
     variables: usize,
 }
 
-impl<N: PowUsize + AddAssign + Zero + Copy> Polynom<N> {
+impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>> Polynom<N> {
     pub fn eval(&self, point: Vec<N>) {
         assert!(point.len() == self.variables);
         let mut sum: N = N::zero();
         for (exp, component) in point.iter().enumerate() {
-            sum += component.upow(exp);
+            sum += self.coefficients[exp] * component.upow(exp + 1);
         }
     }
 }
