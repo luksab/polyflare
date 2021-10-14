@@ -1,7 +1,5 @@
-use core::ops::{
-    AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Shl, ShlAssign, Shr, ShrAssign, SubAssign,
-};
-use num::traits::{One, Zero};
+use num::traits::Zero;
+use std::ops::{Add, AddAssign, Mul};
 pub trait PowUsize {
     fn upow(self, exp: usize) -> Self;
 }
@@ -30,18 +28,35 @@ pow_u!(i128);
 pow_u!(isize);
 
 #[derive(Debug, Clone)]
-struct Polynom<N> {
+struct Polynom<N, const VARIABLES: usize> {
     coefficients: Vec<N>,
     degree: usize,
-    variables: usize,
 }
 
-impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>> Polynom<N> {
+impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const VARIABLES: usize>
+    Polynom<N, VARIABLES>
+{
     pub fn eval(&self, point: Vec<N>) {
-        assert!(point.len() == self.variables);
+        assert!(point.len() == VARIABLES);
         let mut sum: N = N::zero();
         for (exp, component) in point.iter().enumerate() {
             sum += self.coefficients[exp] * component.upow(exp + 1);
+        }
+    }
+}
+
+impl<N: Add<Output = N> + Zero + Copy, const VARIABLES: usize> Polynom<N, VARIABLES> {
+    pub fn add(&self, other: Polynom<N, VARIABLES>) -> Polynom<N, VARIABLES> {
+        assert!(self.coefficients.len() == other.coefficients.len());
+        let coefficients: Vec<N> = self
+            .coefficients
+            .iter()
+            .zip(other.coefficients.iter())
+            .map(|(own, other)| own.to_owned() + other.to_owned())
+            .collect();
+        Polynom {
+            coefficients,
+            degree: self.degree,
         }
     }
 }
