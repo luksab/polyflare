@@ -1,11 +1,9 @@
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use std::time::{Instant, SystemTime};
-use wgpu::{Extent3d};
+use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
-use winit::{
-    event_loop::{ControlFlow, EventLoop},
-};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 mod camera;
 mod instance;
@@ -29,7 +27,23 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    let mut state = pollster::block_on(State::new(window)); // NEW!
+    // initialize a state
+    let mut state = pollster::block_on(State::new(window));
+
+    // create scenes and push into state
+    {
+        let game_of_life =
+            pollster::block_on(game_of_life::GameOfLife::new(&state.device, &state.config));
+        state.scenes.push(Box::new(game_of_life));
+
+        let demo = pollster::block_on(demo3d::Demo3d::new(
+            &state.device,
+            &state.queue,
+            &state.config,
+        ));
+
+        state.scenes.push(Box::new(demo));
+    }
 
     let mut last_render_time = std::time::Instant::now();
     let mut last_sec = SystemTime::now();
@@ -48,6 +62,7 @@ fn main() {
 
     let hidpi_factor = state.window.scale_factor();
 
+    // Set font for imgui
     {
         println!("scaling factor: {}", hidpi_factor);
 

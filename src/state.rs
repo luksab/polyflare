@@ -16,7 +16,7 @@ pub struct State {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
 
-    scenes: Vec<Box<dyn Scene>>,
+    pub scenes: Vec<Box<dyn Scene>>,
 }
 
 impl State {
@@ -78,14 +78,7 @@ impl State {
 
         surface.configure(&device, &config);
 
-        let mut scenes: Vec<Box<dyn Scene>> = Vec::new();
-
-        let game_of_life = GameOfLife::new(&device, &config).await;
-        scenes.push(Box::new(game_of_life));
-
-        let demo = Demo3d::new(&device, &queue, &config).await;
-
-        scenes.push(Box::new(demo));
+        let scenes: Vec<Box<dyn Scene>> = Vec::new();
 
         let scale_factor = window.scale_factor();
         Self {
