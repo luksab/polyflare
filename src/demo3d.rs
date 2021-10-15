@@ -13,10 +13,19 @@ use crate::{
     camera,
     instance::{Instance, InstanceRaw},
     model::{self, DrawLight, DrawModel, Vertex},
-    scene, texture, LightUniform,
+    scene, texture,
 };
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightUniform {
+    position: [f32; 3],
+    // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
+    _padding: u32,
+    color: [f32; 3],
+}
 
 pub struct Demo3d {
     camera: camera::Camera,
