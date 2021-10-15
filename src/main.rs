@@ -21,6 +21,7 @@ mod game_of_life;
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
+    // get the title at compile time from env
     let title = env!("CARGO_PKG_NAME");
     let window = winit::window::WindowBuilder::new()
         .with_title(title)
@@ -58,12 +59,12 @@ fn main() {
         &state.window,
         imgui_winit_support::HiDpiMode::Default,
     );
+    // don't save imgui prefrences
     imgui.set_ini_filename(None);
-
-    let hidpi_factor = state.window.scale_factor();
 
     // Set font for imgui
     {
+        let hidpi_factor = state.window.scale_factor();
         println!("scaling factor: {}", hidpi_factor);
 
         let font_size = (13.0 * hidpi_factor) as f32;
@@ -177,6 +178,7 @@ fn main() {
                 imgui.io_mut().update_delta_time(now - last_frame);
                 last_frame = now;
 
+                // get entire window as texture
                 let frame = match state.surface.get_current_texture() {
                     Ok(frame) => frame,
                     Err(e) => {
@@ -210,6 +212,7 @@ fn main() {
                     "depth_texture",
                 );
 
+                // Render demo3d
                 match state.render(&view, Some(&depth_texture.view), 1) {
                     Ok(_) => {
                         frames_since_last_sec += 1;
@@ -222,9 +225,6 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
-                // Store the new size of Image() or None to indicate that the window is collapsed.
-                let mut new_window_size: Option<[f32; 2]> = None;
-
                 imgui::Window::new("Hello too")
                     .size([400.0, 200.0], Condition::FirstUseEver)
                     .position([600.0, 200.0], Condition::FirstUseEver)
@@ -232,6 +232,8 @@ fn main() {
                         ui.text(format!("Framerate: {:?}", fps));
                     });
 
+                // Store the new size of Image() or None to indicate that the window is collapsed.
+                let mut new_window_size: Option<[f32; 2]> = None;
                 imgui::Window::new("Hello World")
                     .size([1024.0, 1024.0], Condition::FirstUseEver)
                     .build(&ui, || {
@@ -285,8 +287,7 @@ fn main() {
                         renderer.textures.replace(depth_texture_id, depth_texture);
                     }
 
-                    // Only render example to example_texture if thw window is not collapsed
-
+                    // Only render contents if the window is not collapsed
                     match state.render(
                         &renderer.textures.get(window_texture_id).unwrap().view(),
                         Some(&renderer.textures.get(depth_texture_id).unwrap().view()),
@@ -306,40 +307,41 @@ fn main() {
                     }
                 }
 
+                // Actually render imgui ui
                 let mut encoder: wgpu::CommandEncoder = state
                     .device
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                {
+                    if last_cursor != Some(ui.mouse_cursor()) {
+                        last_cursor = Some(ui.mouse_cursor());
+                        platform.prepare_render(&ui, &state.window);
+                    }
 
-                if last_cursor != Some(ui.mouse_cursor()) {
-                    last_cursor = Some(ui.mouse_cursor());
-                    platform.prepare_render(&ui, &state.window);
+                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: None,
+                        color_attachments: &[wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load, // Do not clear
+                                // load: wgpu::LoadOp::Clear(clear_color),
+                                store: true,
+                            },
+                        }],
+                        depth_stencil_attachment: None,
+                    });
+
+                    renderer
+                        .render(ui.render(), &state.queue, &state.device, &mut rpass)
+                        .expect("Rendering imgui failed");
                 }
-
-                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load, // Do not clear
-                            // load: wgpu::LoadOp::Clear(clear_color),
-                            store: true,
-                        },
-                    }],
-                    depth_stencil_attachment: None,
-                });
-
-                renderer
-                    .render(ui.render(), &state.queue, &state.device, &mut rpass)
-                    .expect("Rendering failed");
-
-                drop(rpass);
-
                 state.queue.submit(Some(encoder.finish()));
+
                 frame.present();
             }
             _ => {}
         }
+        // Let imgui handle the event
         platform.handle_event(imgui.io_mut(), &state.window, &event);
     });
 }
