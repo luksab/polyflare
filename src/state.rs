@@ -2,10 +2,9 @@ use wgpu::TextureView;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-use crate::demo3d::Demo3d;
-use crate::game_of_life::GameOfLife;
 use crate::scene::Scene;
-
+/// # The main struct of this framework
+/// mainly defers actual work to scenes
 pub struct State {
     pub window: Window,
     pub surface: wgpu::Surface,
@@ -16,10 +15,14 @@ pub struct State {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
 
+    /// the scenes saved in the state struct
     pub scenes: Vec<Box<dyn Scene>>,
 }
 
 impl State {
+    /// create a new state, does not create any scenes
+    /// 
+    /// add those by calling `state.scenes.push(scene)`
     pub async fn new(window: Window) -> Self {
         let size = window.inner_size();
 
@@ -59,7 +62,7 @@ impl State {
                         max_vertex_attributes: 16,      // default
                         max_vertex_buffer_array_stride: 2048, // default
                         max_push_constant_size: 0,
-                        min_uniform_buffer_offset_alignment: 256,
+                        min_uniform_buffer_offset_alignment: 256, // default
                         min_storage_buffer_offset_alignment: 256, // default
                     },
                 },
@@ -95,6 +98,9 @@ impl State {
         }
     }
 
+    /// call this when the window is resized. 
+    /// 
+    /// internally calls resize on all scenes
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: Option<&f64>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -113,6 +119,7 @@ impl State {
         }
     }
 
+    /// let all scenes handle a WindowEvent
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         for scene in &mut self.scenes {
             scene.input(event);
@@ -122,12 +129,14 @@ impl State {
         }
     }
 
+    /// update all scenes - call this once a frame
     pub fn update(&mut self, dt: std::time::Duration) {
         for scene in &mut self.scenes {
             scene.update(dt, &self.device, &self.queue);
         }
     }
 
+    /// render the scene at index `index`
     pub fn render(
         &mut self,
         view: &TextureView,
