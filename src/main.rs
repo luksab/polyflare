@@ -21,15 +21,9 @@ mod game_of_life;
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    // get the title at compile time from env
-    let title = env!("CARGO_PKG_NAME");
-    let window = winit::window::WindowBuilder::new()
-        .with_title(title)
-        .build(&event_loop)
-        .unwrap();
 
     // initialize a state
-    let mut state = pollster::block_on(State::new(window));
+    let mut state = pollster::block_on(State::new(&event_loop, wgpu::Backends::all()));
 
     // create scenes and push into state
     {

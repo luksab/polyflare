@@ -1,5 +1,6 @@
-use wgpu::TextureView;
+use wgpu::{Backends, TextureView};
 use winit::event::WindowEvent;
+use winit::event_loop::EventLoop;
 use winit::window::Window;
 
 use crate::scene::Scene;
@@ -21,14 +22,20 @@ pub struct State {
 
 impl State {
     /// create a new state, does not create any scenes
-    /// 
+    ///
     /// add those by calling `state.scenes.push(scene)`
-    pub async fn new(window: Window) -> Self {
+    pub async fn new(event_loop: &EventLoop<()>, backend: Backends) -> Self {
+        // get the title at compile time from env
+        let title = env!("CARGO_PKG_NAME");
+        let window = winit::window::WindowBuilder::new()
+            .with_title(title)
+            .build(event_loop)
+            .unwrap();
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
+        let instance = wgpu::Instance::new(backend);
         let surface = unsafe { instance.create_surface(&window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -98,8 +105,8 @@ impl State {
         }
     }
 
-    /// call this when the window is resized. 
-    /// 
+    /// call this when the window is resized.
+    ///
     /// internally calls resize on all scenes
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: Option<&f64>) {
         if new_size.width > 0 && new_size.height > 0 {
