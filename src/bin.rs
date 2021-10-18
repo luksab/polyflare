@@ -31,4 +31,20 @@ fn main() {
     println!("f(x)+g(x)-g(x) = {}", f + g - g);
 
     assert_eq!(f, f + g - g);
+
+    let part = Monomial {
+        coefficient: 1.0,
+        exponents: [2, 4, 3],
+    };
+    let part2 = Monomial {
+        coefficient: 0.5,
+        exponents: [1, 3, 0],
+    };
+    println!("part: {}", part);
+    println!("part2: {}", part2);
+
+    let pol = Polynomial::new(vec![part, part2]);
+    println!("pol: {}", pol);
+    
+    println!("multiplied with itself: {}", &pol * &pol);
 }
