@@ -1,3 +1,4 @@
+use polynomial_optics::Ray;
 use tiny_skia::{Color, LineCap, Paint, PathBuilder, Pixmap, Stroke, StrokeDash, Transform};
 
 pub struct Line {
@@ -13,7 +14,7 @@ pub struct Line {
 impl Line {
     pub fn draw(&self, pixmap: &mut Pixmap) {
         let mut paint = Paint::default();
-        paint.set_color_rgba8(0, 127, 0, 200);
+        paint.set_color(self.color);
         paint.anti_alias = true;
 
         let path = {
@@ -21,6 +22,72 @@ impl Line {
             pb.move_to(self.x1, self.y1);
 
             pb.line_to(self.x2, self.y2);
+            pb.finish().unwrap()
+        };
+
+        let mut stroke = Stroke::default();
+        stroke.width = self.width;
+        stroke.line_cap = LineCap::Round;
+        if self.dashed {
+            stroke.dash = StrokeDash::new(vec![20.0, 40.0], 0.0);
+        }
+
+        pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
+    /// draws z y of the distance
+    pub fn draw_ray(&self, pixmap: &mut Pixmap, ray: &Ray, distance: f64) {
+        let mut paint = Paint::default();
+        paint.set_color(self.color);
+        paint.anti_alias = true;
+
+        let middle = ((pixmap.width() / 4) as f32, (pixmap.height() / 2) as f32);
+
+        let scale = (pixmap.width() / 4) as f32;
+
+        let path = {
+            let mut pb = PathBuilder::new();
+            pb.move_to(
+                middle.0 + scale * ray.o.z as f32,
+                middle.1 + scale * ray.o.y as f32,
+            );
+
+            pb.line_to(
+                middle.0 + scale * (ray.o.z + ray.d.z * distance) as f32,
+                middle.1 + scale * (ray.o.y + ray.d.y * distance) as f32,
+            );
+            pb.finish().unwrap()
+        };
+
+        let mut stroke = Stroke::default();
+        stroke.width = self.width;
+        stroke.line_cap = LineCap::Round;
+        if self.dashed {
+            stroke.dash = StrokeDash::new(vec![20.0, 40.0], 0.0);
+        }
+
+        pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
+    /// draws z y of the distance
+    pub fn draw_circle(&self, pixmap: &mut Pixmap, x: f32, y: f32, r: f32) {
+        let mut paint = Paint::default();
+        paint.set_color(self.color);
+        paint.anti_alias = true;
+
+        let middle = ((pixmap.width() / 4) as f32, (pixmap.height() / 2) as f32);
+
+        let scale = (pixmap.width() / 4) as f32;
+
+        let path = {
+            let mut pb = PathBuilder::new();
+            pb.move_to(middle.0 + scale * x as f32, middle.1 + scale * y as f32);
+
+            pb.push_circle(
+                middle.0 + scale * x as f32 + 2. * r * scale,
+                middle.1 + scale * y as f32,
+                r * scale,
+            );
             pb.finish().unwrap()
         };
 

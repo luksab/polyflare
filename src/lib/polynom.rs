@@ -1,6 +1,3 @@
-pub mod sparse_polynom;
-pub use sparse_polynom::*;
-
 use num::traits::Zero;
 use std::{
     fmt::Display,
