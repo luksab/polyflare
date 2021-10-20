@@ -47,10 +47,12 @@ pub enum Element {
     SphericalLensEntry {
         radius: f64,
         glass: Glass,
+        position: f64,
     },
     SphericalLensExit {
         radius: f64,
         glass: Glass,
+        position: f64,
     },
     Space(f64),
 }
@@ -60,17 +62,22 @@ impl Ray {
         Ray { o, d }
     }
 
-    fn refract_lens(&mut self, radius: &f64, glass: &Glass, entry: bool) {
-        let offset = self.o.z;
-        self.o.z = 0.;
-
+    fn refract_lens(&mut self, radius: &f64, glass: &Glass, position: f64, entry: bool) {
         // c: center of the lens surface if interpreted as an entire sphere
-        let c = Vector3::new(0., 0., *radius);
+        let c = Vector3::new(
+            0.,
+            0.,
+            if entry {
+                position + *radius
+            } else {
+                position - *radius
+            },
+        );
         let delta: f64 =
             self.d.dot(self.o - c).pow(2) - ((self.o - c).magnitude().pow(2) - radius.pow(2));
 
         let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
-        println!("d1: {}", d1);
+        // println!("d1: {}", d1);
         let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
 
         let intersection = if entry {
@@ -80,9 +87,12 @@ impl Ray {
         };
 
         self.o = intersection;
-        self.o.z += offset;
 
-        let normal = (intersection - c).normalize();
+        let normal = if entry {
+            (intersection - c).normalize()
+        } else {
+            -(intersection - c).normalize()
+        };
 
         let eta = if entry { 1.0 / glass.ior } else { glass.ior };
 
@@ -90,8 +100,8 @@ impl Ray {
         let k = 1.0 - eta * eta * (1.0 - normal.dot(self.d) * normal.dot(self.d));
 
         if k < 0.0 {
-            // total reflexion
-            println!("total reflexion");
+            // total reflection
+            println!("total reflection");
             self.d *= 0.0; // or genDType(0.0)
         } else {
             self.d = eta * self.d - (eta * normal.dot(self.d) + k.sqrt()) * normal;
@@ -103,16 +113,24 @@ impl Ray {
     /// the z coordinate has to be relative to the element
     pub fn propagate(&mut self, element: &Element) {
         match element {
-            Element::SphericalLensEntry { radius, glass } => {
+            Element::SphericalLensEntry {
+                radius,
+                glass,
+                position,
+            } => {
                 // propagate by the distance between the first part of the lens
                 // and the actual intersection
-                self.refract_lens(radius, glass, true);
+                self.refract_lens(radius, glass, *position, true);
                 //ray.d = ray.d - 2.0 * (ray.d.dot(normal)) * normal;
             }
             Element::Space(space) => {
                 self.o += self.d * *space;
             }
-            Element::SphericalLensExit { radius, glass } => self.refract_lens(radius, glass, false),
+            Element::SphericalLensExit {
+                radius,
+                glass,
+                position,
+            } => self.refract_lens(radius, glass, *position, false),
         }
     }
 }

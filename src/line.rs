@@ -43,7 +43,7 @@ impl Line {
 
         let middle = ((pixmap.width() / 4) as f32, (pixmap.height() / 2) as f32);
 
-        let scale = (pixmap.width() / 4) as f32;
+        let scale = (pixmap.height() / 10) as f32;
 
         let path = {
             let mut pb = PathBuilder::new();
@@ -77,7 +77,7 @@ impl Line {
 
         let middle = ((pixmap.width() / 4) as f32, (pixmap.height() / 2) as f32);
 
-        let scale = (pixmap.width() / 4) as f32;
+        let scale = (pixmap.height() / 10) as f32;
 
         let path = {
             let mut pb = PathBuilder::new();
@@ -132,7 +132,7 @@ impl Default for Line {
             y2: Default::default(),
             dashed: Default::default(),
             color: Color::from_rgba8(0, 127, 0, 200),
-            width: 6.0,
+            width: 0.1,
         }
     }
 }
