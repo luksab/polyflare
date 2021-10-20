@@ -52,6 +52,7 @@ fn main() {
     println!("multiplied with itself: {}", &pol * &pol);
 
     // ray tracing
+    // let mut pixmap = Pixmap::new(400, 200).unwrap();
     let mut pixmap = Pixmap::new(4000, 2000).unwrap();
     pixmap.fill(Color::from_rgba8(0, 0, 0, 255));
 
