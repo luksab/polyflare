@@ -94,39 +94,8 @@ fn main() {
     println!("lens: {:?}", lens_entry);
     //println!("ray: {:?}", ray);
 
-    let num_rays = 700;
-    let width = 2.0;
-    let now = Instant::now();
-    for i in 0..=num_rays {
-        let mut ray = Ray::new(
-            Vector3 {
-                x: 0.0,
-                y: i as f64 / (num_rays as f64) * width - width / 2.,
-                z: -5.,
-            },
-            Vector3 {
-                x: 0.0,
-                y: 0.0,
-                z: 1.0,
-            },
-        );
-
-        // the first ray
-        line.color = Color::from_rgba8(127, 127, 255, 255);
-        let mut one = ray;
-        ray.propagate(&space);
-
-        // second ray
-        ray.propagate(&lens_entry);
-        line.draw_vecs(&mut pixmap, &one, &ray);
-        one = ray;
-
-        ray.propagate(&lens_exit);
-        line.draw_vecs(&mut pixmap, &one, &ray);
-        line.draw_ray(&mut pixmap, &ray, 20.0);
-    }
-
-    println!("{:?}", now.elapsed());
+    let lens = Lens::new(vec![lens_entry, lens_exit]);
+    lens.draw(&mut pixmap);
 
     pixmap.save_png("image.png").unwrap();
 }
