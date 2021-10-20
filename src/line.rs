@@ -70,6 +70,40 @@ impl Line {
     }
 
     /// draws z y of the distance
+    pub fn draw_vecs(&self, pixmap: &mut Pixmap, ray1: &Ray, ray2: &Ray) {
+        let mut paint = Paint::default();
+        paint.set_color(self.color);
+        paint.anti_alias = true;
+
+        let middle = ((pixmap.width() / 4) as f32, (pixmap.height() / 2) as f32);
+
+        let scale = (pixmap.height() / 10) as f32;
+
+        let path = {
+            let mut pb = PathBuilder::new();
+            pb.move_to(
+                middle.0 + scale * ray1.o.z as f32,
+                middle.1 + scale * ray1.o.y as f32,
+            );
+
+            pb.line_to(
+                middle.0 + scale * (ray2.o.z) as f32,
+                middle.1 + scale * (ray2.o.y) as f32,
+            );
+            pb.finish().unwrap()
+        };
+
+        let mut stroke = Stroke::default();
+        stroke.width = self.width;
+        stroke.line_cap = LineCap::Round;
+        if self.dashed {
+            stroke.dash = StrokeDash::new(vec![20.0, 40.0], 0.0);
+        }
+
+        pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
+    /// draws z y of the distance
     pub fn draw_circle(&self, pixmap: &mut Pixmap, x: f32, y: f32, r: f32) {
         let mut paint = Paint::default();
         paint.set_color(self.color);

@@ -53,6 +53,7 @@ fn main() {
 
     // ray tracing
     let mut pixmap = Pixmap::new(4000, 2000).unwrap();
+    pixmap.fill(Color::from_rgba8(0, 0, 0, 255));
 
     let mut line = Line::new(10., 10., 400., 300.);
 
@@ -101,7 +102,7 @@ fn main() {
             Vector3 {
                 x: 0.0,
                 y: i as f64 / (num_rays as f64) * width - width / 2.,
-                z: -2.5,
+                z: -5.,
             },
             Vector3 {
                 x: 0.0,
@@ -111,21 +112,17 @@ fn main() {
         );
 
         // the first ray
-        line.color = Color::from_rgba8(127, 127, 127, 255);
-        line.draw_ray(&mut pixmap, &ray, 0.5);
+        line.color = Color::from_rgba8(127, 127, 255, 255);
+        let mut one = ray;
         ray.propagate(&space);
 
         // second ray
         ray.propagate(&lens_entry);
-        line.color = Color::from_rgba8(127, 0, 127, 255);
-        line.draw_ray(&mut pixmap, &ray, 2.5);
+        line.draw_vecs(&mut pixmap, &one, &ray);
+        one = ray;
 
         ray.propagate(&lens_exit);
-        line.color = Color::from_rgba8(127, 0, 0, 255);
-        line.draw_ray(&mut pixmap, &ray, 1.0);
-        ray.propagate(&space);
-        ray.propagate(&space);
-        line.color = Color::from_rgba8(127, 127, 255, 255);
+        line.draw_vecs(&mut pixmap, &one, &ray);
         line.draw_ray(&mut pixmap, &ray, 20.0);
     }
 

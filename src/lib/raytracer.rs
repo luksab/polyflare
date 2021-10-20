@@ -1,7 +1,7 @@
 use cgmath::{num_traits::Pow, prelude::*, Vector3};
 
 /// ## A ray at a plane in the lens system
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ray {
     /// origin of the Ray, 0 in the optical axis
     pub o: cgmath::Vector3<f64>,
