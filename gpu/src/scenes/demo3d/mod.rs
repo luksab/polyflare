@@ -34,9 +34,7 @@ pub struct Demo3d {
     camera_uniform: camera::CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
-    mouse_grabbed: bool,
     mouse_pressed: bool,
-    mouse_moved: bool,
     last_mouse_pos: PhysicalPosition<f64>,
 
     obj_model: model::Model,
@@ -362,8 +360,6 @@ impl Demo3d {
             camera_buffer,
             camera_bind_group,
             camera_uniform,
-            mouse_grabbed: false,
-            mouse_moved: false,
             last_mouse_pos: PhysicalPosition { x: 0., y: 0. },
             instances,
             instance_buffer,
@@ -385,7 +381,7 @@ impl scene::Scene for Demo3d {
     fn resize(
         &mut self,
         new_size: winit::dpi::PhysicalSize<u32>,
-        scale_factor: f64,
+        _scale_factor: f64,
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
         _queue: &Queue,
