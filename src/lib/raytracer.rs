@@ -1,7 +1,7 @@
 use cgmath::{
     num_traits::{real::Real, Pow},
     prelude::*,
-    Vector3,
+    Vector2, Vector3,
 };
 use tiny_skia::{Color, Pixmap};
 
@@ -372,117 +372,122 @@ impl Lens {
         }
     }
 
-    pub fn get_rays(&self, num_rays: u32, clip: f64) -> Vec<f32> {
+    pub fn get_rays(&self, num_rays: u32, center_pos: Vector3<f64>, direction: Vector3<f64>, draw_mode: u32) -> Vec<f32> {
         let mut rays = vec![];
 
         let width = 2.0;
+        let mut old_strength;
         for ray_num in 0..num_rays {
-            // for i in 0..self.elements.len() {
-            //     for j in i..self.elements.len() {
-            for i in 0..=0 {
-                for j in 1..=1 {
-                    let mut ray = Ray::new(
-                        Vector3 {
-                            x: 0.0,
-                            y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
-                            z: -5.,
-                        },
-                        Vector3 {
-                            x: 0.0,
-                            y: 0.2,
-                            z: 1.0,
+            if draw_mode & 1 > 0 {
+                for i in 0..self.elements.len() - 1 {
+                    for j in i + 1..self.elements.len() {
+                        let mut pos = center_pos;
+                        pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
+                        let mut ray = Ray::new(
+                            pos,
+                            direction,
+                        );
+                        rays.push(ray.o.z);
+                        rays.push(ray.o.y);
+                        rays.push(ray.strength);
+                        old_strength = ray.strength;
+                        for (ele, element) in self.elements.iter().enumerate() {
+                            // if we iterated through all elements up to
+                            // the first reflection point
+
+                            if ele == j {
+                                // reflect at the first element,
+                                // which is further down the optical path
+                                ray.reflect(element);
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(old_strength);
+                                old_strength = ray.strength;
+
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(ray.strength);
+                                // propagate backwards through system
+                                // until the second reflection
+                                for k in (i + 1..j).rev() {
+                                    ray.propagate(&self.elements[k]);
+                                    rays.push(ray.o.z);
+                                    rays.push(ray.o.y);
+                                    rays.push(old_strength);
+                                    old_strength = ray.strength;
+
+                                    rays.push(ray.o.z);
+                                    rays.push(ray.o.y);
+                                    rays.push(ray.strength);
+                                }
+                                ray.reflect(&self.elements[i]);
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(old_strength);
+                                old_strength = ray.strength;
+
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(ray.strength);
+                                for k in i + 1..j {
+                                    ray.propagate(&self.elements[k]);
+                                    rays.push(ray.o.z);
+                                    rays.push(ray.o.y);
+                                    rays.push(old_strength);
+                                    old_strength = ray.strength;
+
+                                    rays.push(ray.o.z);
+                                    rays.push(ray.o.y);
+                                    rays.push(ray.strength);
+                                }
+                                // println!("strength: {}", ray.strength);
+                            } else {
+                                ray.propagate(element);
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(old_strength);
+                                old_strength = ray.strength;
+
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(ray.strength);
+                            }
                         }
-                        .normalize(),
-                    );
+                        ray.propagate(&Element::Space(100.));
+                        rays.push(ray.o.z);
+                        rays.push(ray.o.y);
+                        rays.push(ray.strength);
+                    }
+                }
+            }
+            if draw_mode & 2 > 0 {
+                let mut pos = center_pos;
+                pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
+                let mut ray = Ray::new(
+                    pos,
+                    direction,
+                );
+                rays.push(ray.o.z);
+                rays.push(ray.o.y);
+                rays.push(ray.strength);
+                old_strength = ray.strength;
+                for element in &self.elements {
+                    ray.propagate(element);
                     rays.push(ray.o.z);
                     rays.push(ray.o.y);
-                    rays.push(ray.strength);
-                    for (ele, element) in self.elements.iter().enumerate() {
-                        // if we iterated through all elements up to
-                        // the first reflection point
+                    rays.push(old_strength);
+                    old_strength = ray.strength;
 
-                        if ele == j {
-                            // reflect at the first element,
-                            // which is further down the optical path
-                            ray.reflect(element);
-                            rays.push(ray.o.z);
-                            rays.push(ray.o.y);
-                            rays.push(ray.strength);
-
-                            rays.push(ray.o.z);
-                            rays.push(ray.o.y);
-                            rays.push(ray.strength);
-                            // propagate backwards through system
-                            // until the second reflection
-                            for k in (i + 1..j).rev() {
-                                ray.propagate(&self.elements[k]);
-                                rays.push(ray.o.z);
-                                rays.push(ray.o.y);
-                                rays.push(ray.strength);
-
-                                rays.push(ray.o.z);
-                                rays.push(ray.o.y);
-                                rays.push(ray.strength);
-                            }
-                            ray.reflect(&self.elements[i]);
-                            rays.push(ray.o.z);
-                            rays.push(ray.o.y);
-                            rays.push(ray.strength);
-
-                            rays.push(ray.o.z);
-                            rays.push(ray.o.y);
-                            rays.push(ray.strength);
-                            for k in i + 1..j {
-                                ray.propagate(&self.elements[k]);
-                                rays.push(ray.o.z);
-                                rays.push(ray.o.y);
-                                rays.push(ray.strength);
-
-                                rays.push(ray.o.z);
-                                rays.push(ray.o.y);
-                                rays.push(ray.strength);
-                            }
-                            // println!("strength: {}", ray.strength);
-                        } else {
-                            ray.propagate(element);
-                            rays.push(ray.o.z);
-                            rays.push(ray.o.y);
-                            rays.push(ray.strength);
-
-                            rays.push(ray.o.z);
-                            rays.push(ray.o.y);
-                            rays.push(ray.strength);
-                        }
-                    }
-                    ray.propagate(&Element::Space(100.));
                     rays.push(ray.o.z);
                     rays.push(ray.o.y);
                     rays.push(ray.strength);
                 }
+                ray.propagate(&Element::Space(100.));
+                rays.push(ray.o.z);
+                rays.push(ray.o.y);
+                rays.push(ray.strength);
             }
-            // let mut ray = Ray::new(
-            //     Vector3 {
-            //         x: 0.0,
-            //         y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
-            //         z: -5.,
-            //     },
-            //     Vector3 {
-            //         x: 0.0,
-            //         y: 0.0,
-            //         z: 1.0,
-            //     },
-            // );
-            // let mut one = ray;
-            // for element in &self.elements {
-            //     ray.propagate(element);
-            //     Lens::draw_rays(pixmap, &one, &ray);
-            //     one = ray;
-            // }
-            // ray.propagate(&Element::Space(100.));
-            // Lens::draw_rays(pixmap, &one, &ray);
         }
-        rays.into_iter()
-            .map(|num| num as f32)
-            .collect()
+        rays.into_iter().map(|num| num as f32).collect()
     }
 }
