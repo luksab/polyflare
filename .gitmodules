@@ -1,0 +1,3 @@
+[submodule "polynomial_optics"]
+	path = polynomial_optics
+	url = https://github.com/luksab/polynomial_optics

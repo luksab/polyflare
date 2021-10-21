@@ -14,9 +14,7 @@ mod scene;
 mod state;
 use state::State;
 
-mod demo3d;
-
-mod game_of_life;
+mod scenes;
 
 fn main() {
     env_logger::init();
@@ -28,10 +26,10 @@ fn main() {
     // create scenes and push into state
     {
         let game_of_life =
-            pollster::block_on(game_of_life::GameOfLife::new(&state.device, &state.config));
+            pollster::block_on(scenes::GameOfLife::new(&state.device, &state.config));
         state.scenes.push(Box::new(game_of_life));
 
-        let demo = pollster::block_on(demo3d::Demo3d::new(
+        let demo = pollster::block_on(scenes::Demo3d::new(
             &state.device,
             &state.queue,
             &state.config,

@@ -230,7 +230,7 @@ impl Demo3d {
             label: Some("camera_bind_group"),
         });
 
-        let res_dir = std::path::Path::new("res");
+        let res_dir = std::path::Path::new("gpu/src/scenes/demo3d/res");
         let obj_model = model::Model::load(
             &device,
             &queue,
@@ -325,8 +325,8 @@ impl Demo3d {
         };
 
         let debug_material = {
-            let diffuse_bytes = include_bytes!("../res/cobble-diffuse.png");
-            let normal_bytes = include_bytes!("../res/cobble-normal.png");
+            let diffuse_bytes = include_bytes!("res/cobble-diffuse.png");
+            let normal_bytes = include_bytes!("res/cobble-normal.png");
 
             let diffuse_texture = texture::Texture::from_bytes(
                 &device,

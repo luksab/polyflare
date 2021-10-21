@@ -1,4 +1,4 @@
-FROM nvidia/vulkan:1.1.121-cuda-10.1-alpha
+FROM nvidia/opengl:1.2-glvnd-runtime
 
 WORKDIR /usr/src/wgpu_test
 COPY . .
@@ -6,14 +6,14 @@ COPY . .
 RUN apt update -y
 RUN apt install libxcursor-dev libxrandr-dev libx11-dev libxxf86vm-dev libxi-dev -y
 RUN apt install libvulkan1 libvulkan-dev mesa-vulkan-drivers -y
-
+RUN apt install vulkan-utils
 # enable intel GPU pass through
 # still need to run "xhost +local:root" on the host before
 # and "xhost -local:root" after using the container
 # call container with
 # docker run --volume=/tmp/.X11-unix:/tmp/.X11-unix --device=/dev/dri:/dev/dri --env="DISPLAY=$DISPLAY" -it wgpu_test /bin/bash
-RUN apt install libgl1-mesa-glx libgl1-mesa-dri -y
-RUN rm -rf /var/lib/apt/lists/*
+# RUN apt install libgl1-mesa-glx libgl1-mesa-dri -y
+# RUN rm -rf /var/lib/apt/lists/*
 # For some reasson, this is still broken on my machine
 
 # enable NVidia GPU pass though
@@ -38,5 +38,5 @@ RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
 #     PATH=/usr/local/cargo/bin:$PATH
 # ENV PATH="$HOME/.cargo/bin:$PATH"
 
-# RUN cargo build
+RUN PATH="$HOME/.cargo/bin:$PATH" cargo build
 # build using "docker build -t wgpu_test ."
