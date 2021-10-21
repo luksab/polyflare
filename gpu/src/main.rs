@@ -18,6 +18,14 @@ use state::State;
 
 mod scenes;
 
+struct Parms {
+    ray_exponent: f64,
+    draw: u32,
+    pos: [f64; 3],
+    dir: [f64; 3],
+    opacity: f32,
+}
+
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
@@ -25,7 +33,13 @@ fn main() {
     // initialize a state
     let mut state = pollster::block_on(State::new(&event_loop, wgpu::Backends::all()));
 
-    let mut optics_params = (512, true);
+    let mut optics_params = Parms {
+        ray_exponent: 2.7,
+        draw: 3,
+        pos: [0.0, 0.0, -5.0],
+        dir: [0.0, 0.1, 1.0],
+        opacity: 0.1,
+    };
 
     // create scenes and push into state
 
@@ -228,20 +242,50 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
+                let mut poly = poly_optics.lock().unwrap();
                 imgui::Window::new("Params")
-                    .size([400.0, 200.0], Condition::FirstUseEver)
-                    .position([600.0, 200.0], Condition::FirstUseEver)
+                    .size([400.0, 250.0], Condition::FirstUseEver)
+                    .position([600.0, 100.0], Condition::FirstUseEver)
                     .build(&ui, || {
                         ui.text(format!("Framerate: {:?}", fps));
-                        Slider::new("num_rays", 1, 4096).build(&ui, &mut optics_params.0);
+                        Slider::new("rays_exponent", 0., 5.)
+                            .build(&ui, &mut optics_params.ray_exponent);
+                        ui.text(format!(
+                            "rays: {}",
+                            10.0_f64.powf(optics_params.ray_exponent) as u32
+                        ));
+
+                        if Slider::new("opacity", 0., 1.).build(&ui, &mut optics_params.opacity) {
+                            poly.sim_params[0] = optics_params.opacity.powf(3.);
+                            poly.write_buffer(&state.queue);
+                        }
+
+                        ui.radio_button("render nothing", &mut optics_params.draw, 0);
+                        ui.radio_button("render both", &mut optics_params.draw, 3);
+                        ui.radio_button("render normal", &mut optics_params.draw, 2);
+                        ui.radio_button("render ghosts", &mut optics_params.draw, 1);
+                        poly.draw_mode = optics_params.draw;
+                        // ui.radio_button("num_rays", &mut optics_params.1, true);
+                        Drag::new("ray origin")
+                            .speed(0.01)
+                            .range(-10., 10.)
+                            .build_array(&ui, &mut optics_params.pos);
+
+                        Drag::new("ray direction")
+                            .speed(0.01)
+                            .range(-1., 1.)
+                            .build_array(&ui, &mut optics_params.dir);
                     });
 
-                poly_optics.lock().unwrap().num_rays = optics_params.0;
+                poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
+                poly.center_pos = optics_params.pos.into();
+                poly.direction = optics_params.dir.into();
 
                 // Store the new size of Image() or None to indicate that the window is collapsed.
                 let mut new_window_size: Option<[f32; 2]> = None;
                 imgui::Window::new("Hello World")
                     .size([512.0, 512.0], Condition::FirstUseEver)
+                    .collapsed(true, Condition::FirstUseEver)
                     .build(&ui, || {
                         // new_example_size = Some(ui.content_region_avail());
                         // ui.text("Hello world!");

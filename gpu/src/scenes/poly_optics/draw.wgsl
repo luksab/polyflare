@@ -8,6 +8,15 @@ struct VertexOutput {
     [[location(0)]] strength: f32;
 };
 
+[[block]]
+struct SimParams {
+  opacity: f32;
+  width: f32;
+  height: f32;
+};
+
+[[group(0), binding(0)]] var<uniform> params : SimParams;
+
 [[stage(vertex)]]
 fn main(
     in: VertexInput,
@@ -26,6 +35,7 @@ fn main(
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    return vec4<f32>(1.0, 1.0, 1.0, sqrt(in.strength));
+  let s = in.strength * params.opacity;
+    return vec4<f32>(1.0, 1.0, 1.0, sqrt(in.strength) * params.opacity);
     // return vec4<f32>(1.0, 1.0, 1.0, 0.0);
 }
