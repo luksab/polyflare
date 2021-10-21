@@ -1,5 +1,7 @@
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
+use std::rc::Rc;
+use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -23,20 +25,29 @@ fn main() {
     // initialize a state
     let mut state = pollster::block_on(State::new(&event_loop, wgpu::Backends::all()));
 
+    let mut optics_params = (512, true);
+
     // create scenes and push into state
-    {
-        let game_of_life =
-            pollster::block_on(scenes::GameOfLife::new(&state.device, &state.config));
-        state.scenes.push(Box::new(game_of_life));
 
-        let demo = pollster::block_on(scenes::Demo3d::new(
-            &state.device,
-            &state.queue,
-            &state.config,
-        ));
+    let game_of_life = Rc::new(Mutex::new(pollster::block_on(scenes::GameOfLife::new(
+        &state.device,
+        &state.config,
+    ))));
+    state.scenes.push(game_of_life.clone());
 
-        state.scenes.push(Box::new(demo));
-    }
+    let poly_optics = Rc::new(Mutex::new(pollster::block_on(scenes::PolyOptics::new(
+        &state.device,
+        &state.config,
+    ))));
+    state.scenes.push(poly_optics.clone());
+
+    // let demo = pollster::block_on(scenes::Demo3d::new(
+    //     &state.device,
+    //     &state.queue,
+    //     &state.config,
+    // ));
+
+    // state.scenes.push(Box::new(demo));
 
     let mut last_render_time = std::time::Instant::now();
     let mut last_sec = SystemTime::now();
@@ -217,17 +228,20 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
-                imgui::Window::new("Hello too")
+                imgui::Window::new("Params")
                     .size([400.0, 200.0], Condition::FirstUseEver)
                     .position([600.0, 200.0], Condition::FirstUseEver)
                     .build(&ui, || {
                         ui.text(format!("Framerate: {:?}", fps));
+                        Slider::new("num_rays", 1, 4096).build(&ui, &mut optics_params.0);
                     });
+
+                poly_optics.lock().unwrap().num_rays = optics_params.0;
 
                 // Store the new size of Image() or None to indicate that the window is collapsed.
                 let mut new_window_size: Option<[f32; 2]> = None;
                 imgui::Window::new("Hello World")
-                    .size([1024.0, 1024.0], Condition::FirstUseEver)
+                    .size([512.0, 512.0], Condition::FirstUseEver)
                     .build(&ui, || {
                         // new_example_size = Some(ui.content_region_avail());
                         // ui.text("Hello world!");

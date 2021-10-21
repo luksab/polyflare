@@ -1,3 +1,6 @@
+use std::rc::Rc;
+use std::sync::Mutex;
+
 use wgpu::{Backends, TextureView};
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
@@ -17,7 +20,7 @@ pub struct State {
     pub config: wgpu::SurfaceConfiguration,
 
     /// the scenes saved in the state struct
-    pub scenes: Vec<Box<dyn Scene>>,
+    pub scenes: Vec<Rc<Mutex<dyn Scene>>>,
 }
 
 impl State {
@@ -78,6 +81,8 @@ impl State {
             .await
             .unwrap();
 
+        println!("{:?}", surface.get_preferred_format(&adapter).unwrap());
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_preferred_format(&adapter).unwrap(),
@@ -88,7 +93,7 @@ impl State {
 
         surface.configure(&device, &config);
 
-        let scenes: Vec<Box<dyn Scene>> = Vec::new();
+        let scenes: Vec<Rc<Mutex<dyn Scene>>> = Vec::new();
 
         let scale_factor = window.scale_factor();
         Self {
@@ -116,7 +121,7 @@ impl State {
             self.surface.configure(&self.device, &self.config);
         }
         for scene in &mut self.scenes {
-            scene.resize(
+            scene.lock().unwrap().resize(
                 self.size,
                 *scale_factor.unwrap_or(&self.scale_factor),
                 &self.device,
@@ -129,7 +134,7 @@ impl State {
     /// let all scenes handle a WindowEvent
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         for scene in &mut self.scenes {
-            scene.input(event);
+            scene.lock().unwrap().input(event);
         }
         match event {
             _ => false,
@@ -139,7 +144,7 @@ impl State {
     /// update all scenes - call this once a frame
     pub fn update(&mut self, dt: std::time::Duration) {
         for scene in &mut self.scenes {
-            scene.update(dt, &self.device, &self.queue);
+            scene.lock().unwrap().update(dt, &self.device, &self.queue);
         }
     }
 
@@ -153,6 +158,8 @@ impl State {
         self.scenes
             .get_mut(index)
             .expect("scene not found!")
+            .lock()
+            .unwrap()
             .render(view, depth_view, &self.device, &self.queue)
     }
 }
