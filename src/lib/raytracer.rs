@@ -1,4 +1,8 @@
-use cgmath::{Vector3, num_traits::{Pow, real::Real}, prelude::*};
+use cgmath::{
+    num_traits::{real::Real, Pow},
+    prelude::*,
+    Vector3,
+};
 use tiny_skia::{Color, Pixmap};
 
 /// ## A ray at a plane in the lens system
@@ -305,13 +309,14 @@ impl Lens {
                             x: 0.0,
                             y: 0.2,
                             z: 1.0,
-                        }.normalize(),
+                        }
+                        .normalize(),
                     );
                     let mut one = ray;
                     for (ele, element) in self.elements.iter().enumerate() {
                         // if we iterated through all elements up to
                         // the first reflection point
-                        
+
                         if ele == j {
                             // reflect at the first element,
                             // which is further down the optical path
@@ -320,7 +325,7 @@ impl Lens {
                             one = ray;
                             // propagate backwards through system
                             // until the second reflection
-                            for k in (i+1..j).rev() {
+                            for k in (i + 1..j).rev() {
                                 ray.propagate(&self.elements[k]);
                                 Lens::draw_rays(pixmap, &one, &ray);
                                 one = ray;
@@ -328,7 +333,7 @@ impl Lens {
                             ray.reflect(&self.elements[i]);
                             Lens::draw_rays(pixmap, &one, &ray);
                             one = ray;
-                            for k in i+1..j {
+                            for k in i + 1..j {
                                 ray.propagate(&self.elements[k]);
                                 Lens::draw_rays(pixmap, &one, &ray);
                                 one = ray;
@@ -365,5 +370,119 @@ impl Lens {
             // ray.propagate(&Element::Space(100.));
             // Lens::draw_rays(pixmap, &one, &ray);
         }
+    }
+
+    pub fn get_rays(&self, num_rays: u32, clip: f64) -> Vec<f32> {
+        let mut rays = vec![];
+
+        let width = 2.0;
+        for ray_num in 0..num_rays {
+            // for i in 0..self.elements.len() {
+            //     for j in i..self.elements.len() {
+            for i in 0..=0 {
+                for j in 1..=1 {
+                    let mut ray = Ray::new(
+                        Vector3 {
+                            x: 0.0,
+                            y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
+                            z: -5.,
+                        },
+                        Vector3 {
+                            x: 0.0,
+                            y: 0.2,
+                            z: 1.0,
+                        }
+                        .normalize(),
+                    );
+                    rays.push(ray.o.z);
+                    rays.push(ray.o.y);
+                    rays.push(ray.strength);
+                    for (ele, element) in self.elements.iter().enumerate() {
+                        // if we iterated through all elements up to
+                        // the first reflection point
+
+                        if ele == j {
+                            // reflect at the first element,
+                            // which is further down the optical path
+                            ray.reflect(element);
+                            rays.push(ray.o.z);
+                            rays.push(ray.o.y);
+                            rays.push(ray.strength);
+
+                            rays.push(ray.o.z);
+                            rays.push(ray.o.y);
+                            rays.push(ray.strength);
+                            // propagate backwards through system
+                            // until the second reflection
+                            for k in (i + 1..j).rev() {
+                                ray.propagate(&self.elements[k]);
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(ray.strength);
+
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(ray.strength);
+                            }
+                            ray.reflect(&self.elements[i]);
+                            rays.push(ray.o.z);
+                            rays.push(ray.o.y);
+                            rays.push(ray.strength);
+
+                            rays.push(ray.o.z);
+                            rays.push(ray.o.y);
+                            rays.push(ray.strength);
+                            for k in i + 1..j {
+                                ray.propagate(&self.elements[k]);
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(ray.strength);
+
+                                rays.push(ray.o.z);
+                                rays.push(ray.o.y);
+                                rays.push(ray.strength);
+                            }
+                            // println!("strength: {}", ray.strength);
+                        } else {
+                            ray.propagate(element);
+                            rays.push(ray.o.z);
+                            rays.push(ray.o.y);
+                            rays.push(ray.strength);
+
+                            rays.push(ray.o.z);
+                            rays.push(ray.o.y);
+                            rays.push(ray.strength);
+                        }
+                    }
+                    ray.propagate(&Element::Space(100.));
+                    rays.push(ray.o.z);
+                    rays.push(ray.o.y);
+                    rays.push(ray.strength);
+                }
+            }
+            // let mut ray = Ray::new(
+            //     Vector3 {
+            //         x: 0.0,
+            //         y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
+            //         z: -5.,
+            //     },
+            //     Vector3 {
+            //         x: 0.0,
+            //         y: 0.0,
+            //         z: 1.0,
+            //     },
+            // );
+            // let mut one = ray;
+            // for element in &self.elements {
+            //     ray.propagate(element);
+            //     Lens::draw_rays(pixmap, &one, &ray);
+            //     one = ray;
+            // }
+            // ray.propagate(&Element::Space(100.));
+            // Lens::draw_rays(pixmap, &one, &ray);
+        }
+        rays.into_iter()
+            .map(|num| num as f32)
+            .collect()
     }
 }
