@@ -473,7 +473,7 @@ impl PolyOptics {
         );
     }
 
-    fn update_rays(&mut self, device: &wgpu::Device) {
+    pub fn update_rays(&mut self, device: &wgpu::Device) {
         self.rays = self.lens.get_rays(
             self.num_rays,
             self.center_pos,
@@ -588,12 +588,12 @@ impl Scene for PolyOptics {
         true
     }
 
-    fn update(&mut self, _dt: std::time::Duration, device: &wgpu::Device, _queue: &Queue) {
+    fn update(&mut self, _dt: std::time::Duration, _device: &wgpu::Device, _queue: &Queue) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
         //     self.cell_timer = SystemTime::now();
         //     self.update_cells(device, queue);
         // }
-        self.update_rays(device);
+        //self.update_rays(device);
     }
 
     fn render(

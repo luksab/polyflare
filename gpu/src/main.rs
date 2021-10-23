@@ -243,12 +243,13 @@ fn main() {
                 }
 
                 let mut poly = poly_optics.lock().unwrap();
+                let mut update_poly = false;
                 imgui::Window::new("Params")
                     .size([400.0, 250.0], Condition::FirstUseEver)
                     .position([600.0, 100.0], Condition::FirstUseEver)
                     .build(&ui, || {
                         ui.text(format!("Framerate: {:?}", fps));
-                        Slider::new("rays_exponent", 0., 5.)
+                        update_poly |= Slider::new("rays_exponent", 0., 5.)
                             .build(&ui, &mut optics_params.ray_exponent);
                         ui.text(format!(
                             "rays: {}",
@@ -260,18 +261,18 @@ fn main() {
                             poly.write_buffer(&state.queue);
                         }
 
-                        ui.radio_button("render nothing", &mut optics_params.draw, 0);
-                        ui.radio_button("render both", &mut optics_params.draw, 3);
-                        ui.radio_button("render normal", &mut optics_params.draw, 2);
-                        ui.radio_button("render ghosts", &mut optics_params.draw, 1);
+                        update_poly |= ui.radio_button("render nothing", &mut optics_params.draw, 0)
+                            || ui.radio_button("render both", &mut optics_params.draw, 3)
+                            || ui.radio_button("render normal", &mut optics_params.draw, 2)
+                            || ui.radio_button("render ghosts", &mut optics_params.draw, 1);
                         poly.draw_mode = optics_params.draw;
                         // ui.radio_button("num_rays", &mut optics_params.1, true);
-                        Drag::new("ray origin")
+                        update_poly |= Drag::new("ray origin")
                             .speed(0.01)
                             .range(-10., 10.)
                             .build_array(&ui, &mut optics_params.pos);
 
-                        Drag::new("ray direction")
+                        update_poly |= Drag::new("ray direction")
                             .speed(0.01)
                             .range(-1., 1.)
                             .build_array(&ui, &mut optics_params.dir);
@@ -280,6 +281,10 @@ fn main() {
                 poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
                 poly.center_pos = optics_params.pos.into();
                 poly.direction = optics_params.dir.into();
+
+                if update_poly {
+                    poly.update_rays(&state.device);
+                }
 
                 // Store the new size of Image() or None to indicate that the window is collapsed.
                 let mut new_window_size: Option<[f32; 2]> = None;
