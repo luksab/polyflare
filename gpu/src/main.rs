@@ -243,6 +243,7 @@ fn main() {
                 }
 
                 let mut poly = poly_optics.lock().unwrap();
+                poly.update_rays(&state.device);
                 let mut update_poly = false;
                 imgui::Window::new("Params")
                     .size([400.0, 250.0], Condition::FirstUseEver)
@@ -285,6 +286,8 @@ fn main() {
                 if update_poly {
                     poly.update_rays(&state.device);
                 }
+                // we don't need poly for the rest of this function
+                drop(poly);
 
                 // Store the new size of Image() or None to indicate that the window is collapsed.
                 let mut new_window_size: Option<[f32; 2]> = None;
