@@ -27,8 +27,10 @@ fn main(
     //     f32(grid_pos[1])/f32(params.side_len)) * 2.f32;
     // let pos = (position + offset - vec2<f32>(0.9,0.9));
 
+    let screenAspect = normalize(vec2<f32>(params.height, params.width));
+
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(in.position/4.0, 0.,1.);
+    out.clip_position = vec4<f32>(in.position/4.0*screenAspect, 0.,1.);
     out.strength = in.strength;
     return out;
 }
