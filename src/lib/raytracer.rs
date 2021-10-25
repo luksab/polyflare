@@ -1,8 +1,4 @@
-use cgmath::{
-    num_traits::{real::Real, Pow},
-    prelude::*,
-    Vector2, Vector3,
-};
+use cgmath::{num_traits::Pow, prelude::*, Vector3};
 use tiny_skia::{Color, Pixmap};
 
 /// ## A ray at a plane in the lens system
@@ -155,7 +151,7 @@ impl Ray {
         let delta: f64 =
             self.d.dot(self.o - c).pow(2) - ((self.o - c).magnitude().pow(2) - radius.pow(2));
 
-        let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
+        // let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
         let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
 
         let intersection = if entry {
@@ -372,7 +368,13 @@ impl Lens {
         }
     }
 
-    pub fn get_rays(&self, num_rays: u32, center_pos: Vector3<f64>, direction: Vector3<f64>, draw_mode: u32) -> Vec<f32> {
+    pub fn get_rays(
+        &self,
+        num_rays: u32,
+        center_pos: Vector3<f64>,
+        direction: Vector3<f64>,
+        draw_mode: u32,
+    ) -> Vec<f32> {
         let mut rays = vec![];
 
         let width = 2.0;
@@ -383,10 +385,7 @@ impl Lens {
                     for j in i + 1..self.elements.len() {
                         let mut pos = center_pos;
                         pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                        let mut ray = Ray::new(
-                            pos,
-                            direction,
-                        );
+                        let mut ray = Ray::new(pos, direction);
                         rays.push(ray.o.z);
                         rays.push(ray.o.y);
                         rays.push(ray.strength);
@@ -463,10 +462,7 @@ impl Lens {
             if draw_mode & 2 > 0 {
                 let mut pos = center_pos;
                 pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                let mut ray = Ray::new(
-                    pos,
-                    direction,
-                );
+                let mut ray = Ray::new(pos, direction);
                 rays.push(ray.o.z);
                 rays.push(ray.o.y);
                 rays.push(ray.strength);
