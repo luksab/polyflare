@@ -1,4 +1,4 @@
-use cgmath::{num_traits::Pow, prelude::*, Vector3};
+use cgmath::{num_traits::Pow, prelude::*, Vector2, Vector3};
 use tiny_skia::{Color, Pixmap};
 
 /// ## A ray at a plane in the lens system
@@ -57,6 +57,16 @@ pub enum Element {
         glass: Glass,
         position: f64,
     },
+    CylindricalLensEntry {
+        radius: f64,
+        glass: Glass,
+        position: f64,
+    },
+    CylindricalLensExit {
+        radius: f64,
+        glass: Glass,
+        position: f64,
+    },
     Space(f64),
 }
 
@@ -83,101 +93,158 @@ impl Ray {
         return 1.0 - s + p;
     }
 
-    fn refract_lens(&mut self, radius: &f64, glass: &Glass, position: f64, entry: bool) {
-        // c: center of the lens surface if interpreted as an entire sphere
-        let c = Vector3::new(
-            0.,
-            0.,
-            if entry {
-                position + *radius
+    fn propagate_element(
+        &mut self,
+        radius: &f64,
+        glass: &Glass,
+        position: f64,
+        reflect: bool,
+        entry: bool,
+        cylindrical: bool,
+    ) {
+        let intersection = if cylindrical {
+            // cylindrical: x is not affected by curvature
+
+            // c: center of the lens surface if interpreted as an entire sphere
+            let c = Vector2::new(
+                0.,
+                if entry {
+                    position + *radius
+                } else {
+                    position - *radius
+                },
+            );
+            let o: Vector2<f64> = Vector2 {
+                x: self.o.x,
+                y: self.o.y,
+            };
+            let d: Vector2<f64> = Vector2 {
+                x: self.d.x,
+                y: self.d.y,
+            };
+            let delta: f64 = d.dot(o - c).pow(2) - ((o - c).magnitude().pow(2) - radius.pow(2));
+
+            let d1 = -(d.dot(o - c)) - delta.sqrt();
+            let d2 = -(d.dot(o - c)) + delta.sqrt();
+
+            if reflect {
+                self.o + self.d * d2
             } else {
-                position - *radius
-            },
-        );
-        let delta: f64 =
-            self.d.dot(self.o - c).pow(2) - ((self.o - c).magnitude().pow(2) - radius.pow(2));
-
-        let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
-        let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
-
-        let intersection = if entry {
-            self.o + self.d * d1
+                if entry {
+                    self.o + self.d * d1
+                } else {
+                    self.o + self.d * d2
+                }
+            }
         } else {
-            self.o + self.d * d2
+            // c: center of the lens surface if interpreted as an entire sphere
+            let c = Vector3::new(
+                0.,
+                0.,
+                if entry {
+                    position + *radius
+                } else {
+                    position - *radius
+                },
+            );
+
+            let delta: f64 =
+                self.d.dot(self.o - c).pow(2) - ((self.o - c).magnitude().pow(2) - radius.pow(2));
+
+            let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
+            let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
+
+            if reflect {
+                self.o + self.d * d2
+            } else {
+                if entry {
+                    self.o + self.d * d1
+                } else {
+                    self.o + self.d * d2
+                }
+            }
         };
 
         self.o = intersection;
 
-        let normal = if entry {
-            (intersection - c).normalize()
+        let normal = if cylindrical {
+            let c = Vector2::new(
+                0.,
+                if entry {
+                    position + *radius
+                } else {
+                    position - *radius
+                },
+            );
+            let intersection: Vector2<f64> = Vector2 {
+                x: intersection.x,
+                y: intersection.y,
+            };
+
+            let normal2d = intersection - c;
+
+            let intersection = Vector3 {
+                x: 0.0,
+                y: normal2d.x,
+                z: normal2d.y,
+            };
+
+            if entry {
+                (intersection).normalize()
+            } else {
+                -(intersection).normalize()
+            }
         } else {
-            -(intersection - c).normalize()
+            let c = Vector3::new(
+                0.,
+                0.,
+                if entry {
+                    position + *radius
+                } else {
+                    position - *radius
+                },
+            );
+            if entry {
+                (intersection - c).normalize()
+            } else {
+                -(intersection - c).normalize()
+            }
         };
 
-        let eta = if entry { 1.0 / glass.ior } else { glass.ior };
+        if reflect {
+            let d_in = self.d;
 
-        // from https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/refract.xhtml
-        let k = 1.0 - eta * eta * (1.0 - normal.dot(self.d) * normal.dot(self.d));
+            self.d = self.d - 2.0 * normal.dot(self.d) * normal;
 
-        let d_in = self.d;
-
-        if k < 0.0 {
-            // total reflection
-            println!("total reflection");
-            self.d *= 0.0; // or genDType(0.0)
+            self.strength *= Ray::fresnel_r(
+                d_in.angle(normal).0,
+                self.d.angle(-normal).0,
+                if entry { glass.ior } else { 1.0 },
+                if entry { 1.0 } else { glass.ior },
+            );
         } else {
-            self.d = eta * self.d - (eta * normal.dot(self.d) + k.sqrt()) * normal;
+            let eta = if entry { 1.0 / glass.ior } else { glass.ior };
+
+            // from https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/refract.xhtml
+            let k = 1.0 - eta * eta * (1.0 - normal.dot(self.d) * normal.dot(self.d));
+
+            let d_in = self.d;
+
+            if k < 0.0 {
+                // total reflection
+                println!("total reflection");
+                self.d *= 0.0; // or genDType(0.0)
+            } else {
+                self.d = eta * self.d - (eta * normal.dot(self.d) + k.sqrt()) * normal;
+            }
+
+            self.strength *= Ray::fresnel_t(
+                d_in.angle(-normal).0,
+                self.d.angle(-normal).0,
+                if entry { 1.0 } else { glass.ior },
+                if entry { glass.ior } else { 1.0 },
+            );
         }
-
-        self.strength *= Ray::fresnel_t(
-            d_in.angle(-normal).0,
-            self.d.angle(-normal).0,
-            if entry { 1.0 } else { glass.ior },
-            if entry { glass.ior } else { 1.0 },
-        );
-    }
-
-    fn reflect_lens(&mut self, radius: &f64, glass: &Glass, position: f64, entry: bool) {
-        // c: center of the lens surface if interpreted as an entire sphere
-        let c = Vector3::new(
-            0.,
-            0.,
-            if entry {
-                position + *radius
-            } else {
-                position - *radius
-            },
-        );
-        let delta: f64 =
-            self.d.dot(self.o - c).pow(2) - ((self.o - c).magnitude().pow(2) - radius.pow(2));
-
-        // let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
-        let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
-
-        let intersection = if entry {
-            self.o + self.d * d2
-        } else {
-            self.o + self.d * d2
-        };
-
-        self.o = intersection;
-
-        let normal = if entry {
-            (intersection - c).normalize()
-        } else {
-            -(intersection - c).normalize()
-        };
-
-        let d_in = self.d;
-
-        self.d = self.d - 2.0 * normal.dot(self.d) * normal;
-
-        self.strength *= Ray::fresnel_r(
-            d_in.angle(normal).0,
-            self.d.angle(-normal).0,
-            if entry { glass.ior } else { 1.0 },
-            if entry { 1.0 } else { glass.ior },
-        );
     }
 
     /// propagate a ray through an element
@@ -191,7 +258,7 @@ impl Ray {
             } => {
                 // propagate by the distance between the first part of the lens
                 // and the actual intersection
-                self.refract_lens(radius, glass, *position, true);
+                self.propagate_element(radius, glass, *position, false, true, false);
                 //ray.d = ray.d - 2.0 * (ray.d.dot(normal)) * normal;
             }
             Element::Space(space) => {
@@ -201,7 +268,17 @@ impl Ray {
                 radius,
                 glass,
                 position,
-            } => self.refract_lens(radius, glass, *position, false),
+            } => self.propagate_element(radius, glass, *position, false, false, false),
+            Element::CylindricalLensEntry {
+                radius,
+                glass,
+                position,
+            } => self.propagate_element(radius, glass, *position, false, true, true),
+            Element::CylindricalLensExit {
+                radius,
+                glass,
+                position,
+            } => self.propagate_element(radius, glass, *position, false, false, true),
         }
     }
 
@@ -216,7 +293,7 @@ impl Ray {
             } => {
                 // propagate by the distance between the first part of the lens
                 // and the actual intersection
-                self.reflect_lens(radius, glass, *position, true);
+                self.propagate_element(radius, glass, *position, true, true, false);
                 //ray.d = ray.d - 2.0 * (ray.d.dot(normal)) * normal;
             }
             Element::Space(space) => {
@@ -226,7 +303,17 @@ impl Ray {
                 radius,
                 glass,
                 position,
-            } => self.reflect_lens(radius, glass, *position, false),
+            } => self.propagate_element(radius, glass, *position, true, false, false),
+            Element::CylindricalLensEntry {
+                radius,
+                glass,
+                position,
+            } => self.propagate_element(radius, glass, *position, true, true, true),
+            Element::CylindricalLensExit {
+                radius,
+                glass,
+                position,
+            } => self.propagate_element(radius, glass, *position, true, false, true),
         }
     }
 }
