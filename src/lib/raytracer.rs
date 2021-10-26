@@ -231,12 +231,13 @@ impl Ray {
                 self.d = eta * self.d - (eta * normal.dot(self.d) + k.sqrt()) * normal;
             }
 
-            self.strength *= 1.0 - Ray::fresnel_r(
-                d_in.angle(-normal).0,
-                self.d.angle(-normal).0,
-                if entry { 1.0 } else { glass.ior },
-                if entry { glass.ior } else { 1.0 },
-            );
+            self.strength *= 1.0
+                - Ray::fresnel_r(
+                    d_in.angle(-normal).0,
+                    self.d.angle(-normal).0,
+                    if entry { 1.0 } else { glass.ior },
+                    if entry { glass.ior } else { 1.0 },
+                );
         }
     }
 
@@ -319,6 +320,60 @@ pub struct Lens {
 impl Lens {
     pub fn new(elements: Vec<Element>) -> Self {
         Self { elements }
+    }
+
+    /// get elements in form:
+    /// ```
+    /// struct Element {
+    ///   position1: f32;
+    ///   radius1  : f32;
+    ///   position2: f32;
+    ///   radius2  : f32;
+    /// };
+    /// ```
+    /// only works if elements are entry and exit alternatively
+    pub fn get_elements_buffer(&self) -> Vec<f32> {
+        let mut elements = vec![];
+
+        for element in &self.elements {
+            match element {
+                Element::SphericalLensEntry {
+                    radius,
+                    glass,
+                    position,
+                } => {
+                    elements.push((position + radius) as f32);
+                    elements.push(*radius as f32)
+                }
+                Element::SphericalLensExit {
+                    radius,
+                    glass,
+                    position,
+                } => {
+                    elements.push((position - radius) as f32);
+                    elements.push(*radius as f32)
+                }
+                Element::CylindricalLensEntry {
+                    radius,
+                    glass,
+                    position,
+                } => {
+                    elements.push((position + radius) as f32);
+                    elements.push(*radius as f32)
+                }
+                Element::CylindricalLensExit {
+                    radius,
+                    glass,
+                    position,
+                } => {
+                    elements.push((position - radius) as f32);
+                    elements.push(*radius as f32)
+                }
+                Element::Space(_) => (),
+            }
+        }
+
+        elements
     }
 
     /// draws z y of the distance
