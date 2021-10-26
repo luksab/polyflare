@@ -86,13 +86,6 @@ impl Ray {
         return s + p;
     }
 
-    fn fresnel_t(t1: f64, t2: f64, n1: f64, n2: f64) -> f64 {
-        let s = 0.5 * ((n1 * t1.cos() - n2 * t2.cos()) / (n1 * t1.cos() + n2 * t2.cos())).pow(2);
-        let p = 0.5 * ((n1 * t2.cos() - n2 * t1.cos()) / (n1 * t2.cos() + n2 * t1.cos())).pow(2);
-
-        return 1.0 - s + p;
-    }
-
     fn propagate_element(
         &mut self,
         radius: &f64,
@@ -238,7 +231,7 @@ impl Ray {
                 self.d = eta * self.d - (eta * normal.dot(self.d) + k.sqrt()) * normal;
             }
 
-            self.strength *= Ray::fresnel_t(
+            self.strength *= 1.0 - Ray::fresnel_r(
                 d_in.angle(-normal).0,
                 self.d.angle(-normal).0,
                 if entry { 1.0 } else { glass.ior },
