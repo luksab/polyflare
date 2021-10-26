@@ -107,6 +107,56 @@ impl PolyOptics {
         //         push_constant_ranges: &[],
         //     });
 
+
+        let lens = {
+            let space = Element::Space(0.5);
+            let radius = 3.0;
+            let lens_entry = Element::SphericalLensEntry {
+                radius,
+                glass: Glass {
+                    ior: 1.5,
+                    coating: (),
+                },
+                position: -2.0,
+            };
+            let lens_exit_pos = 1.0;
+            let lens_exit = Element::SphericalLensExit {
+                radius,
+                glass: Glass {
+                    ior: 1.5,
+                    coating: (),
+                },
+                position: lens_exit_pos,
+            };
+            // line.width = 3.0;
+            // // lens entry
+            // line.draw_circle(&mut pixmap, -radius as f32 - 2.0, 0., radius as f32);
+
+            // // lens exit
+            // line.color = Color::from_rgba8(127, 127, 127, 255);
+            // line.draw_circle(
+            //     &mut pixmap,
+            //     (-3.) * radius as f32 + lens_exit_pos as f32,
+            //     0.,
+            //     radius as f32,
+            // );
+            // line.width = 0.1;
+
+            println!("space: {:?}", space);
+            println!("lens: {:?}", lens_entry);
+            //println!("ray: {:?}", ray);
+
+            Lens::new(vec![lens_entry, lens_exit])
+        };
+
+        // buffer for elements
+        let lens_data = lens.get_elements_buffer();
+        let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Lens drawing Buffer"),
+            contents: bytemuck::cast_slice(&lens_data),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        });
+
         let conversion_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -141,6 +191,18 @@ impl PolyOptics {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage {read_only: true},
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (lens_data.len() * mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
                 ],
                 label: Some("texture_bind_group_layout"),
             });
@@ -159,6 +221,10 @@ impl PolyOptics {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: sim_param_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: lens_buffer.as_entire_binding(),
                 },
             ],
             label: Some("texture_bind_group"),
@@ -374,46 +440,6 @@ impl PolyOptics {
         //     -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
         // ];
 
-        let lens = {
-            let space = Element::Space(0.5);
-            let radius = 3.0;
-            let lens_entry = Element::SphericalLensEntry {
-                radius,
-                glass: Glass {
-                    ior: 1.5,
-                    coating: (),
-                },
-                position: -2.0,
-            };
-            let lens_exit_pos = 1.0;
-            let lens_exit = Element::SphericalLensExit {
-                radius,
-                glass: Glass {
-                    ior: 1.5,
-                    coating: (),
-                },
-                position: lens_exit_pos,
-            };
-            // line.width = 3.0;
-            // // lens entry
-            // line.draw_circle(&mut pixmap, -radius as f32 - 2.0, 0., radius as f32);
-
-            // // lens exit
-            // line.color = Color::from_rgba8(127, 127, 127, 255);
-            // line.draw_circle(
-            //     &mut pixmap,
-            //     (-3.) * radius as f32 + lens_exit_pos as f32,
-            //     0.,
-            //     radius as f32,
-            // );
-            // line.width = 0.1;
-
-            println!("space: {:?}", space);
-            println!("lens: {:?}", lens_entry);
-            //println!("ray: {:?}", ray);
-
-            Lens::new(vec![lens_entry, lens_exit])
-        };
         let rays = vec![0.0, 0.0];
         // let vertex_buffer_data = [-1.0f32, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
         let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -526,6 +552,15 @@ impl Scene for PolyOptics {
         let format = wgpu::TextureFormat::Rgba16Float;
         self.high_color_tex =
             Texture::create_color_texture(device, config, format, "high_color_tex");
+
+        // buffer for elements
+        let lens_data = self.lens.get_elements_buffer();
+        let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Lens drawing Buffer"),
+            contents: bytemuck::cast_slice(&lens_data),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        });
+
         let conversion_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -560,6 +595,18 @@ impl Scene for PolyOptics {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage {read_only: true},
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (lens_data.len() * mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
                 ],
                 label: Some("texture_bind_group_layout"),
             });
@@ -578,6 +625,10 @@ impl Scene for PolyOptics {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: self.sim_param_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: lens_buffer.as_entire_binding(),
                 },
             ],
             label: Some("texture_bind_group"),
@@ -613,10 +664,10 @@ impl Scene for PolyOptics {
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.2,
-                    g: 0.2,
-                    b: 0.3,
-                    a: 1.0,
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
                 }),
                 store: true,
             },
@@ -674,10 +725,10 @@ impl Scene for PolyOptics {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.2,
-                        g: 0.2,
-                        b: 0.3,
-                        a: 1.0,
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.0,
                     }),
                     store: true,
                 },
