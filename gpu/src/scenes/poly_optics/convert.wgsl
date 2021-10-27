@@ -48,7 +48,7 @@ var s_diffuse: sampler;
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let pos = vec2<f32>(in.clip_position.x / params.width, in.clip_position.y / params.height);
     let sample = textureSample(t_diffuse, s_diffuse, pos);
-    var bg = vec4<f32>(0.2,0.2,0.3,1.0);
+    var bg = vec4<f32>(0.15,0.15,0.25,1.0);
 
     let screenAspect = normalize(vec2<f32>(params.height, params.width));
     let pos_lens = (pos - vec2<f32>(0.5,0.5))/screenAspect * 2.;
@@ -59,7 +59,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         let c2 = vec2<f32>(element.position2/4.0, 0.0);
         if ( distance(c1, pos_lens) <= element.radius1 / 4.0 
             && distance(c2, pos_lens) <= element.radius2 / 4.0 ) {
-            bg = vec4<f32>(0.1,0.1,0.15,1.0);
+            bg = vec4<f32>(0.3,0.3,0.4,1.0);
         }
     }
 

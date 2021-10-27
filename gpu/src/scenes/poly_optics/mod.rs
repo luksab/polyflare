@@ -1,4 +1,4 @@
-use std::{fs::read_to_string, iter, mem};
+use std::{fs::read_to_string, iter, mem, time::Instant};
 
 use cgmath::{InnerSpace, Vector3};
 use wgpu::{
@@ -595,6 +595,9 @@ impl Scene for PolyOptics {
                 .modified()
                 .unwrap()
         {
+            print!("reloading convert shader! ");
+            let now = Instant::now();
+            self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").unwrap();
             // buffer for elements
             let lens_data = self.lens.get_elements_buffer();
             let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -615,6 +618,7 @@ impl Scene for PolyOptics {
             );
             self.conversion_render_pipeline = pipeline;
             self.conversion_bind_group = bind_group;
+            println!("took {:?}.", now.elapsed());
         }
 
         if self.draw_meta.modified().unwrap()
@@ -623,6 +627,9 @@ impl Scene for PolyOptics {
                 .modified()
                 .unwrap()
         {
+            self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl").unwrap();
+            print!("reloading draw shader! ");
+            let now = Instant::now();
             let (pipeline, bind_group) = Self::shader_draw(
                 device,
                 &self.sim_params,
@@ -631,6 +638,7 @@ impl Scene for PolyOptics {
             );
             self.conversion_render_pipeline = pipeline;
             self.conversion_bind_group = bind_group;
+            println!("took {:?}.", now.elapsed());
         }
     }
 
