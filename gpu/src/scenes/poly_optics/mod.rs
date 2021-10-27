@@ -35,7 +35,7 @@ pub struct PolyOptics {
     convert_meta: std::fs::Metadata,
     draw_meta: std::fs::Metadata,
     format: TextureFormat,
-    confFormat: TextureFormat,
+    conf_format: TextureFormat,
 }
 
 impl PolyOptics {
@@ -328,42 +328,28 @@ impl PolyOptics {
             Self::shader_draw(device, &sim_params, &sim_param_buffer, format);
 
         let lens = {
-            let space = Element::Space(0.5);
             let radius = 3.0;
-            let lens_entry = Element::SphericalLensEntry {
+            let lens_entry = Element {
                 radius,
                 glass: Glass {
                     ior: 1.5,
                     coating: (),
                 },
                 position: -2.0,
+                entry: true,
+                spherical: true,
             };
             let lens_exit_pos = 1.0;
-            let lens_exit = Element::SphericalLensExit {
+            let lens_exit = Element {
                 radius,
                 glass: Glass {
                     ior: 1.5,
                     coating: (),
                 },
                 position: lens_exit_pos,
+                entry: false,
+                spherical: true,
             };
-            // line.width = 3.0;
-            // // lens entry
-            // line.draw_circle(&mut pixmap, -radius as f32 - 2.0, 0., radius as f32);
-
-            // // lens exit
-            // line.color = Color::from_rgba8(127, 127, 127, 255);
-            // line.draw_circle(
-            //     &mut pixmap,
-            //     (-3.) * radius as f32 + lens_exit_pos as f32,
-            //     0.,
-            //     radius as f32,
-            // );
-            // line.width = 0.1;
-
-            println!("space: {:?}", space);
-            println!("lens: {:?}", lens_entry);
-            //println!("ray: {:?}", ray);
 
             Lens::new(vec![lens_entry, lens_exit])
         };
@@ -428,7 +414,7 @@ impl PolyOptics {
             convert_meta,
             draw_meta,
             format,
-            confFormat: config.format,
+            conf_format: config.format,
         }
     }
 
@@ -613,7 +599,7 @@ impl Scene for PolyOptics {
                 &self.sim_param_buffer,
                 &lens_data,
                 &lens_buffer,
-                &self.confFormat,
+                &self.conf_format,
                 &self.high_color_tex,
             );
             self.conversion_render_pipeline = pipeline;
