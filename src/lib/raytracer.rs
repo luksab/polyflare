@@ -45,29 +45,13 @@ pub struct Glass {
 ///
 /// ```
 #[derive(Debug)]
-pub enum Element {
+pub struct Element {
     /// One optical interface
-    SphericalLensEntry {
-        radius: f64,
-        glass: Glass,
-        position: f64,
-    },
-    SphericalLensExit {
-        radius: f64,
-        glass: Glass,
-        position: f64,
-    },
-    CylindricalLensEntry {
-        radius: f64,
-        glass: Glass,
-        position: f64,
-    },
-    CylindricalLensExit {
-        radius: f64,
-        glass: Glass,
-        position: f64,
-    },
-    Space(f64),
+    pub radius: f64,
+    pub glass: Glass,
+    pub position: f64,
+    pub entry: bool,
+    pub spherical: bool,
 }
 
 impl Ray {
@@ -244,71 +228,27 @@ impl Ray {
     /// propagate a ray through an element
     ///
     pub fn propagate(&mut self, element: &Element) {
-        match element {
-            Element::SphericalLensEntry {
-                radius,
-                glass,
-                position,
-            } => {
-                // propagate by the distance between the first part of the lens
-                // and the actual intersection
-                self.propagate_element(radius, glass, *position, false, true, false);
-                //ray.d = ray.d - 2.0 * (ray.d.dot(normal)) * normal;
-            }
-            Element::Space(space) => {
-                self.o += self.d * *space;
-            }
-            Element::SphericalLensExit {
-                radius,
-                glass,
-                position,
-            } => self.propagate_element(radius, glass, *position, false, false, false),
-            Element::CylindricalLensEntry {
-                radius,
-                glass,
-                position,
-            } => self.propagate_element(radius, glass, *position, false, true, true),
-            Element::CylindricalLensExit {
-                radius,
-                glass,
-                position,
-            } => self.propagate_element(radius, glass, *position, false, false, true),
-        }
+        self.propagate_element(
+            &element.radius,
+            &element.glass,
+            element.position,
+            false,
+            element.entry,
+            !element.spherical,
+        );
     }
 
     /// reflect a Ray from an element
     ///
     pub fn reflect(&mut self, element: &Element) {
-        match element {
-            Element::SphericalLensEntry {
-                radius,
-                glass,
-                position,
-            } => {
-                // propagate by the distance between the first part of the lens
-                // and the actual intersection
-                self.propagate_element(radius, glass, *position, true, true, false);
-                //ray.d = ray.d - 2.0 * (ray.d.dot(normal)) * normal;
-            }
-            Element::Space(space) => {
-                self.o += self.d * *space;
-            }
-            Element::SphericalLensExit {
-                radius,
-                glass,
-                position,
-            } => self.propagate_element(radius, glass, *position, true, false, false),
-            Element::CylindricalLensEntry {
-                radius,
-                glass,
-                position,
-            } => self.propagate_element(radius, glass, *position, true, true, true),
-            Element::CylindricalLensExit {
-                radius,
-                glass,
-                position,
-            } => self.propagate_element(radius, glass, *position, true, false, true),
-        }
+        self.propagate_element(
+            &element.radius,
+            &element.glass,
+            element.position,
+            true,
+            element.entry,
+            !element.spherical,
+        );
     }
 }
 
@@ -336,41 +276,11 @@ impl Lens {
         let mut elements = vec![];
 
         for element in &self.elements {
-            match element {
-                Element::SphericalLensEntry {
-                    radius,
-                    glass,
-                    position,
-                } => {
-                    elements.push((position + radius) as f32);
-                    elements.push(*radius as f32)
-                }
-                Element::SphericalLensExit {
-                    radius,
-                    glass,
-                    position,
-                } => {
-                    elements.push((position - radius) as f32);
-                    elements.push(*radius as f32)
-                }
-                Element::CylindricalLensEntry {
-                    radius,
-                    glass,
-                    position,
-                } => {
-                    elements.push((position + radius) as f32);
-                    elements.push(*radius as f32)
-                }
-                Element::CylindricalLensExit {
-                    radius,
-                    glass,
-                    position,
-                } => {
-                    elements.push((position - radius) as f32);
-                    elements.push(*radius as f32)
-                }
-                Element::Space(_) => (),
+            match element.entry {
+                true => elements.push((element.position + element.radius) as f32),
+                false => elements.push((element.position - element.radius) as f32),
             }
+            elements.push(element.radius as f32);
         }
 
         elements
@@ -476,7 +386,7 @@ impl Lens {
                             one = ray;
                         }
                     }
-                    ray.propagate(&Element::Space(100.));
+                    ray.o += ray.d * 100.;
                     Lens::draw_rays(pixmap, &one, &ray);
                 }
             }
@@ -587,7 +497,7 @@ impl Lens {
                                 rays.push(ray.strength);
                             }
                         }
-                        ray.propagate(&Element::Space(100.));
+                        ray.o += ray.d * 100.;
                         rays.push(ray.o.z);
                         rays.push(ray.o.y);
                         rays.push(ray.strength);
@@ -613,7 +523,7 @@ impl Lens {
                     rays.push(ray.o.y);
                     rays.push(ray.strength);
                 }
-                ray.propagate(&Element::Space(100.));
+                ray.o += ray.d * 100.;
                 rays.push(ray.o.z);
                 rays.push(ray.o.y);
                 rays.push(ray.strength);
