@@ -28,6 +28,7 @@ pub struct PolyOptics {
     pub lens: Lens,
     rays: Vec<f32>,
     pub num_rays: u32,
+    pub which_ghost: u32,
     pub draw_mode: u32,
     pub center_pos: Vector3<f64>,
     pub direction: Vector3<f64>,
@@ -310,12 +311,6 @@ impl PolyOptics {
         let high_color_tex =
             Texture::create_color_texture(device, config, format, "high_color_tex");
 
-        // let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        //     label: Some("Conversion Pipeline Layout"),
-        //     bind_group_layouts: &[&conversion_bind_group_layout],
-        //     push_constant_ranges: &[],
-        // });
-
         // buffer for simulation parameters uniform
         let sim_params = [0.1, 512., 512., 512., 512.];
         let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -396,6 +391,7 @@ impl PolyOptics {
 
             draw_mode: 2,
             num_rays: 256,
+            which_ghost: 2,
             rays: vec![],
             center_pos: Vector3 {
                 x: 0.0,
@@ -430,8 +426,9 @@ impl PolyOptics {
         self.rays = self.lens.get_rays(
             self.num_rays,
             self.center_pos,
-            self.direction,
+            self.direction.normalize(),
             self.draw_mode,
+            self.which_ghost,
         );
         self.vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -455,30 +452,36 @@ impl PolyOptics {
         // // update frame count
         // self.frame_num += 1;
     }
-}
 
-impl Scene for PolyOptics {
-    fn resize(
-        &mut self,
-        new_size: winit::dpi::PhysicalSize<u32>,
-        scale_factor: f64,
-        device: &wgpu::Device,
-        config: &SurfaceConfiguration,
-        queue: &Queue,
-    ) {
-        self.sim_params[1] = new_size.width as f32 * scale_factor as f32;
-        self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
-        self.sim_params[3] = new_size.width as f32;
-        self.sim_params[4] = new_size.height as f32;
+    pub fn update_buffers(&mut self, queue: &Queue, device: &wgpu::Device, update_size: bool) {
         queue.write_buffer(
             &self.sim_param_buffer,
             0,
             bytemuck::cast_slice(&self.sim_params),
         );
 
-        let format = wgpu::TextureFormat::Rgba16Float;
-        self.high_color_tex =
-            Texture::create_color_texture(device, config, format, "high_color_tex");
+        if update_size {
+            // buffer for elements
+            let lens_data = self.lens.get_elements_buffer();
+            let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Lens drawing Buffer"),
+                contents: bytemuck::cast_slice(&lens_data),
+                usage: wgpu::BufferUsages::UNIFORM
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::STORAGE,
+            });
+            let (pipeline, bind_group) = Self::convert_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &lens_data,
+                &lens_buffer,
+                &self.conf_format,
+                &self.high_color_tex,
+            );
+            self.conversion_render_pipeline = pipeline;
+            self.conversion_bind_group = bind_group;
+        }
 
         // buffer for elements
         let lens_data = self.lens.get_elements_buffer();
@@ -562,6 +565,28 @@ impl Scene for PolyOptics {
             ],
             label: Some("texture_bind_group"),
         });
+    }
+}
+
+impl Scene for PolyOptics {
+    fn resize(
+        &mut self,
+        new_size: winit::dpi::PhysicalSize<u32>,
+        scale_factor: f64,
+        device: &wgpu::Device,
+        config: &SurfaceConfiguration,
+        queue: &Queue,
+    ) {
+        self.sim_params[1] = new_size.width as f32 * scale_factor as f32;
+        self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
+        self.sim_params[3] = new_size.width as f32;
+        self.sim_params[4] = new_size.height as f32;
+        
+        let format = wgpu::TextureFormat::Rgba16Float;
+        self.high_color_tex =
+            Texture::create_color_texture(device, config, format, "high_color_tex");
+
+        self.update_buffers(queue, device, false);
     }
 
     fn input(&mut self, _event: &winit::event::WindowEvent) -> bool {

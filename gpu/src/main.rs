@@ -1,5 +1,6 @@
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
+use polynomial_optics::Element;
 use std::rc::Rc;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
@@ -35,8 +36,8 @@ fn main() {
 
     let mut optics_params = Parms {
         ray_exponent: 2.7,
-        draw: 3,
-        pos: [0.0, 0.0, -5.0],
+        draw: 1,
+        pos: [0.0, 0.0, -7.0],
         dir: [0.0, 0.1, 1.0],
         opacity: 0.1,
     };
@@ -54,6 +55,39 @@ fn main() {
         &state.config,
     ))));
     state.scenes.push(poly_optics.clone());
+
+    let glass = polynomial_optics::Glass {
+        ior: 1.5,
+        coating: (),
+    };
+    // r1, d1, r2, distance to next lens
+    let mut lens_ui: Vec<(f32, f32, f32, f32)> = vec![(3., 3., 3., 3.), (3., 3., 3., 5.)];
+    // init lens
+    {
+        let mut poly = poly_optics.lock().unwrap();
+        let mut elements: Vec<Element> = vec![];
+        let mut dst: f32 = -5.;
+        for element in &lens_ui {
+            elements.push(Element {
+                radius: element.0 as f64,
+                glass,
+                position: dst as f64,
+                entry: true,
+                spherical: true,
+            });
+            dst += element.1;
+            elements.push(Element {
+                radius: element.2 as f64,
+                glass,
+                position: dst as f64,
+                entry: false,
+                spherical: true,
+            });
+            dst += element.3;
+        }
+        poly.lens.elements = elements;
+        poly.update_buffers(&state.queue, &state.device, true);
+    }
 
     // let demo = pollster::block_on(scenes::Demo3d::new(
     //     &state.device,
@@ -262,10 +296,11 @@ fn main() {
                             poly.write_buffer(&state.queue);
                         }
 
-                        update_poly |= ui.radio_button("render nothing", &mut optics_params.draw, 0)
-                            || ui.radio_button("render both", &mut optics_params.draw, 3)
-                            || ui.radio_button("render normal", &mut optics_params.draw, 2)
-                            || ui.radio_button("render ghosts", &mut optics_params.draw, 1);
+                        update_poly |=
+                            ui.radio_button("render nothing", &mut optics_params.draw, 0)
+                                || ui.radio_button("render both", &mut optics_params.draw, 3)
+                                || ui.radio_button("render normal", &mut optics_params.draw, 2)
+                                || ui.radio_button("render ghosts", &mut optics_params.draw, 1);
                         poly.draw_mode = optics_params.draw;
                         // ui.radio_button("num_rays", &mut optics_params.1, true);
                         update_poly |= Drag::new("ray origin")
@@ -286,6 +321,58 @@ fn main() {
                 if update_poly {
                     poly.update_rays(&state.device);
                 }
+
+                let mut update_lens = false;
+                imgui::Window::new("Lens")
+                    .size([400.0, 250.0], Condition::FirstUseEver)
+                    .position([100.0, 100.0], Condition::FirstUseEver)
+                    .build(&ui, || {
+                        // ui.text(format!("Framerate: {:?}", fps));
+                        // Slider::new("first radius", 0., 5.)
+                        //     .build(&ui, &mut poly.lens.elements[0].);
+                        let num_ghosts = (poly.lens.elements.len() * poly.lens.elements.len()) as u32;
+                        update_lens |= Slider::new("which ghost", 0, num_ghosts)
+                                .build(&ui, &mut poly.which_ghost);
+                        for (i, element) in lens_ui.iter_mut().enumerate() {
+                            ui.text(format!("Lens: {:?}", i + 1));
+                            update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
+                                .build(&ui, &mut element.0);
+                            update_lens |=
+                                Slider::new(format!("d##{}", i), 0., element.0 + element.2)
+                                    .build(&ui, &mut element.1);
+                            update_lens |= Slider::new(format!("r2##{}", i), 0., 3.)
+                                .build(&ui, &mut element.2);
+                            update_lens |= Slider::new(format!("d_next##{}", i), 0., 6.)
+                                .build(&ui, &mut element.3);
+                            ui.separator();
+                        }
+                    });
+
+                if update_lens {
+                    let mut elements: Vec<Element> = vec![];
+                    let mut dst: f32 = -5.;
+                    for element in &lens_ui {
+                        dst += element.1;
+                        elements.push(Element {
+                            radius: element.0 as f64,
+                            glass,
+                            position: dst as f64,
+                            entry: true,
+                            spherical: true,
+                        });
+                        dst += element.3;
+                        elements.push(Element {
+                            radius: element.2 as f64,
+                            glass,
+                            position: dst as f64,
+                            entry: false,
+                            spherical: true,
+                        });
+                    }
+                    poly.lens.elements = elements;
+                    poly.update_buffers(&state.queue, &state.device, false);
+                }
+
                 // we don't need poly for the rest of this function
                 drop(poly);
 
