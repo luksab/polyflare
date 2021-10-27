@@ -1,7 +1,10 @@
-use std::{iter, mem};
+use std::{fs::read_to_string, iter, mem};
 
 use cgmath::{InnerSpace, Vector3};
-use wgpu::{util::DeviceExt, Queue, SurfaceConfiguration, TextureView};
+use wgpu::{
+    util::DeviceExt, BindGroup, Buffer, Queue, RenderPipeline, SurfaceConfiguration, TextureFormat,
+    TextureView,
+};
 
 use crate::{scene::Scene, texture::Texture};
 
@@ -28,272 +31,28 @@ pub struct PolyOptics {
     pub draw_mode: u32,
     pub center_pos: Vector3<f64>,
     pub direction: Vector3<f64>,
+
+    convert_meta: std::fs::Metadata,
+    draw_meta: std::fs::Metadata,
+    format: TextureFormat,
+    confFormat: TextureFormat,
 }
 
 impl PolyOptics {
-    pub async fn new(device: &wgpu::Device, config: &SurfaceConfiguration) -> Self {
-        // let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        //     label: None,
-        //     source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
-        // });
+    fn shader_draw(
+        device: &wgpu::Device,
+        sim_params: &[f32; 5],
+        sim_param_buffer: &Buffer,
+        format: TextureFormat,
+    ) -> (RenderPipeline, BindGroup) {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyOptics"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("draw.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                read_to_string("gpu/src/scenes/poly_optics/draw.wgsl")
+                    .expect("Shader could not be read.")
+                    .into(),
+            ),
         });
-
-        let format = wgpu::TextureFormat::Rgba16Float;
-        let high_color_tex =
-            Texture::create_color_texture(device, config, format, "high_color_tex");
-
-        // let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        //     label: Some("Conversion Pipeline Layout"),
-        //     bind_group_layouts: &[&conversion_bind_group_layout],
-        //     push_constant_ranges: &[],
-        // });
-
-        // buffer for simulation parameters uniform
-        let sim_params = [0.1, 512., 512., 512., 512.];
-        let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Simulation Parameter Buffer"),
-            contents: bytemuck::cast_slice(&sim_params),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        // // create compute bind layout group and compute pipeline layout
-        // let compute_bind_group_layout =
-        //     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        //         entries: &[
-        //             wgpu::BindGroupLayoutEntry {
-        //                 binding: 0,
-        //                 visibility: wgpu::ShaderStages::COMPUTE,
-        //                 ty: wgpu::BindingType::Buffer {
-        //                     ty: wgpu::BufferBindingType::Uniform,
-        //                     has_dynamic_offset: false,
-        //                     min_binding_size: wgpu::BufferSize::new(
-        //                         (sim_param_data.len() * mem::size_of::<u32>()) as _,
-        //                     ),
-        //                 },
-        //                 count: None,
-        //             },
-        //             // TODO: BufferSize
-        //             wgpu::BindGroupLayoutEntry {
-        //                 binding: 1,
-        //                 visibility: wgpu::ShaderStages::COMPUTE,
-        //                 ty: wgpu::BindingType::Buffer {
-        //                     ty: wgpu::BufferBindingType::Storage { read_only: true },
-        //                     has_dynamic_offset: false,
-        //                     min_binding_size: wgpu::BufferSize::new((2 * NUM_RAYS * NUM_RAYS) as _),
-        //                 },
-        //                 count: None,
-        //             },
-        //             // TODO: BufferSize
-        //             wgpu::BindGroupLayoutEntry {
-        //                 binding: 2,
-        //                 visibility: wgpu::ShaderStages::COMPUTE,
-        //                 ty: wgpu::BindingType::Buffer {
-        //                     ty: wgpu::BufferBindingType::Storage { read_only: false },
-        //                     has_dynamic_offset: false,
-        //                     min_binding_size: wgpu::BufferSize::new((2 * NUM_RAYS * NUM_RAYS) as _),
-        //                 },
-        //                 count: None,
-        //             },
-        //         ],
-        //         label: None,
-        //     });
-        // let compute_pipeline_layout =
-        //     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        //         label: Some("compute"),
-        //         bind_group_layouts: &[&compute_bind_group_layout],
-        //         push_constant_ranges: &[],
-        //     });
-
-
-        let lens = {
-            let space = Element::Space(0.5);
-            let radius = 3.0;
-            let lens_entry = Element::SphericalLensEntry {
-                radius,
-                glass: Glass {
-                    ior: 1.5,
-                    coating: (),
-                },
-                position: -2.0,
-            };
-            let lens_exit_pos = 1.0;
-            let lens_exit = Element::SphericalLensExit {
-                radius,
-                glass: Glass {
-                    ior: 1.5,
-                    coating: (),
-                },
-                position: lens_exit_pos,
-            };
-            // line.width = 3.0;
-            // // lens entry
-            // line.draw_circle(&mut pixmap, -radius as f32 - 2.0, 0., radius as f32);
-
-            // // lens exit
-            // line.color = Color::from_rgba8(127, 127, 127, 255);
-            // line.draw_circle(
-            //     &mut pixmap,
-            //     (-3.) * radius as f32 + lens_exit_pos as f32,
-            //     0.,
-            //     radius as f32,
-            // );
-            // line.width = 0.1;
-
-            println!("space: {:?}", space);
-            println!("lens: {:?}", lens_entry);
-            //println!("ray: {:?}", ray);
-
-            Lens::new(vec![lens_entry, lens_exit])
-        };
-
-        // buffer for elements
-        let lens_data = lens.get_elements_buffer();
-        let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Lens drawing Buffer"),
-            contents: bytemuck::cast_slice(&lens_data),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-        });
-
-        let conversion_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                (sim_params.len() * mem::size_of::<f32>()) as _,
-                            ),
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage {read_only: true},
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                (lens_data.len() * mem::size_of::<f32>()) as _,
-                            ),
-                        },
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
-
-        let conversion_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &conversion_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&high_color_tex.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&high_color_tex.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: sim_param_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: lens_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("texture_bind_group"),
-        });
-        let conversion_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Conversion Pipeline Layout"),
-                bind_group_layouts: &[&conversion_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let conversion_render_pipeline = {
-            let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: Some("conversion"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("convert.wgsl").into()),
-            });
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&conversion_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: "main",
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: 2 * 4,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &[wgpu::VertexAttribute {
-                            offset: 0,
-                            shader_location: 0,
-                            format: wgpu::VertexFormat::Float32x2,
-                        }],
-                    }],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: "main",
-                    targets: &[wgpu::ColorTargetState {
-                        format: config.format,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::SrcAlpha,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                            alpha: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                        }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    // Requires Features::DEPTH_CLAMPING
-                    clamp_depth: false,
-                    // Requires Features::CONSERVATIVE_RASTERIZATION
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-            })
-        };
-
-        // create render pipeline with simProps as bind group layout
 
         let render_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -378,76 +137,6 @@ impl PolyOptics {
             multisample: wgpu::MultisampleState::default(),
         });
 
-        // // create compute pipeline
-        // let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        //     label: Some("Compute pipeline"),
-        //     layout: Some(&compute_pipeline_layout),
-        //     module: &compute_shader,
-        //     entry_point: "main",
-        // });
-
-        // buffer for all particles data of type [bool,...]
-        // TODO: BufferSize
-        // let mut initial_particle_data = vec![0 as u32; (2 * NUM_RAYS * NUM_RAYS) as usize];
-        // for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
-        //     particle_instance_chunk[0] = i as u32; // bool??
-        //     particle_instance_chunk[1] = fastrand::u32(0..6) / 5; // bool??
-        // }
-
-        // let mut particle_buffers = Vec::<wgpu::Buffer>::new();
-        // let mut particle_bind_groups = Vec::<wgpu::BindGroup>::new();
-        // for i in 0..2 {
-        //     particle_buffers.push(
-        //         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //             label: Some(&format!("Particle Buffer {}", i)),
-        //             contents: bytemuck::cast_slice(&initial_particle_data),
-        //             usage: wgpu::BufferUsages::VERTEX
-        //                 | wgpu::BufferUsages::STORAGE
-        //                 | wgpu::BufferUsages::COPY_DST,
-        //         }),
-        //     );
-        // }
-
-        // // create two bind groups, one for each buffer as the src
-        // // where the alternate buffer is used as the dst
-        // for i in 0..2 {
-        //     particle_bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
-        //         layout: &compute_bind_group_layout,
-        //         entries: &[
-        //             wgpu::BindGroupEntry {
-        //                 binding: 0,
-        //                 resource: sim_param_buffer.as_entire_binding(),
-        //             },
-        //             wgpu::BindGroupEntry {
-        //                 binding: 1,
-        //                 resource: particle_buffers[i].as_entire_binding(),
-        //             },
-        //             wgpu::BindGroupEntry {
-        //                 binding: 2,
-        //                 resource: particle_buffers[(i + 1) % 2].as_entire_binding(), // bind to opposite buffer
-        //             },
-        //         ],
-        //         label: None,
-        //     }));
-        // }
-
-        // calculates number of work groups from PARTICLES_PER_GROUP constant
-        // TODO: BufferSize
-        // let work_group_count =
-        //     (((NUM_RAYS * NUM_RAYS) as f32) / (RAYS_PER_GROUP as f32)).ceil() as u32;
-
-        // let vertex_buffer_data = [
-        //     -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
-        // ];
-
-        let rays = vec![0.0, 0.0];
-        // let vertex_buffer_data = [-1.0f32, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
-        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&rays[..]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
         let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &render_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
@@ -457,16 +146,264 @@ impl PolyOptics {
             label: None,
         });
 
+        (boid_render_pipeline, render_bind_group)
+    }
+
+    fn convert_shader(
+        device: &wgpu::Device,
+        sim_params: &[f32; 5],
+        sim_param_buffer: &Buffer,
+        lens_data: &Vec<f32>,
+        lens_buffer: &Buffer,
+        format: &TextureFormat,
+        high_color_tex: &Texture,
+    ) -> (RenderPipeline, BindGroup) {
+        let conversion_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (sim_params.len() * mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (lens_data.len() * mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            });
+
+        let conversion_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &conversion_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&high_color_tex.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&high_color_tex.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: sim_param_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: lens_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("texture_bind_group"),
+        });
+        let conversion_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Conversion Pipeline Layout"),
+                bind_group_layouts: &[&conversion_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let conversion_render_pipeline = {
+            let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("conversion"),
+                source: wgpu::ShaderSource::Wgsl(
+                    read_to_string("gpu/src/scenes/poly_optics/convert.wgsl")
+                        .expect("Shader could not be read.")
+                        .into(),
+                ),
+            });
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&conversion_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "main",
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: 2 * 4,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[wgpu::VertexAttribute {
+                            offset: 0,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x2,
+                        }],
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "main",
+                    targets: &[wgpu::ColorTargetState {
+                        format: *format,
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            alpha: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::One,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                        }),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    // Requires Features::DEPTH_CLAMPING
+                    clamp_depth: false,
+                    // Requires Features::CONSERVATIVE_RASTERIZATION
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+            })
+        };
+        (conversion_render_pipeline, conversion_bind_group)
+    }
+
+    pub async fn new(device: &wgpu::Device, config: &SurfaceConfiguration) -> Self {
+        // let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        //     label: None,
+        //     source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
+        // });
+
+        let format = wgpu::TextureFormat::Rgba16Float;
+        let high_color_tex =
+            Texture::create_color_texture(device, config, format, "high_color_tex");
+
+        // let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        //     label: Some("Conversion Pipeline Layout"),
+        //     bind_group_layouts: &[&conversion_bind_group_layout],
+        //     push_constant_ranges: &[],
+        // });
+
+        // buffer for simulation parameters uniform
+        let sim_params = [0.1, 512., 512., 512., 512.];
+        let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Simulation Parameter Buffer"),
+            contents: bytemuck::cast_slice(&sim_params),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let (boid_render_pipeline, render_bind_group) =
+            Self::shader_draw(device, &sim_params, &sim_param_buffer, format);
+
+        let lens = {
+            let space = Element::Space(0.5);
+            let radius = 3.0;
+            let lens_entry = Element::SphericalLensEntry {
+                radius,
+                glass: Glass {
+                    ior: 1.5,
+                    coating: (),
+                },
+                position: -2.0,
+            };
+            let lens_exit_pos = 1.0;
+            let lens_exit = Element::SphericalLensExit {
+                radius,
+                glass: Glass {
+                    ior: 1.5,
+                    coating: (),
+                },
+                position: lens_exit_pos,
+            };
+            // line.width = 3.0;
+            // // lens entry
+            // line.draw_circle(&mut pixmap, -radius as f32 - 2.0, 0., radius as f32);
+
+            // // lens exit
+            // line.color = Color::from_rgba8(127, 127, 127, 255);
+            // line.draw_circle(
+            //     &mut pixmap,
+            //     (-3.) * radius as f32 + lens_exit_pos as f32,
+            //     0.,
+            //     radius as f32,
+            // );
+            // line.width = 0.1;
+
+            println!("space: {:?}", space);
+            println!("lens: {:?}", lens_entry);
+            //println!("ray: {:?}", ray);
+
+            Lens::new(vec![lens_entry, lens_exit])
+        };
+
+        // buffer for elements
+        let lens_data = lens.get_elements_buffer();
+        let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Lens drawing Buffer"),
+            contents: bytemuck::cast_slice(&lens_data),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
+        let rays = vec![0.0, 0.0];
+        // let vertex_buffer_data = [-1.0f32, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
+        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&rays[..]),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
+            device,
+            &sim_params,
+            &sim_param_buffer,
+            &lens_data,
+            &lens_buffer,
+            &config.format,
+            &high_color_tex,
+        );
+
+        let convert_meta = std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").unwrap();
+        let draw_meta = std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl").unwrap();
+
         Self {
             boid_render_pipeline,
 
-            // particle_bind_groups,
             sim_param_buffer,
             sim_params,
-            // compute_pipeline,
-            // work_group_count,
-            // frame_num: 0,
-            // cell_timer: SystemTime::now(),
             vertices_buffer,
             render_bind_group,
             lens,
@@ -488,6 +425,10 @@ impl PolyOptics {
             high_color_tex,
             conversion_render_pipeline,
             conversion_bind_group,
+            convert_meta,
+            draw_meta,
+            format,
+            confFormat: config.format,
         }
     }
 
@@ -558,7 +499,9 @@ impl Scene for PolyOptics {
         let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Lens drawing Buffer"),
             contents: bytemuck::cast_slice(&lens_data),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
         });
 
         let conversion_bind_group_layout =
@@ -599,7 +542,7 @@ impl Scene for PolyOptics {
                         binding: 3,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage {read_only: true},
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: wgpu::BufferSize::new(
                                 (lens_data.len() * mem::size_of::<f32>()) as _,
@@ -639,12 +582,56 @@ impl Scene for PolyOptics {
         true
     }
 
-    fn update(&mut self, _dt: std::time::Duration, _device: &wgpu::Device, _queue: &Queue) {
+    fn update(&mut self, _dt: std::time::Duration, device: &wgpu::Device, _queue: &Queue) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
         //     self.cell_timer = SystemTime::now();
         //     self.update_cells(device, queue);
         // }
         //self.update_rays(device);
+
+        if self.convert_meta.modified().unwrap()
+            != std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl")
+                .unwrap()
+                .modified()
+                .unwrap()
+        {
+            // buffer for elements
+            let lens_data = self.lens.get_elements_buffer();
+            let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Lens drawing Buffer"),
+                contents: bytemuck::cast_slice(&lens_data),
+                usage: wgpu::BufferUsages::UNIFORM
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::STORAGE,
+            });
+            let (pipeline, bind_group) = Self::convert_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &lens_data,
+                &lens_buffer,
+                &self.confFormat,
+                &self.high_color_tex,
+            );
+            self.conversion_render_pipeline = pipeline;
+            self.conversion_bind_group = bind_group;
+        }
+
+        if self.draw_meta.modified().unwrap()
+            != std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl")
+                .unwrap()
+                .modified()
+                .unwrap()
+        {
+            let (pipeline, bind_group) = Self::shader_draw(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                self.format,
+            );
+            self.conversion_render_pipeline = pipeline;
+            self.conversion_bind_group = bind_group;
+        }
     }
 
     fn render(
