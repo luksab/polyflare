@@ -92,26 +92,22 @@ impl Ray {
                 },
             );
             let o: Vector2<f64> = Vector2 {
-                x: self.o.x,
-                y: self.o.y,
+                x: self.o.y,
+                y: self.o.z,
             };
             let d: Vector2<f64> = Vector2 {
-                x: self.d.x,
-                y: self.d.y,
-            };
+                x: self.d.y,
+                y: self.d.z,
+            }.normalize();
             let delta: f64 = d.dot(o - c).pow(2) - ((o - c).magnitude().pow(2) - radius.pow(2));
 
             let d1 = -(d.dot(o - c)) - delta.sqrt();
             let d2 = -(d.dot(o - c)) + delta.sqrt();
 
-            if reflect {
-                self.o + self.d * d2
+            if entry == (self.d.z > 0.) {
+                self.o + self.d * d1
             } else {
-                if entry {
-                    self.o + self.d * d1
-                } else {
-                    self.o + self.d * d2
-                }
+                self.o + self.d * d2
             }
         } else {
             // c: center of the lens surface if interpreted as an entire sphere
@@ -131,18 +127,10 @@ impl Ray {
             let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
             let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
 
-            if reflect {
-                if entry {
-                    self.o + self.d * d1
-                } else {
-                    self.o + self.d * d2
-                }
+            if entry == (self.d.z > 0.) {
+                self.o + self.d * d1
             } else {
-                if entry {
-                    self.o + self.d * d1
-                } else {
-                    self.o + self.d * d2
-                }
+                self.o + self.d * d2
             }
         };
 
@@ -158,9 +146,9 @@ impl Ray {
                 },
             );
             let intersection: Vector2<f64> = Vector2 {
-                x: intersection.x,
-                y: intersection.y,
-            };
+                x: intersection.y,
+                y: intersection.z,
+            }.normalize();
 
             let normal2d = intersection - c;
 
@@ -170,7 +158,7 @@ impl Ray {
                 z: normal2d.y,
             };
 
-            if entry {
+            if entry == (self.d.z > 0.) {
                 (intersection).normalize()
             } else {
                 -(intersection).normalize()
@@ -185,7 +173,7 @@ impl Ray {
                     position - *radius
                 },
             );
-            if entry {
+            if entry == (self.d.z > 0.) {
                 (intersection - c).normalize()
             } else {
                 -(intersection - c).normalize()
@@ -200,8 +188,16 @@ impl Ray {
             self.strength *= Ray::fresnel_r(
                 d_in.angle(normal).0,
                 self.d.angle(-normal).0,
-                if entry { glass.ior } else { 1.0 },
-                if entry { 1.0 } else { glass.ior },
+                if entry == (self.d.z > 0.) {
+                    glass.ior
+                } else {
+                    1.0
+                },
+                if entry == (self.d.z > 0.) {
+                    1.0
+                } else {
+                    glass.ior
+                },
             );
         } else {
             let eta = if entry { 1.0 / glass.ior } else { glass.ior };
@@ -464,7 +460,7 @@ impl Lens {
                                     // propagate backwards through system
                                     // until the second reflection
                                     for k in (i + 1..j).rev() {
-                                        ray.propagate(&self.elements[k]);//, reversed - invert glass
+                                        ray.propagate(&self.elements[k]);
                                         rays.push(ray.o.z);
                                         rays.push(ray.o.y);
                                         rays.push(old_strength);
