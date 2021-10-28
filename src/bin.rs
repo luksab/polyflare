@@ -58,24 +58,27 @@ fn main() {
 
     let mut line = Line::new(10., 10., 400., 300.);
 
-    let space = Element::Space(0.5);
     let radius = 3.0;
-    let lens_entry = Element::SphericalLensEntry {
+    let lens_entry = Element {
         radius,
         glass: Glass {
             ior: 1.5,
             coating: (),
         },
         position: -2.0,
+        entry: true,
+        spherical: true,
     };
     let lens_exit_pos = 1.0;
-    let lens_exit = Element::SphericalLensExit {
+    let lens_exit = Element {
         radius,
         glass: Glass {
             ior: 1.5,
             coating: (),
         },
         position: lens_exit_pos,
+        entry: false,
+        spherical: true,
     };
     line.width = 3.0;
     // lens entry
@@ -91,7 +94,6 @@ fn main() {
     );
     line.width = 0.1;
 
-    println!("space: {:?}", space);
     println!("lens: {:?}", lens_entry);
     //println!("ray: {:?}", ray);
 
