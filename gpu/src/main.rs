@@ -61,13 +61,14 @@ fn main() {
         coating: (),
     };
     // r1, d1, r2, distance to next lens
-    let mut lens_ui: Vec<(f32, f32, f32, f32)> = vec![(3., 3., 3., 3.), (3., 3., 3., 5.)];
+    let mut lens_ui: Vec<(f32, f32, f32, f32)> = vec![(3., 0., 3., 3.), (3., 3., 3., 3.)];
     // init lens
     {
         let mut poly = poly_optics.lock().unwrap();
         let mut elements: Vec<Element> = vec![];
         let mut dst: f32 = -5.;
         for element in &lens_ui {
+            dst += element.1;
             elements.push(Element {
                 radius: element.0 as f64,
                 glass,
@@ -75,7 +76,7 @@ fn main() {
                 entry: true,
                 spherical: true,
             });
-            dst += element.1;
+            dst += element.3;
             elements.push(Element {
                 radius: element.2 as f64,
                 glass,
@@ -83,7 +84,6 @@ fn main() {
                 entry: false,
                 spherical: true,
             });
-            dst += element.3;
         }
         poly.lens.elements = elements;
         poly.update_buffers(&state.queue, &state.device, true);
@@ -330,16 +330,17 @@ fn main() {
                         // ui.text(format!("Framerate: {:?}", fps));
                         // Slider::new("first radius", 0., 5.)
                         //     .build(&ui, &mut poly.lens.elements[0].);
-                        let num_ghosts = (poly.lens.elements.len() * poly.lens.elements.len()) as u32;
+                        let num_ghosts =
+                            (poly.lens.elements.len() * poly.lens.elements.len()) as u32;
                         update_lens |= Slider::new("which ghost", 0, num_ghosts)
-                                .build(&ui, &mut poly.which_ghost);
+                            .build(&ui, &mut poly.which_ghost);
                         for (i, element) in lens_ui.iter_mut().enumerate() {
                             ui.text(format!("Lens: {:?}", i + 1));
-                            update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
-                                .build(&ui, &mut element.0);
                             update_lens |=
                                 Slider::new(format!("d##{}", i), 0., element.0 + element.2)
                                     .build(&ui, &mut element.1);
+                            update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
+                                .build(&ui, &mut element.0);
                             update_lens |= Slider::new(format!("r2##{}", i), 0., 3.)
                                 .build(&ui, &mut element.2);
                             update_lens |= Slider::new(format!("d_next##{}", i), 0., 6.)
