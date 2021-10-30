@@ -104,7 +104,7 @@ impl Ray {
             let d1 = -(d.dot(o - c)) - delta.sqrt();
             let d2 = -(d.dot(o - c)) + delta.sqrt();
 
-            if entry == (self.d.z > 0.) {
+            if (entry == (self.d.z > 0.)) == (radius > &0.) {
                 self.o + self.d * d1
             } else {
                 self.o + self.d * d2
@@ -127,7 +127,7 @@ impl Ray {
             let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
             let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
 
-            if entry == (self.d.z > 0.) {
+            if (entry == (self.d.z > 0.)) == (radius > &0.){
                 self.o + self.d * d1
             } else {
                 self.o + self.d * d2
@@ -158,7 +158,7 @@ impl Ray {
                 z: normal2d.y,
             };
 
-            if entry == (self.d.z > 0.) {
+            if (entry == (self.d.z > 0.)) == (radius > &0.) {
                 (intersection).normalize()
             } else {
                 -(intersection).normalize()
@@ -173,7 +173,7 @@ impl Ray {
                     position - *radius
                 },
             );
-            if entry == (self.d.z > 0.) {
+            if (entry == (self.d.z > 0.)) == (radius > &0.) {
                 (intersection - c).normalize()
             } else {
                 -(intersection - c).normalize()
