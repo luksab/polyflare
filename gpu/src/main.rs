@@ -337,7 +337,7 @@ fn main() {
                         for (i, element) in lens_ui.iter_mut().enumerate() {
                             ui.text(format!("Lens: {:?}", i + 1));
                             update_lens |=
-                                Slider::new(format!("d##{}", i), 0., element.0 + element.2)
+                                Slider::new(format!("d##{}", i), 0., element.0.abs() + element.2.abs())
                                     .build(&ui, &mut element.1);
                             update_lens |= Slider::new(format!("r1##{}", i), -3., 3.)
                                 .build(&ui, &mut element.0);

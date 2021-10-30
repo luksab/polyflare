@@ -53,13 +53,35 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let screenAspect = normalize(vec2<f32>(params.height, params.width));
     let pos_lens = (pos - vec2<f32>(0.5,0.5))/screenAspect * 2.;
 
-    for (var i: u32 = u32(0); i <= arrayLength(&elements.el); i = i + u32(1)) {
+    for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];
         let c1 = vec2<f32>(element.position1/4.0, 0.0);
         let c2 = vec2<f32>(element.position2/4.0, 0.0);
-        if ( distance(c1, pos_lens) <= element.radius1 / 4.0 
-            && distance(c2, pos_lens) <= element.radius2 / 4.0 ) {
-            bg = vec4<f32>(0.3,0.3,0.4,1.0);
+        if (element.radius1 > 0. && element.radius2 > 0.) {
+            if ( distance(c1, pos_lens) <= element.radius1 / 4.0 
+                && distance(c2, pos_lens) <= element.radius2 / 4.0 ) {
+                bg = vec4<f32>(0.3,0.3,0.4,1.0);
+            }
+        } 
+        if (element.radius1 <= 0. && element.radius2 > 0.) {
+            if ( distance(c1, pos_lens) > - element.radius1 / 4.0 
+                && distance(c2, pos_lens) <= element.radius2 / 4.0 ) {
+                bg = vec4<f32>(0.3,0.3,0.4,1.0);
+            }
+        }
+        if (element.radius1 > 0. && element.radius2 <= 0.) {
+            if ( distance(c1, pos_lens) <= element.radius1 / 4.0 
+                && distance(c2, pos_lens) > - element.radius2 / 4.0 ) {
+                bg = vec4<f32>(0.3,0.3,0.4,1.0);
+            }
+        }
+        if (element.radius1 <= 0. && element.radius2 <= 0.) {
+            if ( distance(c1, pos_lens) > - element.radius1 / 4.0 
+                && distance(c2, pos_lens) > - element.radius2 / 4.0 
+                && (pos_lens.y > element.radius1/4.0 && pos_lens.y < -element.radius1/4.0)
+                && (pos_lens.x - element.position1/4.0 > 0.) && (pos_lens.x - element.position2/4.0 < 0.)) {
+                bg = vec4<f32>(0.3,0.3,0.4,1.0);
+            }
         }
     }
 
