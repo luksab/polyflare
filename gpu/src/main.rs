@@ -339,11 +339,11 @@ fn main() {
                             update_lens |=
                                 Slider::new(format!("d##{}", i), 0., element.0 + element.2)
                                     .build(&ui, &mut element.1);
-                            update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
+                            update_lens |= Slider::new(format!("r1##{}", i), -3., 3.)
                                 .build(&ui, &mut element.0);
-                            update_lens |= Slider::new(format!("r2##{}", i), 0., 3.)
+                            update_lens |= Slider::new(format!("r2##{}", i), -3., 3.)
                                 .build(&ui, &mut element.2);
-                            update_lens |= Slider::new(format!("d_next##{}", i), 0., 6.)
+                            update_lens |= Slider::new(format!("d_next##{}", i), -3., 6.)
                                 .build(&ui, &mut element.3);
                             ui.separator();
                         }
