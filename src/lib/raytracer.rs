@@ -34,13 +34,23 @@ pub struct Glass {
 /// # One element in a lens system
 /// ```
 /// # use polynomial_optics::raytracer::*;
-/// let space = Element::Space(1.0);
+/// let glass = polynomial_optics::Glass {
+///     ior: 1.5,
+///     coating: (),
+/// };
+/// let element = Element{
+///    radius: 3.,
+///    glass,
+///    position: 2.,
+///    entry: true,
+///    spherical: true,     
+/// };
 /// let mut ray = Ray::default();
 ///
-/// println!("space: {:?}", space);
+/// println!("space: {:?}", element);
 /// println!("ray: {:?}", ray);
 ///
-/// let ray2 = space.propagate(ray);
+/// let ray2 = ray.propagate(&element);
 /// println!("propagated ray: {:?}", ray2);
 ///
 /// ```
@@ -265,10 +275,10 @@ impl Lens {
     /// get elements in form:
     /// ```
     /// struct Element {
-    ///   position1: f32;
-    ///   radius1  : f32;
-    ///   position2: f32;
-    ///   radius2  : f32;
+    ///   position1: f32,
+    ///   radius1  : f32,
+    ///   position2: f32,
+    ///   radius2  : f32,
     /// };
     /// ```
     /// only works if elements are entry and exit alternatively
