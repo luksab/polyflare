@@ -1,7 +1,7 @@
 use num::traits::Zero;
 use std::{
     fmt::Display,
-    ops::{Add, AddAssign, Mul, Neg, Sub},
+    ops::{Add, AddAssign, Div, Mul, Neg, Sub},
 };
 pub trait PowUsize {
     fn upow(self, exp: usize) -> Self;
@@ -80,6 +80,42 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl<
+        N: Add + Copy + Zero + std::iter::Sum<N> + PowUsize + Mul<Output = N> + Div<Output = N>,
+        const DEGREE: usize,
+    > Polynom2d<N, DEGREE>
+{
+    /// ```
+    /// use polynomial_optics::*;
+    /// let f = Polynom2d {
+    ///     coefficients: [[380., 47.], [3., 1.0]],
+    /// };
+    /// let p = vec![(1.0,1.0,f.eval(1.0, 1.0)), (-1.0,1.0,f.eval(-1.0, 1.0))
+    ///              , (1.0,-1.0,f.eval(1.0, -1.0)), (-1.0,-1.0,f.eval(-1.0, -1.0))];
+    /// let res = Polynom2d::<_, 2>::fit(p);
+    /// println!("{:?}", res);
+    /// assert!(f == res);
+    /// ```
+    pub fn fit(points: Vec<(N, N, N)>) -> Polynom2d<N, DEGREE> {
+        let mut coefficients = [[N::zero(); DEGREE]; DEGREE];
+        for i in 0..DEGREE {
+            for j in 0..DEGREE {
+                coefficients[i][j] = points
+                    .iter()
+                    .map(|(x, y, d)| (*d) * (*x).upow(i) * (*y).upow(j))
+                    .sum::<N>()
+                    / points
+                        .iter()
+                        .map(|(x, y, d)| (*x).upow(2 * i) * (*y).upow(2 * j))
+                        .sum();
+            }
+        }
+        Polynom2d {
+            coefficients: coefficients,
+        }
     }
 }
 
@@ -251,6 +287,62 @@ impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usiz
             }
         }
         sum
+    }
+}
+
+impl<
+        N: Add + Copy + Zero + std::iter::Sum<N> + PowUsize + Mul<Output = N> + Div<Output = N>,
+        const DEGREE: usize,
+    > Polynom4d<N, DEGREE>
+{
+    /// ```
+    /// use polynomial_optics::*;
+    /// let f = Polynom4d {
+    ///     coefficients: [[[[1., 2.], [1., 2.]], [[1., 2.], [1., 2.]]], [[[1., 2.], [1., 2.]], [[1., 2.], [1., 2.]]]],
+    /// };
+    /// let mut p = vec![];
+    /// for i in &[-1.,1.] {
+    ///    for j in &[-1.,1.] {
+    ///        for k in &[-1.,1.] {
+    ///            for l in &[-1.,1.] {
+    ///                p.push((*i, *j, *k, *l, f.eval(*i, *j, *k, *l)));
+    ///            }
+    ///        }
+    ///    }
+    /// }
+    /// println!("{:?}", p);
+    /// let res = Polynom4d::<_, 2>::fit(p);
+    /// println!("{:?}", res);
+    /// assert!(f == res);
+    /// ```
+    pub fn fit(points: Vec<(N, N, N, N, N)>) -> Polynom4d<N, DEGREE> {
+        let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
+        for i in 0..DEGREE {
+            for j in 0..DEGREE {
+                for k in 0..DEGREE {
+                    for l in 0..DEGREE {
+                        coefficients[i][j][k][l] = points
+                            .iter()
+                            .map(|(x, y, z, w, d)| {
+                                (*d) * (*x).upow(i) * (*y).upow(j) * (*z).upow(k) * (*w).upow(l)
+                            })
+                            .sum::<N>()
+                            / points
+                                .iter()
+                                .map(|(x, y, z, w, d)| {
+                                    (*x).upow(2 * i)
+                                        * (*y).upow(2 * j)
+                                        * (*z).upow(2 * k)
+                                        * (*w).upow(2 * l)
+                                })
+                                .sum();
+                    }
+                }
+            }
+        }
+        Polynom4d {
+            coefficients: coefficients,
+        }
     }
 }
 
