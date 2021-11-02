@@ -167,7 +167,7 @@ impl<N, const VARIABLES: usize> Monomial<N, VARIABLES> {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Polynomial<N, const VARIABLES: usize> {
-    terms: Vec<Monomial<N, VARIABLES>>,
+    pub terms: Vec<Monomial<N, VARIABLES>>,
 }
 
 impl<N: Copy + Zero + One + PartialOrd + Neg<Output = N>, const VARIABLES: usize> Display

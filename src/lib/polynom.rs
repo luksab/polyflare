@@ -1,5 +1,6 @@
 use num::traits::Zero;
 use std::{
+    default,
     fmt::Display,
     ops::{Add, AddAssign, Div, Mul, Neg, Sub},
 };
@@ -116,6 +117,79 @@ impl<
         Polynom2d {
             coefficients: coefficients,
         }
+    }
+}
+
+impl<N: Add + Copy + Zero + std::cmp::PartialOrd + std::ops::AddAssign, const DEGREE: usize>
+    Polynom2d<N, DEGREE>
+{
+    fn fact(n: usize) -> u64 {
+        let mut f: u64 = n as u64;
+        for i in 2..n {
+            f *= i as u64;
+        }
+        return f;
+    }
+
+    fn choose(n: usize, k: usize) -> u64 {
+        let mut num: u64 = n as u64;
+        for i in 1..k {
+            num *= (n - i) as u64;
+        }
+        return num / Self::fact(k);
+    }
+
+    fn dist(phi: &crate::Polynomial<N, 2>, cp: (), points: &Vec<(N, N, N)>) -> N {
+        N::zero()
+    }
+
+    fn get_monomial(&self, i: usize, j: usize) -> crate::Monomial<N, 2> {
+        crate::Monomial {
+            coefficient: self.coefficients[i][j],
+            exponents: [i, j],
+        }
+    }
+
+    /// # Orthogonal Matching Pursuit with replacement
+    /// ```
+    /// ```
+    pub fn get_sparse(&self, points: Vec<(N, N, N)>, terms: usize) -> crate::Polynomial<N, 2> {
+        let mut phi = crate::Polynomial::new(vec![]);
+        let mut cp = Default::default();
+        for i in 0..DEGREE {
+            for j in 0..DEGREE {
+                phi.terms.push(self.get_monomial(i, j));
+                let mut min = Self::dist(&phi, cp, &points);
+                let (mut min_i, mut min_j) = (0, 0);
+                phi.terms.pop();
+                for k in 0..DEGREE {
+                    for l in 0..DEGREE {
+                        phi.terms.push(self.get_monomial(k, l));
+                        let new_min = Self::dist(&phi, cp, &points);
+                        phi.terms.pop();
+                        if new_min < min {
+                            min = new_min;
+                            min_i = k;
+                            min_j = l;
+                        }
+                    }
+                }
+                if phi.terms.len() < terms {
+                    phi.terms.push(self.get_monomial(min_i, min_j));
+                } else {
+                    let mut term = self.get_monomial(min_i, min_j);
+                    for k in 0..phi.terms.len() {
+                        term = std::mem::replace(&mut phi.terms[k], term);
+                        let new_min = Self::dist(&phi, cp, &points);
+                        if new_min < min {
+                            break;
+                        }
+                    }
+                }
+                // TODO: implement linear least sqares here
+            }
+        }
+        phi
     }
 }
 
