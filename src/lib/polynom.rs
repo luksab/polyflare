@@ -1,6 +1,14 @@
+use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
+use mathru::{
+    algebra::linear::{
+        matrix::{LUDec, Solve},
+        Matrix, Vector,
+    },
+    matrix, vector,
+};
 use num::traits::Zero;
+use std::vec;
 use std::{
-    default,
     fmt::Display,
     ops::{Add, AddAssign, Div, Mul, Neg, Sub},
 };
@@ -85,7 +93,7 @@ where
 }
 
 impl<
-        N: Add + Copy + Zero + std::iter::Sum<N> + PowUsize + Mul<Output = N> + Div<Output = N>,
+        N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq,
         const DEGREE: usize,
     > Polynom2d<N, DEGREE>
 {
@@ -101,18 +109,31 @@ impl<
     /// assert!(f == res);
     /// ```
     pub fn fit(points: Vec<(N, N, N)>) -> Polynom2d<N, DEGREE> {
-        let mut coefficients = [[N::zero(); DEGREE]; DEGREE];
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                coefficients[i][j] = points
+        let mut m = Matrix::<N>::zero(DEGREE * DEGREE, DEGREE * DEGREE);
+        let mut k = Vector::<N>::zero(DEGREE * DEGREE);
+        for (iter, element) in m.iter_mut().enumerate() {
+            let (i, j) = (iter / (DEGREE * DEGREE), iter % (DEGREE * DEGREE));
+            let a = (i / DEGREE, i % DEGREE);
+            let b = (j / DEGREE, j % DEGREE);
+            println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
+            *element = points
                     .iter()
-                    .map(|(x, y, d)| (*d) * (*x).upow(i) * (*y).upow(j))
+                .map(|(x, y, _d)| (*x).upow(a.0 + b.0) * (*y).upow(a.1 + b.1))
                     .sum::<N>()
-                    / points
+        }
+        for (i, element) in k.iter_mut().enumerate() {
+            let a = (i / DEGREE, i % DEGREE);
+            *element = points
                         .iter()
-                        .map(|(x, y, d)| (*x).upow(2 * i) * (*y).upow(2 * j))
-                        .sum();
+                .map(|(x, y, d)| *d * (*x).upow(a.0) * (*y).upow(a.1))
+                .sum::<N>()
             }
+        println!("m: {:?}", m);
+        println!("k: {:?}", k);
+        let c = m.solve(&k).unwrap();
+        let mut coefficients = [[N::zero(); DEGREE]; DEGREE];
+        for (i, element) in c.iter().enumerate() {
+            coefficients[i / DEGREE][i % DEGREE] = *element;
         }
         Polynom2d {
             coefficients: coefficients,
