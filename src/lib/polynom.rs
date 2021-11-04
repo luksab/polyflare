@@ -117,17 +117,17 @@ impl<
             let b = (j / DEGREE, j % DEGREE);
             println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
             *element = points
-                    .iter()
+                .iter()
                 .map(|(x, y, _d)| (*x).upow(a.0 + b.0) * (*y).upow(a.1 + b.1))
-                    .sum::<N>()
+                .sum::<N>()
         }
         for (i, element) in k.iter_mut().enumerate() {
             let a = (i / DEGREE, i % DEGREE);
             *element = points
-                        .iter()
+                .iter()
                 .map(|(x, y, d)| *d * (*x).upow(a.0) * (*y).upow(a.1))
                 .sum::<N>()
-            }
+        }
         println!("m: {:?}", m);
         println!("k: {:?}", k);
         let c = m.solve(&k).unwrap();
@@ -386,14 +386,14 @@ impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usiz
 }
 
 impl<
-        N: Add + Copy + Zero + std::iter::Sum<N> + PowUsize + Mul<Output = N> + Div<Output = N>,
+        N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq,
         const DEGREE: usize,
     > Polynom4d<N, DEGREE>
 {
     /// ```
     /// use polynomial_optics::*;
     /// let f = Polynom4d {
-    ///     coefficients: [[[[1., 2.], [1., 2.]], [[1., 2.], [1., 2.]]], [[[1., 2.], [1., 2.]], [[1., 2.], [1., 2.]]]],
+    ///     coefficients: [[[[4., 2.], [1., 2.]], [[7., 2.], [1., 2.]]], [[[4., 7.], [1., 2.]], [[23., 2.], [1., 2.]]]],
     /// };
     /// let mut p = vec![];
     /// for i in &[-1.,1.] {
@@ -411,7 +411,51 @@ impl<
     /// assert!(f == res);
     /// ```
     pub fn fit(points: Vec<(N, N, N, N, N)>) -> Polynom4d<N, DEGREE> {
+        let mut m = Matrix::<N>::zero(
+            DEGREE * DEGREE * DEGREE * DEGREE,
+            DEGREE * DEGREE * DEGREE * DEGREE,
+        );
+        let mut k = Vector::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE);
+        for (iter, element) in m.iter_mut().enumerate() {
+            let (i, j) = (
+                iter / (DEGREE * DEGREE * DEGREE * DEGREE),
+                iter % (DEGREE * DEGREE * DEGREE * DEGREE),
+            );
+            let (k_i, l_i) = (i / DEGREE, i % DEGREE);
+            let (k_j, l_j) = (j / DEGREE, j % DEGREE);
+            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
+            let b = (k_j / DEGREE, k_j % DEGREE, l_j / DEGREE, l_j % DEGREE);
+            println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
+            *element = points
+                .iter()
+                .map(|(x, y, z, w, _d)| {
+                    (*x).upow(a.0 + b.0)
+                        * (*y).upow(a.1 + b.1)
+                        * (*z).upow(a.2 + b.2)
+                        * (*w).upow(a.3 + b.3)
+                })
+                .sum::<N>()
+        }
+        for (i, element) in k.iter_mut().enumerate() {
+            let (k_i, l_i) = (i / DEGREE, i % DEGREE);
+            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
+            *element = points
+                .iter()
+                .map(|(x, y, z, w, d)| {
+                    *d * (*x).upow(a.0) * (*y).upow(a.1) * (*z).upow(a.2) * (*w).upow(a.3)
+                })
+                .sum::<N>()
+        }
+        println!("m: {:?}", m);
+        println!("k: {:?}", k);
+        let c = m.solve(&k).unwrap();
         let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
+        for (i, element) in c.iter().enumerate() {
+            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
+            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
+            println!("{:?}", a);
+            coefficients[a.0][a.1][a.2][a.3] = *element;
+        }
         for i in 0..DEGREE {
             for j in 0..DEGREE {
                 for k in 0..DEGREE {
