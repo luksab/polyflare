@@ -115,7 +115,7 @@ impl<
             let (i, j) = (iter / (DEGREE * DEGREE), iter % (DEGREE * DEGREE));
             let a = (i / DEGREE, i % DEGREE);
             let b = (j / DEGREE, j % DEGREE);
-            println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
+            // println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
             *element = points
                 .iter()
                 .map(|(x, y, _d)| (*x).upow(a.0 + b.0) * (*y).upow(a.1 + b.1))
@@ -128,8 +128,8 @@ impl<
                 .map(|(x, y, d)| *d * (*x).upow(a.0) * (*y).upow(a.1))
                 .sum::<N>()
         }
-        println!("m: {:?}", m);
-        println!("k: {:?}", k);
+        // println!("m: {:?}", m);
+        // println!("k: {:?}", k);
         let c = m.solve(&k).unwrap();
         let mut coefficients = [[N::zero(); DEGREE]; DEGREE];
         for (i, element) in c.iter().enumerate() {
@@ -144,22 +144,6 @@ impl<
 impl<N: Add + Copy + Zero + std::cmp::PartialOrd + std::ops::AddAssign, const DEGREE: usize>
     Polynom2d<N, DEGREE>
 {
-    fn fact(n: usize) -> u64 {
-        let mut f: u64 = n as u64;
-        for i in 2..n {
-            f *= i as u64;
-        }
-        return f;
-    }
-
-    fn choose(n: usize, k: usize) -> u64 {
-        let mut num: u64 = n as u64;
-        for i in 1..k {
-            num *= (n - i) as u64;
-        }
-        return num / Self::fact(k);
-    }
-
     fn dist(phi: &crate::Polynomial<N, 2>, cp: (), points: &Vec<(N, N, N)>) -> N {
         N::zero()
     }
@@ -362,6 +346,74 @@ where
     }
 }
 
+impl<N: Add + Copy + Zero + std::cmp::PartialOrd + std::ops::AddAssign, const DEGREE: usize>
+    Polynom4d<N, DEGREE>
+{
+    fn dist(phi: &crate::Polynomial<N, 4>, cp: (), points: &Vec<(N, N, N)>) -> N {
+        N::zero()
+    }
+
+    fn get_monomial(&self, i: usize, j: usize, k: usize, l: usize) -> crate::Monomial<N, 4> {
+        crate::Monomial {
+            coefficient: self.coefficients[i][j][k][l],
+            exponents: [i, j, k, l],
+        }
+    }
+
+    /// # Orthogonal Matching Pursuit with replacement
+    /// ```
+    /// ```
+    pub fn get_sparse(&self, points: Vec<(N, N, N)>, terms: usize) -> crate::Polynomial<N, 4> {
+        let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
+        let mut cp = Default::default();
+        for i in 0..DEGREE {
+            for j in 0..DEGREE {
+                for k in 0..DEGREE {
+                    for l in 0..DEGREE {
+                        phi.terms.push(self.get_monomial(i, j, k, l));
+                        let mut min = Self::dist(&phi, cp, &points);
+                        let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
+                        phi.terms.pop();
+                        for m in 0..DEGREE {
+                            for n in 0..DEGREE {
+                                for o in 0..DEGREE {
+                                    for p in 0..DEGREE {
+                                        phi.terms.push(self.get_monomial(k, l, k, l));
+                                        let new_min = Self::dist(&phi, cp, &points);
+                                        phi.terms.pop();
+                                        if new_min < min {
+                                            min = new_min;
+                                            min_i = m;
+                                            min_j = n;
+                                            min_k = o;
+                                            min_l = p;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if phi.terms.len() < terms {
+                            phi.terms
+                                .push(self.get_monomial(min_i, min_j, min_k, min_l));
+                        } else {
+                            let mut term = self.get_monomial(min_i, min_j, min_k, min_l);
+                            for k in 0..phi.terms.len() {
+                                term = std::mem::replace(&mut phi.terms[k], term);
+                                let new_min = Self::dist(&phi, cp, &points);
+                                if new_min < min {
+                                    break;
+                                }
+                            }
+                        }
+                        // TODO: implement linear least sqares here
+                    }
+                }
+            }
+        }
+        phi
+    }
+}
+
 impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usize>
     Polynom4d<N, DEGREE>
 {
@@ -425,7 +477,7 @@ impl<
             let (k_j, l_j) = (j / DEGREE, j % DEGREE);
             let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
             let b = (k_j / DEGREE, k_j % DEGREE, l_j / DEGREE, l_j % DEGREE);
-            println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
+            // println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
             *element = points
                 .iter()
                 .map(|(x, y, z, w, _d)| {
@@ -446,14 +498,14 @@ impl<
                 })
                 .sum::<N>()
         }
-        println!("m: {:?}", m);
-        println!("k: {:?}", k);
+        // println!("m: {:?}", m);
+        // println!("k: {:?}", k);
         let c = m.solve(&k).unwrap();
         let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
         for (i, element) in c.iter().enumerate() {
             let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
             let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
-            println!("{:?}", a);
+            // println!("{:?}", a);
             coefficients[a.0][a.1][a.2][a.3] = *element;
         }
         for i in 0..DEGREE {
