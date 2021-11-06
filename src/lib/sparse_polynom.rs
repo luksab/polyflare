@@ -149,7 +149,7 @@ impl<N, const VARIABLES: usize> Monomial<N, VARIABLES> {
 }
 
 /// A sparse polynomial consisting of a Vec of Monomials
-/// 
+///
 /// The Monomials are sorted to allow fast consolidation of terms.
 /// ```
 ///# use polynomial_optics::*;
@@ -218,6 +218,27 @@ impl<N: PartialOrd + AddAssign + Copy, const VARIABLES: usize> Polynomial<N, VAR
                 terms.swap_remove(i);
             }
         }
+    }
+}
+
+impl<N: Zero + AddAssign + MulAssign + std::ops::Mul<Output = N> + PowUsize + Copy, const VARIABLES: usize>
+    Polynomial<N, VARIABLES>
+{
+    /// Evaluate monomial at a point
+    /// ```
+    ///# use polynomial_optics::*;
+    /// let pol = Monomial {
+    ///     coefficient: 1.0,
+    ///     exponents: [2, 3, 5],
+    /// };
+    /// println!("f(3, 2, 1.5)={}", pol.eval([3.0, 2.0, 1.5]));
+    /// ```
+    pub fn eval(&self, point: [N; VARIABLES]) -> N {
+        let mut sum = N::zero();
+        for term in &self.terms {
+            sum += term.eval(point);
+        }
+        sum
     }
 }
 

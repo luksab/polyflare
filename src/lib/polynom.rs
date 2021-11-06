@@ -7,6 +7,7 @@ use mathru::{
     matrix, vector,
 };
 use num::traits::Zero;
+use std::ops::MulAssign;
 use std::vec;
 use std::{
     fmt::Display,
@@ -141,11 +142,25 @@ impl<
     }
 }
 
-impl<N: Add + Copy + Zero + std::cmp::PartialOrd + std::ops::AddAssign, const DEGREE: usize>
-    Polynom2d<N, DEGREE>
+impl<
+        N: Zero
+            + AddAssign
+            + MulAssign
+            + std::ops::Mul<Output = N>
+            + crate::sparse_polynom::PowUsize
+            + std::cmp::PartialOrd
+            + std::ops::Sub<Output = N>
+            + Copy,
+        const DEGREE: usize,
+    > Polynom2d<N, DEGREE>
 {
     fn dist(phi: &crate::Polynomial<N, 2>, cp: (), points: &Vec<(N, N, N)>) -> N {
-        N::zero()
+        let mut result = N::zero();
+        for point in points {
+            let input = [point.0, point.1];
+            result += phi.eval(input) - point.2;
+        }
+        result
     }
 
     fn get_monomial(&self, i: usize, j: usize) -> crate::Monomial<N, 2> {
@@ -346,11 +361,25 @@ where
     }
 }
 
-impl<N: Add + Copy + Zero + std::cmp::PartialOrd + std::ops::AddAssign, const DEGREE: usize>
-    Polynom4d<N, DEGREE>
+impl<
+        N: Zero
+            + AddAssign
+            + MulAssign
+            + std::ops::Mul<Output = N>
+            + crate::sparse_polynom::PowUsize
+            + std::cmp::PartialOrd
+            + std::ops::Sub<Output = N>
+            + Copy,
+        const DEGREE: usize,
+    > Polynom4d<N, DEGREE>
 {
-    fn dist(phi: &crate::Polynomial<N, 4>, cp: (), points: &Vec<(N, N, N)>) -> N {
-        N::zero()
+    fn dist(phi: &crate::Polynomial<N, 4>, cp: (), points: &Vec<(N, N, N, N, N)>) -> N {
+        let mut result = N::zero();
+        for point in points {
+            let input = [point.0, point.1, point.2, point.3];
+            result += phi.eval(input) - point.4;
+        }
+        result
     }
 
     fn get_monomial(&self, i: usize, j: usize, k: usize, l: usize) -> crate::Monomial<N, 4> {
@@ -363,7 +392,11 @@ impl<N: Add + Copy + Zero + std::cmp::PartialOrd + std::ops::AddAssign, const DE
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
-    pub fn get_sparse(&self, points: Vec<(N, N, N)>, terms: usize) -> crate::Polynomial<N, 4> {
+    pub fn get_sparse(
+        &self,
+        points: Vec<(N, N, N, N, N)>,
+        terms: usize,
+    ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut cp = Default::default();
         for i in 0..DEGREE {
@@ -378,7 +411,7 @@ impl<N: Add + Copy + Zero + std::cmp::PartialOrd + std::ops::AddAssign, const DE
                             for n in 0..DEGREE {
                                 for o in 0..DEGREE {
                                     for p in 0..DEGREE {
-                                        phi.terms.push(self.get_monomial(k, l, k, l));
+                                        phi.terms.push(self.get_monomial(m, n, o, p));
                                         let new_min = Self::dist(&phi, cp, &points);
                                         phi.terms.pop();
                                         if new_min < min {
