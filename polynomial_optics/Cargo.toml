@@ -1,0 +1,21 @@
+[package]
+name = "polynomial_optics"
+version = "0.1.0"
+authors = ["luksab <lukas@sabatschus.de>"]
+edition = "2018"
+
+[[bin]]
+name = "polynomial_optics"
+path = "src/bin.rs"
+
+[lib]
+name = "polynomial_optics"
+path = "src/lib/lib.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tiny-skia = "0.6.1"
+num = "0.4.0"
+cgmath = "0.18"
+mathru = "0.10"
