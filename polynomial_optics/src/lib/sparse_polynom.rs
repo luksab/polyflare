@@ -1,3 +1,7 @@
+use mathru::algebra::{
+    abstr::{AbsDiffEq, Field, Scalar},
+    linear::{matrix::Solve, Matrix, Vector},
+};
 use num::{traits::Zero, One};
 use std::{
     cmp::Ordering,
@@ -141,6 +145,31 @@ impl<N: PowUsize + MulAssign + Zero + Copy + Mul<Output = N>, const VARIABLES: u
     }
 }
 
+impl<N: PowUsize + MulAssign + Zero + One + Copy + Mul<Output = N>, const VARIABLES: usize>
+    Monomial<N, VARIABLES>
+{
+    pub fn res(&self, point: [N; VARIABLES]) -> N {
+        let mut sum: N = N::one();
+        for (variable, &exponent) in self.exponents.iter().enumerate() {
+            sum *= point[variable].upow(exponent);
+        }
+        sum
+    }
+
+    pub fn combine_res(&self, other: &Monomial<N, VARIABLES>, point: [N; VARIABLES]) -> N {
+        let mut sum: N = N::one();
+        for (variable, (&exponent_self, &exponent_other)) in self
+            .exponents
+            .iter()
+            .zip(other.exponents.iter())
+            .enumerate()
+        {
+            sum *= point[variable].upow(exponent_self + exponent_other);
+        }
+        sum
+    }
+}
+
 impl<N, const VARIABLES: usize> Monomial<N, VARIABLES> {
     /// Get the degree of the Monomial
     pub fn degree(&self) -> usize {
@@ -221,8 +250,10 @@ impl<N: PartialOrd + AddAssign + Copy, const VARIABLES: usize> Polynomial<N, VAR
     }
 }
 
-impl<N: Zero + AddAssign + MulAssign + std::ops::Mul<Output = N> + PowUsize + Copy, const VARIABLES: usize>
-    Polynomial<N, VARIABLES>
+impl<
+        N: Zero + AddAssign + MulAssign + std::ops::Mul<Output = N> + PowUsize + Copy,
+        const VARIABLES: usize,
+    > Polynomial<N, VARIABLES>
 {
     /// Evaluate monomial at a point
     /// ```
@@ -319,5 +350,96 @@ impl<
         }
         Polynomial::consolidate_terms(&mut terms);
         Polynomial { terms }
+    }
+}
+
+impl<
+        N: Add + Copy + num::Zero + One + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq,
+    > Polynomial<N, 2>
+{
+    /// ```
+    /// # use polynomial_optics::*;
+    /// let pol = vec![Monomial {
+    ///     coefficient: 1.5,
+    ///     exponents: [3, 5],
+    /// }, Monomial {
+    ///     coefficient: 1.0,
+    ///     exponents: [1, 0],
+    /// },];
+    /// let mut pol = Polynomial::new(pol);
+    /// println!("f(1, 1)={}", pol.eval([1.0, 1.0]));
+    /// pol.fit(&vec![(1., 1., 1.0), (1.5, 2., 2.0)]);
+    /// println!("{}", pol);
+    /// println!("f(1, 1)={}", pol.eval([1.0, 1.0]));
+    /// println!("f(1, 2)={}", pol.eval([1.5, 2.0]));
+    /// approx::abs_diff_eq!(pol.eval([1.0, 1.0]), 1.0, epsilon = f64::EPSILON);
+    /// approx::abs_diff_eq!(pol.eval([1.5, 2.0]), 2.0, epsilon = f64::EPSILON);
+    /// ```
+    pub fn fit(&mut self, points: &Vec<(N, N, N)>) {
+        let tems_num = self.terms.len();
+        let mut m = vec![num::Zero::zero(); tems_num.pow(2 as u32)];
+        let mut k = vec![num::Zero::zero(); tems_num];
+        for (i, a) in self.terms.iter().enumerate() {
+            for (j, b) in self.terms.iter().enumerate() {
+                m[i * self.terms.len() + j] = points
+                    .iter()
+                    .map(|(x, y, _d)| a.combine_res(b, [*x, *y]))
+                    .sum::<N>();
+            }
+        }
+        for (i, a) in self.terms.iter().enumerate() {
+            k[i] = points
+                .iter()
+                .map(|(x, y, d)| *d * a.res([*x, *y]))
+                .sum::<N>()
+        }
+        let m = Matrix::new(tems_num, tems_num, m);
+        let k = Vector::new_column(tems_num, k);
+        let c = m.solve(&k).unwrap();
+        for (i, term) in self.terms.iter_mut().enumerate() {
+            term.coefficient = *c.get(i);
+        }
+    }
+}
+
+impl<
+        N: Add
+            + Copy
+            + num::Zero
+            + num::One
+            + std::iter::Sum<N>
+            + PowUsize
+            + Field
+            + Scalar
+            + AbsDiffEq,
+    > Polynomial<N, 4>
+{
+    pub fn fit(&mut self, points: Vec<(N, N, N, N, N)>) {
+        let mut m: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4 as u32).pow(2 as u32)];
+        let mut k: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4 as u32)];
+        for (i, a) in self.terms.iter().enumerate() {
+            for (j, b) in self.terms.iter().enumerate() {
+                m[i * self.terms.len() + j] = points
+                    .iter()
+                    .map(|(x, y, z, w, _d)| a.combine_res(b, [*x, *y, *z, *w]))
+                    .sum::<N>()
+            }
+        }
+        for (i, a) in self.terms.iter().enumerate() {
+            k[i] = points
+                .iter()
+                .map(|(x, y, z, w, d)| *d * a.res([*x, *y, *z, *w]))
+                .sum::<N>()
+        }
+        let m = Matrix::new(
+            self.terms.len().pow(4 as u32),
+            self.terms.len().pow(4 as u32),
+            m,
+        );
+        let k = Vector::new_row(self.terms.len().pow(4 as u32), k);
+        let c = m.solve(&k).unwrap();
+        for (i, term) in self.terms.iter_mut().enumerate() {
+            term.coefficient = *c.get(i);
+        }
     }
 }

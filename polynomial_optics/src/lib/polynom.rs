@@ -1,18 +1,12 @@
 use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
-use mathru::{
-    algebra::linear::{
-        matrix::{LUDec, Solve},
-        Matrix, Vector,
-    },
-    matrix, vector,
-};
+use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
 use num::traits::Zero;
-use std::ops::MulAssign;
 use std::vec;
 use std::{
     fmt::Display,
-    ops::{Add, AddAssign, Div, Mul, Neg, Sub},
+    ops::{Add, AddAssign, Mul, Neg, Sub},
 };
+use std::{iter::Sum, ops::MulAssign};
 pub trait PowUsize {
     fn upow(self, exp: usize) -> Self;
 }
@@ -144,18 +138,23 @@ impl<
 
 impl<
         N: Zero
+            + num::One
+            + Sum
             + AddAssign
             + MulAssign
             + std::ops::Mul<Output = N>
             + crate::sparse_polynom::PowUsize
             + std::cmp::PartialOrd
             + std::ops::Sub<Output = N>
+            + Field
+            + Scalar
+            + mathru::algebra::abstr::AbsDiffEq
             + Copy,
         const DEGREE: usize,
     > Polynom2d<N, DEGREE>
 {
     fn dist(phi: &crate::Polynomial<N, 2>, cp: (), points: &Vec<(N, N, N)>) -> N {
-        let mut result = N::zero();
+        let mut result = num::Zero::zero();
         for point in points {
             let input = [point.0, point.1];
             result += phi.eval(input) - point.2;
@@ -206,7 +205,7 @@ impl<
                         }
                     }
                 }
-                // TODO: implement linear least sqares here
+                phi.fit(&points)
             }
         }
         phi
