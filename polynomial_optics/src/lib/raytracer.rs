@@ -21,6 +21,16 @@ impl Default for Ray {
     }
 }
 
+impl Ray {
+    fn intersect(&self, plane: f64) -> (f64, f64) {
+        let diff = plane - self.o.z;
+        let num_z = diff / self.d.z;
+
+        let intersect = self.o + self.d * num_z;
+        (intersect.x, intersect.y)
+    }
+}
+
 /// ## Properties of a particular glass
 /// saves ior and coating
 #[derive(Debug, Clone, Copy)]
@@ -108,7 +118,8 @@ impl Ray {
             let d: Vector2<f64> = Vector2 {
                 x: self.d.y,
                 y: self.d.z,
-            }.normalize();
+            }
+            .normalize();
             let delta: f64 = d.dot(o - c).pow(2) - ((o - c).magnitude().pow(2) - radius.pow(2));
 
             let d1 = -(d.dot(o - c)) - delta.sqrt();
@@ -137,7 +148,7 @@ impl Ray {
             let d1 = -(self.d.dot(self.o - c)) - delta.sqrt();
             let d2 = -(self.d.dot(self.o - c)) + delta.sqrt();
 
-            if (entry == (self.d.z > 0.)) == (radius > &0.){
+            if (entry == (self.d.z > 0.)) == (radius > &0.) {
                 self.o + self.d * d1
             } else {
                 self.o + self.d * d2
@@ -158,7 +169,8 @@ impl Ray {
             let intersection: Vector2<f64> = Vector2 {
                 x: intersection.y,
                 y: intersection.z,
-            }.normalize();
+            }
+            .normalize();
 
             let normal2d = intersection - c;
 
@@ -547,5 +559,130 @@ impl Lens {
             }
         }
         rays.into_iter().map(|num| num as f32).collect()
+    }
+
+    pub fn get_paths(
+        &self,
+        num_rays: u32,
+        center_pos: Vector3<f64>,
+        direction: Vector3<f64>,
+        draw_mode: u32,
+        which_ghost: u32,
+    ) -> Vec<Vec<Ray>> {
+        let mut rays = vec![];
+
+        let width = 2.0;
+        for ray_num_x in 0..num_rays {
+            for ray_num_y in 0..num_rays {
+                if draw_mode & 1 > 0 {
+                    let mut ghost_num = 0;
+                    for i in 0..self.elements.len() - 1 {
+                        for j in i + 1..self.elements.len() {
+                            ghost_num += 1;
+                            if ghost_num == which_ghost || which_ghost == 0 {
+                                let mut ray_collection = vec![];
+                                // make new ray
+                                let mut pos = center_pos;
+                                pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                                pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                                let mut ray = Ray::new(pos, direction);
+                                ray_collection.push(ray);
+
+                                for (ele, element) in self.elements.iter().enumerate() {
+                                    // if we iterated through all elements up to
+                                    // the first reflection point
+
+                                    if ele == j {
+                                        // reflect at the first element,
+                                        // which is further down the optical path
+                                        ray.reflect(element);
+                                        ray_collection.push(ray);
+
+                                        // propagate backwards through system
+                                        // until the second reflection
+                                        for k in (i + 1..j).rev() {
+                                            ray.propagate(&self.elements[k]);
+                                            ray_collection.push(ray);
+                                        }
+                                        ray.reflect(&self.elements[i]);
+                                        ray_collection.push(ray);
+
+                                        for k in i + 1..=j {
+                                            ray.propagate(&self.elements[k]);
+                                            ray_collection.push(ray);
+                                        }
+                                        // println!("strength: {}", ray.strength);
+                                    } else {
+                                        ray.propagate(element);
+                                        ray_collection.push(ray);
+                                    }
+                                }
+                                ray.o += ray.d * 100.;
+                                ray_collection.push(ray);
+
+                                // only return rays that have made it through
+                                if ray.d.magnitude() > 0. {
+                                    rays.push(ray_collection);
+                                }
+                            }
+                        }
+                    }
+                }
+                if draw_mode & 2 > 0 {
+                    let mut pos = center_pos;
+                    pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                    pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                    let mut ray = Ray::new(pos, direction);
+                    let mut ray_collection = vec![];
+                    ray_collection.push(ray);
+                    for element in &self.elements {
+                        ray.propagate(element);
+                        ray_collection.push(ray);
+                    }
+                    ray.o += ray.d * 100.;
+                    ray_collection.push(ray);
+
+                    // only return rays that have made it through
+                    if ray.d.magnitude() > 0. {
+                        rays.push(ray_collection);
+                    }
+                }
+            }
+        }
+        rays
+    }
+
+    pub fn get_dots(
+        &self,
+        num_rays: u32,
+        center_pos: Vector3<f64>,
+        direction: Vector3<f64>,
+        draw_mode: u32,
+        which_ghost: u32,
+        sensor_pos: f64,
+    ) -> Vec<f32> {
+        let rays = self.get_paths(
+            num::integer::Roots::sqrt(&(num_rays * 1000)),
+            center_pos,
+            direction,
+            draw_mode,
+            which_ghost,
+        );
+        // println!(
+        //     "in: {} out:{} percent: {}",
+        //     &num_rays * 100,
+        //     rays.len(),
+        //     rays.len() as f64 / (&num_rays * 100) as f64 * 100.
+        // );
+
+        let mut dots = vec![];
+        for ray in rays {
+            let ray = ray.last().expect("empty ray");
+            let intersection = ray.intersect(sensor_pos);
+            dots.push(intersection.0 as f32);
+            dots.push(intersection.1 as f32);
+            dots.push(ray.strength as f32);
+        }
+        dots
     }
 }

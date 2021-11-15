@@ -7,6 +7,9 @@ pub use game_of_life::*;
 pub mod poly_optics;
 pub use poly_optics::*;
 
+pub mod poly_res;
+pub use poly_res::*;
+
 fn create_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
