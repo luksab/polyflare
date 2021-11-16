@@ -2,8 +2,8 @@ use std::{fs::read_to_string, iter, mem, time::Instant};
 
 use cgmath::{InnerSpace, Vector3};
 use wgpu::{
-    util::DeviceExt, BindGroup, Buffer, Queue, RenderPipeline, SurfaceConfiguration, TextureFormat,
-    TextureView,
+    util::DeviceExt, BindGroup, Buffer, ComputePipeline, Queue, RenderPipeline,
+    SurfaceConfiguration, TextureFormat, TextureView,
 };
 
 use crate::{scene::Scene, texture::Texture};
@@ -16,6 +16,11 @@ pub struct PolyOptics {
     conversion_render_pipeline: wgpu::RenderPipeline,
     conversion_bind_group: wgpu::BindGroup,
     vertices_buffer: wgpu::Buffer,
+    compute_pipeline: ComputePipeline,
+    compute_bind_group: BindGroup,
+    rays_buffer: wgpu::Buffer,
+    lens_buffer: wgpu::Buffer,
+    lens_data: Vec<f32>,
 
     // particle_bind_groups: Vec<wgpu::BindGroup>,
     render_bind_group: wgpu::BindGroup,
@@ -301,6 +306,108 @@ impl PolyOptics {
         (conversion_render_pipeline, conversion_bind_group)
     }
 
+    fn raytrace_shader(
+        device: &wgpu::Device,
+        sim_params: &[f32; 5],
+        sim_param_buffer: &Buffer,
+        lens_data: &Vec<f32>,
+        lens_buffer: &Buffer,
+        num_rays: u32,
+    ) -> (ComputePipeline, BindGroup, Buffer) {
+        let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
+        });
+
+        // create compute bind layout group and compute pipeline layout
+        let compute_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (sim_params.len() * mem::size_of::<u32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new((num_rays * 32) as _),
+                        },
+                        count: None,
+                    },
+                ],
+                label: None,
+            });
+        let compute_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("compute"),
+                bind_group_layouts: &[&compute_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        // create compute pipeline
+        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute pipeline"),
+            layout: Some(&compute_pipeline_layout),
+            module: &compute_shader,
+            entry_point: "main",
+        });
+
+        // buffer for all particles data of type [bool,...]
+        // vec3: 16 bytes
+        // vec3, vec3, float
+        let initial_particle_data = vec![0 as f32; (num_rays * 9) as usize];
+        // for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
+        //     particle_instance_chunk[0] = i as u32; // bool??
+        //     particle_instance_chunk[1] = fastrand::f32(0..6) / 5; // bool??
+        // }
+
+        let rays_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("Rays Buffer")),
+            contents: bytemuck::cast_slice(&initial_particle_data),
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC,
+        });
+
+        // create two bind groups, one for each buffer as the src
+        // where the alternate buffer is used as the dst
+        let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &compute_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: sim_param_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: rays_buffer.as_entire_binding(),
+                },
+            ],
+            label: None,
+        });
+
+        const RAYS_PER_GROUP: u32 = 64;
+        // calculates number of work groups from PARTICLES_PER_GROUP constant
+        let work_group_count = (((num_rays) as f32) / (RAYS_PER_GROUP as f32)).ceil() as u32;
+
+        let vertex_buffer_data = [
+            -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
+        ];
+
+        (compute_pipeline, compute_bind_group, rays_buffer)
+    }
+
     pub async fn new(device: &wgpu::Device, config: &SurfaceConfiguration) -> Self {
         // let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         //     label: None,
@@ -377,6 +484,16 @@ impl PolyOptics {
             &high_color_tex,
         );
 
+        let num_rays = 256;
+        let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
+            device,
+            &sim_params,
+            &sim_param_buffer,
+            &lens_data,
+            &lens_buffer,
+            num_rays,
+        );
+
         let convert_meta = std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").unwrap();
         let draw_meta = std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl").unwrap();
 
@@ -390,7 +507,7 @@ impl PolyOptics {
             lens,
 
             draw_mode: 2,
-            num_rays: 256,
+            num_rays,
             which_ghost: 2,
             rays: vec![],
             center_pos: Vector3 {
@@ -407,6 +524,11 @@ impl PolyOptics {
             high_color_tex,
             conversion_render_pipeline,
             conversion_bind_group,
+            compute_pipeline,
+            compute_bind_group,
+            rays_buffer,
+            lens_data,
+            lens_buffer,
             convert_meta,
             draw_meta,
             format,
@@ -422,7 +544,69 @@ impl PolyOptics {
         );
     }
 
-    pub fn update_rays(&mut self, device: &wgpu::Device) {
+    pub async fn update_rays(&mut self, device: &wgpu::Device, queue: &Queue, update_size: bool) {
+        if update_size {
+            println!("update: {}", self.num_rays);
+            let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &self.lens_data,
+                &self.lens_buffer,
+                self.num_rays,
+            );
+            self.compute_pipeline = compute_pipeline;
+            self.compute_bind_group = compute_bind_group;
+            self.rays_buffer = rays_buffer;
+        }
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
+
+        let work_group_count = 1;
+        {
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.compute_pipeline);
+            cpass.set_bind_group(0, &self.compute_bind_group, &[]);
+            cpass.dispatch(work_group_count, 1, 1);
+        }
+
+        let output_buffer_size = (self.num_rays as f32 * 32.0) as wgpu::BufferAddress;
+        let output_buffer_desc = wgpu::BufferDescriptor {
+            size: output_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            label: Some("Ray DST"),
+            mapped_at_creation: false,
+        };
+        let output_buffer = device.create_buffer(&output_buffer_desc);
+        println!("{}", self.num_rays);
+        encoder.copy_buffer_to_buffer(
+            &self.rays_buffer,
+            0,
+            &output_buffer,
+            0,
+            (self.num_rays * 32).into(),
+        );
+
+        queue.submit(iter::once(encoder.finish()));
+
+        let buffer_slice = output_buffer.slice(..);
+        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+        device.poll(wgpu::Maintain::Wait);
+
+        if let Ok(()) = buffer_future.await {
+            let data = buffer_slice.get_mapped_range();
+
+            let vertices = unsafe { data.align_to::<f32>().1 };
+            let vec_vertices = vertices.to_vec();
+            let data = vec_vertices;
+            println!("{:?}", data);
+        } else {
+            panic!("Failed to generate terrain!")
+        }
+
         self.rays = self.lens.get_rays(
             self.num_rays,
             self.center_pos,
@@ -581,7 +765,7 @@ impl Scene for PolyOptics {
         self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
         self.sim_params[3] = new_size.width as f32;
         self.sim_params[4] = new_size.height as f32;
-        
+
         let format = wgpu::TextureFormat::Rgba16Float;
         self.high_color_tex =
             Texture::create_color_texture(device, config, format, "high_color_tex");
@@ -608,7 +792,8 @@ impl Scene for PolyOptics {
         {
             print!("reloading convert shader! ");
             let now = Instant::now();
-            self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").unwrap();
+            self.convert_meta =
+                std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").unwrap();
             // buffer for elements
             let lens_data = self.lens.get_elements_buffer();
             let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

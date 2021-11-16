@@ -205,6 +205,8 @@ fn main() {
         renderer.textures.insert(depth_texture)
     };
 
+    let mut first_frame = true;
+
     event_loop.run(move |event, _, control_flow| {
         if last_sec.elapsed().unwrap().as_secs() > 1 {
             last_sec = SystemTime::now();
@@ -299,14 +301,16 @@ fn main() {
 
                 let mut poly = poly_optics.lock().unwrap();
                 let mut poly_res = poly_res.lock().unwrap();
-                let mut update_poly = false;
+                let mut update_poly = first_frame;
+                let mut update_rays = first_frame;
                 imgui::Window::new("Params")
                     .size([400.0, 250.0], Condition::FirstUseEver)
                     .position([600.0, 100.0], Condition::FirstUseEver)
                     .build(&ui, || {
                         ui.text(format!("Framerate: {:?}", fps));
-                        update_poly |= Slider::new("rays_exponent", 0., 5.)
+                        update_rays |= Slider::new("rays_exponent", 0., 5.)
                             .build(&ui, &mut optics_params.ray_exponent);
+                        update_poly |= update_rays;
                         ui.text(format!(
                             "rays: {}",
                             10.0_f64.powf(optics_params.ray_exponent) as u32
@@ -341,7 +345,9 @@ fn main() {
                 poly.center_pos = optics_params.pos.into();
                 poly.direction = optics_params.dir.into();
 
-                poly.update_rays(&state.device);
+                println!("{}", update_rays);
+
+                pollster::block_on(poly.update_rays(&state.device, &state.queue, update_rays));
                 poly_res.update_rays(&poly, &state.device);
 
                 let mut update_lens = false;
@@ -587,6 +593,7 @@ fn main() {
                 state.queue.submit(Some(encoder.finish()));
 
                 frame.present();
+                first_frame = false;
             }
             _ => {}
         }
