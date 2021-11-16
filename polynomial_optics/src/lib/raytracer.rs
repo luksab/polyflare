@@ -661,13 +661,83 @@ impl Lens {
         which_ghost: u32,
         sensor_pos: f64,
     ) -> Vec<f32> {
-        let rays = self.get_paths(
-            num::integer::Roots::sqrt(&(num_rays * 1000)),
-            center_pos,
-            direction,
-            draw_mode,
-            which_ghost,
-        );
+        // let rays = self.get_paths(
+        //     num::integer::Roots::sqrt(&(num_rays * 1000)),
+        //     center_pos,
+        //     direction,
+        //     draw_mode,
+        //     which_ghost,
+        // );
+
+        let mut rays = vec![];
+
+        let width = 2.0;
+        for ray_num_x in 0..num_rays {
+            for ray_num_y in 0..num_rays {
+                if draw_mode & 1 > 0 {
+                    let mut ghost_num = 0;
+                    for i in 0..self.elements.len() - 1 {
+                        for j in i + 1..self.elements.len() {
+                            ghost_num += 1;
+                            if ghost_num == which_ghost || which_ghost == 0 {
+                                // make new ray
+                                let mut pos = center_pos;
+                                pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                                pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                                let mut ray = Ray::new(pos, direction);
+
+                                for (ele, element) in self.elements.iter().enumerate() {
+                                    // if we iterated through all elements up to
+                                    // the first reflection point
+
+                                    if ele == j {
+                                        // reflect at the first element,
+                                        // which is further down the optical path
+                                        ray.reflect(element);
+
+                                        // propagate backwards through system
+                                        // until the second reflection
+                                        for k in (i + 1..j).rev() {
+                                            ray.propagate(&self.elements[k]);
+                                        }
+                                        ray.reflect(&self.elements[i]);
+
+                                        for k in i + 1..=j {
+                                            ray.propagate(&self.elements[k]);
+                                        }
+                                        // println!("strength: {}", ray.strength);
+                                    } else {
+                                        ray.propagate(element);
+                                    }
+                                }
+                                ray.o += ray.d * 100.;
+
+                                // only return rays that have made it through
+                                if ray.d.magnitude() > 0. {
+                                    rays.push(ray);
+                                }
+                            }
+                        }
+                    }
+                }
+                if draw_mode & 2 > 0 {
+                    let mut pos = center_pos;
+                    pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                    pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                    let mut ray = Ray::new(pos, direction);
+                    for element in &self.elements {
+                        ray.propagate(element);
+                    }
+                    ray.o += ray.d * 100.;
+
+                    // only return rays that have made it through
+                    if ray.d.magnitude() > 0. {
+                        rays.push(ray);
+                    }
+                }
+            }
+        }
+
         // println!(
         //     "in: {} out:{} percent: {}",
         //     &num_rays * 100,
@@ -677,7 +747,6 @@ impl Lens {
 
         let mut dots = vec![];
         for ray in rays {
-            let ray = ray.last().expect("empty ray");
             let intersection = ray.intersect(sensor_pos);
             dots.push(intersection.0 as f32);
             dots.push(intersection.1 as f32);
