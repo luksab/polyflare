@@ -15,7 +15,6 @@ pub struct PolyOptics {
     high_color_tex: Texture,
     conversion_render_pipeline: wgpu::RenderPipeline,
     conversion_bind_group: wgpu::BindGroup,
-    vertices_buffer: wgpu::Buffer,
     compute_pipeline: ComputePipeline,
     compute_bind_group: BindGroup,
     rays_buffer: wgpu::Buffer,
@@ -427,14 +426,6 @@ impl PolyOptics {
             label: None,
         });
 
-        const RAYS_PER_GROUP: u32 = 64;
-        // calculates number of work groups from PARTICLES_PER_GROUP constant
-        let work_group_count = (((num_rays) as f32) / (RAYS_PER_GROUP as f32)).ceil() as u32;
-
-        let vertex_buffer_data = [
-            -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
-        ];
-
         (compute_pipeline, compute_bind_group, rays_buffer)
     }
 
@@ -496,14 +487,6 @@ impl PolyOptics {
                 | wgpu::BufferUsages::STORAGE,
         });
 
-        let rays = vec![0.0, 0.0];
-        // let vertex_buffer_data = [-1.0f32, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
-        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&rays[..]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
             &sim_params,
@@ -533,7 +516,6 @@ impl PolyOptics {
 
             sim_param_buffer,
             sim_params,
-            vertices_buffer,
             render_bind_group,
             lens,
 
@@ -606,7 +588,7 @@ impl PolyOptics {
         }
 
         if cfg!(debug_assertions) {
-            let output_buffer_size = (self.num_rays as f32 * 32.0) as wgpu::BufferAddress;
+            let output_buffer_size = (self.num_rays * 32) as wgpu::BufferAddress;
             let output_buffer_desc = wgpu::BufferDescriptor {
                 size: output_buffer_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
@@ -636,7 +618,7 @@ impl PolyOptics {
                 let data = vec_vertices;
                 println!("{:?}", data);
             } else {
-                panic!("Failed to generate terrain!")
+                panic!("Failed to copy ray buffer!")
             }
         }
 
@@ -666,9 +648,6 @@ impl PolyOptics {
         // //     cpass.dispatch(self.work_group_count, 1, 1);
         // // }
         // queue.submit(iter::once(encoder.finish()));
-
-        // // update frame count
-        // self.frame_num += 1;
     }
 
     pub fn update_buffers(&mut self, queue: &Queue, device: &wgpu::Device, update_size: bool) {
@@ -811,7 +790,7 @@ impl Scene for PolyOptics {
         true
     }
 
-    fn update(&mut self, _dt: std::time::Duration, device: &wgpu::Device, queue: &Queue) {
+    fn update(&mut self, _dt: std::time::Duration, device: &wgpu::Device, _queue: &Queue) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
         //     self.cell_timer = SystemTime::now();
         //     self.update_cells(device, queue);
