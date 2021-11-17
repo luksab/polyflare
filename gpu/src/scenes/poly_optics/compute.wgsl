@@ -6,12 +6,14 @@ struct Ray {
 
 [[block]]
 struct SimParams {
-  side_len: u32;
+  opacity: f32;
+  width: f32;
+  height: f32;
 };
 
 [[block]]
 struct Rays {
-  rays : [[stride(32)]] array<Ray>;
+  rays : [[stride(48)]] array<Ray>;
 };
 
 [[group(0), binding(0)]] var<uniform> params : SimParams;
@@ -48,7 +50,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     return;
   }
 
-  rays.rays[index].strength = 1.;
+  rays.rays[index].o = vec3<f32>(params.opacity, 1., 0.);
+  rays.rays[index].strength = 0.;
 
   // var old : u32 = cellsSrc.cells[index].alive;
 

@@ -341,14 +341,12 @@ fn main() {
                             .build_array(&ui, &mut optics_params.dir);
                     });
 
-                poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
+                // poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
                 poly.center_pos = optics_params.pos.into();
                 poly.direction = optics_params.dir.into();
 
-                println!("{}", update_rays);
-
                 pollster::block_on(poly.update_rays(&state.device, &state.queue, update_rays));
-                poly_res.update_rays(&poly, &state.device);
+                // poly_res.update_rays(&poly, &state.device);
 
                 let mut update_lens = false;
                 imgui::Window::new("Lens")
@@ -409,76 +407,76 @@ fn main() {
                 // we don't need poly for the rest of this function
                 drop(poly);
 
-                // Render PolyRes
-                {
-                    // Store the new size of Image() or None to indicate that the window is collapsed.
-                    let mut new_window_size: Option<[f32; 2]> = None;
-                    imgui::Window::new("Poly Res")
-                        .size([512.0, 512.0], Condition::FirstUseEver)
-                        .position([700., 50.], Condition::FirstUseEver)
-                        .build(&ui, || {
-                            // new_example_size = Some(ui.content_region_avail());
-                            // ui.text("Hello world!");
-                            // ui.text("This...is...imgui-rs on WGPU!");
-                            // ui.separator();
-                            // let mouse_pos = ui.io().mouse_pos;
-                            // ui.text(format!(
-                            //     "Mouse Position: ({:.1},{:.1})",
-                            //     mouse_pos[0], mouse_pos[1]
-                            // ));
-                            new_window_size = Some(ui.content_region_avail());
-                            imgui::Image::new(res_window_texture_id, new_window_size.unwrap())
-                                .build(&ui);
-                        });
+                // // Render PolyRes
+                // {
+                //     // Store the new size of Image() or None to indicate that the window is collapsed.
+                //     let mut new_window_size: Option<[f32; 2]> = None;
+                //     imgui::Window::new("Poly Res")
+                //         .size([512.0, 512.0], Condition::FirstUseEver)
+                //         .position([700., 50.], Condition::FirstUseEver)
+                //         .build(&ui, || {
+                //             // new_example_size = Some(ui.content_region_avail());
+                //             // ui.text("Hello world!");
+                //             // ui.text("This...is...imgui-rs on WGPU!");
+                //             // ui.separator();
+                //             // let mouse_pos = ui.io().mouse_pos;
+                //             // ui.text(format!(
+                //             //     "Mouse Position: ({:.1},{:.1})",
+                //             //     mouse_pos[0], mouse_pos[1]
+                //             // ));
+                //             new_window_size = Some(ui.content_region_avail());
+                //             imgui::Image::new(res_window_texture_id, new_window_size.unwrap())
+                //                 .build(&ui);
+                //         });
 
-                    if let Some(size) = new_window_size {
-                        // Resize render target, which is optional
-                        if size != window_render_size && size[0] >= 1.0 && size[1] >= 1.0 {
-                            window_render_size = size;
-                            let scale = &ui.io().display_framebuffer_scale;
-                            let texture_config = TextureConfig {
-                                size: Extent3d {
-                                    width: (window_render_size[0] * scale[0]) as u32,
-                                    height: (window_render_size[1] * scale[1]) as u32,
-                                    ..Default::default()
-                                },
-                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                                ..Default::default()
-                            };
-                            renderer.textures.replace(
-                                res_window_texture_id,
-                                Texture::new(&state.device, &renderer, texture_config),
-                            );
+                //     if let Some(size) = new_window_size {
+                //         // Resize render target, which is optional
+                //         if size != window_render_size && size[0] >= 1.0 && size[1] >= 1.0 {
+                //             window_render_size = size;
+                //             let scale = &ui.io().display_framebuffer_scale;
+                //             let texture_config = TextureConfig {
+                //                 size: Extent3d {
+                //                     width: (window_render_size[0] * scale[0]) as u32,
+                //                     height: (window_render_size[1] * scale[1]) as u32,
+                //                     ..Default::default()
+                //                 },
+                //                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                //                     | wgpu::TextureUsages::TEXTURE_BINDING,
+                //                 ..Default::default()
+                //             };
+                //             renderer.textures.replace(
+                //                 res_window_texture_id,
+                //                 Texture::new(&state.device, &renderer, texture_config),
+                //             );
 
-                            poly_res.sim_params[1] = size[0];
-                            poly_res.sim_params[2] = size[1];
-                            poly_res.sim_params[3] = size[0] * state.scale_factor as f32;
-                            poly_res.sim_params[4] = size[1] * state.scale_factor as f32;
-                            poly_res.write_buffer(&state.queue);
-                        }
-                        drop(poly_res);
+                //             poly_res.sim_params[1] = size[0];
+                //             poly_res.sim_params[2] = size[1];
+                //             poly_res.sim_params[3] = size[0] * state.scale_factor as f32;
+                //             poly_res.sim_params[4] = size[1] * state.scale_factor as f32;
+                //             poly_res.write_buffer(&state.queue);
+                //         }
+                //         drop(poly_res);
 
-                        // Only render contents if the window is not collapsed
-                        match state.render(
-                            &renderer.textures.get(res_window_texture_id).unwrap().view(),
-                            None,
-                            2,
-                        ) {
-                            Ok(_) => {}
-                            // Reconfigure the surface if lost
-                            Err(wgpu::SurfaceError::Lost) => {
-                                state.resize(state.size, None);
-                            }
-                            // The system is out of memory, we should probably quit
-                            Err(wgpu::SurfaceError::OutOfMemory) => {
-                                *control_flow = ControlFlow::Exit
-                            }
-                            // All other errors (Outdated, Timeout) should be resolved by the next frame
-                            Err(e) => eprintln!("{:?}", e),
-                        }
-                    }
-                }
+                //         // Only render contents if the window is not collapsed
+                //         match state.render(
+                //             &renderer.textures.get(res_window_texture_id).unwrap().view(),
+                //             None,
+                //             2,
+                //         ) {
+                //             Ok(_) => {}
+                //             // Reconfigure the surface if lost
+                //             Err(wgpu::SurfaceError::Lost) => {
+                //                 state.resize(state.size, None);
+                //             }
+                //             // The system is out of memory, we should probably quit
+                //             Err(wgpu::SurfaceError::OutOfMemory) => {
+                //                 *control_flow = ControlFlow::Exit
+                //             }
+                //             // All other errors (Outdated, Timeout) should be resolved by the next frame
+                //             Err(e) => eprintln!("{:?}", e),
+                //         }
+                //     }
+                // }
 
                 // Render GameOfLife
                 {

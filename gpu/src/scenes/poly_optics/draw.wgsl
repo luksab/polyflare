@@ -1,6 +1,7 @@
 struct VertexInput {
-    [[location(0)]] position: vec2<f32>;
-    [[location(1)]] strength: f32;
+    [[location(0)]] o: vec3<f32>;
+    [[location(1)]] d: vec3<f32>;
+    [[location(2)]] strength: f32;
 };
 
 struct VertexOutput {
@@ -30,7 +31,7 @@ fn main(
     let screenAspect = normalize(vec2<f32>(params.height, params.width));
 
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(in.position/4.0*screenAspect, 0.,1.);
+    out.clip_position = vec4<f32>(in.o.xy / 4.0 * screenAspect, 0.,1.);
     out.strength = in.strength;
     return out;
 }

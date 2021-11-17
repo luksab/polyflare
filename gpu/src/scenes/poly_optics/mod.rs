@@ -40,6 +40,7 @@ pub struct PolyOptics {
 
     convert_meta: std::fs::Metadata,
     draw_meta: std::fs::Metadata,
+    compute_meta: std::fs::Metadata,
     format: TextureFormat,
     conf_format: TextureFormat,
 }
@@ -91,17 +92,25 @@ impl PolyOptics {
                 module: &draw_shader,
                 entry_point: "main",
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 3 * 4,
+                    array_stride: 12 * 4,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
+                        // r.o
                         wgpu::VertexAttribute {
                             offset: 0,
                             shader_location: 0,
-                            format: wgpu::VertexFormat::Float32x2,
+                            format: wgpu::VertexFormat::Float32x3,
                         },
+                        // r.d
                         wgpu::VertexAttribute {
-                            offset: 2 * 4,
+                            offset: 4 * 4,
                             shader_location: 1,
+                            format: wgpu::VertexFormat::Float32x3,
+                        },
+                        // r.strength
+                        wgpu::VertexAttribute {
+                            offset: 8 * 4,
+                            shader_location: 2,
                             format: wgpu::VertexFormat::Float32,
                         },
                     ],
@@ -316,7 +325,11 @@ impl PolyOptics {
     ) -> (ComputePipeline, BindGroup, Buffer) {
         let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                read_to_string("gpu/src/scenes/poly_optics/compute.wgsl")
+                    .expect("Shader could not be read.")
+                    .into(),
+            ),
         });
 
         // create compute bind layout group and compute pipeline layout
@@ -341,7 +354,7 @@ impl PolyOptics {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new((num_rays * 32) as _),
+                            min_binding_size: wgpu::BufferSize::new((num_rays * 48) as _),
                         },
                         count: None,
                     },
@@ -364,9 +377,10 @@ impl PolyOptics {
         });
 
         // buffer for all particles data of type [bool,...]
-        // vec3: 16 bytes
+        // vec3: 16 bytes, 4 floats
         // vec3, vec3, float
-        let initial_particle_data = vec![0 as f32; (num_rays * 9) as usize];
+        let initial_ray_data = vec![0 as f32; (num_rays * 12) as usize];
+        println!("new ray buffer [{}]", num_rays * 12);
         // for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
         //     particle_instance_chunk[0] = i as u32; // bool??
         //     particle_instance_chunk[1] = fastrand::f32(0..6) / 5; // bool??
@@ -374,7 +388,7 @@ impl PolyOptics {
 
         let rays_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&format!("Rays Buffer")),
-            contents: bytemuck::cast_slice(&initial_particle_data),
+            contents: bytemuck::cast_slice(&initial_ray_data),
             usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC,
@@ -484,7 +498,7 @@ impl PolyOptics {
             &high_color_tex,
         );
 
-        let num_rays = 256;
+        let num_rays = 1;
         let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
             device,
             &sim_params,
@@ -496,6 +510,7 @@ impl PolyOptics {
 
         let convert_meta = std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").unwrap();
         let draw_meta = std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl").unwrap();
+        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_optics/compute.wgsl").unwrap();
 
         Self {
             boid_render_pipeline,
@@ -531,6 +546,7 @@ impl PolyOptics {
             lens_buffer,
             convert_meta,
             draw_meta,
+            compute_meta,
             format,
             conf_format: config.format,
         }
@@ -573,52 +589,54 @@ impl PolyOptics {
             cpass.dispatch(work_group_count, 1, 1);
         }
 
-        let output_buffer_size = (self.num_rays as f32 * 32.0) as wgpu::BufferAddress;
-        let output_buffer_desc = wgpu::BufferDescriptor {
-            size: output_buffer_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            label: Some("Ray DST"),
-            mapped_at_creation: false,
-        };
-        let output_buffer = device.create_buffer(&output_buffer_desc);
-        println!("{}", self.num_rays);
-        encoder.copy_buffer_to_buffer(
-            &self.rays_buffer,
-            0,
-            &output_buffer,
-            0,
-            (self.num_rays * 32).into(),
-        );
+        if cfg!(debug_assertions) {
+            let output_buffer_size = (self.num_rays as f32 * 48.0) as wgpu::BufferAddress;
+            let output_buffer_desc = wgpu::BufferDescriptor {
+                size: output_buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                label: Some("Ray DST"),
+                mapped_at_creation: false,
+            };
+            let output_buffer = device.create_buffer(&output_buffer_desc);
+            encoder.copy_buffer_to_buffer(
+                &self.rays_buffer,
+                0,
+                &output_buffer,
+                0,
+                (self.num_rays * 48).into(),
+            );
 
-        queue.submit(iter::once(encoder.finish()));
+            queue.submit(iter::once(encoder.finish()));
 
-        let buffer_slice = output_buffer.slice(..);
-        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-        device.poll(wgpu::Maintain::Wait);
+            let buffer_slice = output_buffer.slice(..);
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+            device.poll(wgpu::Maintain::Wait);
 
-        if let Ok(()) = buffer_future.await {
-            let data = buffer_slice.get_mapped_range();
+            if let Ok(()) = buffer_future.await {
+                let data = buffer_slice.get_mapped_range();
 
-            let vertices = unsafe { data.align_to::<f32>().1 };
-            let vec_vertices = vertices.to_vec();
-            let data = vec_vertices;
-            println!("{:?}", data);
-        } else {
-            panic!("Failed to generate terrain!")
+                let vertices = unsafe { data.align_to::<f32>().1 };
+                let vec_vertices = vertices.to_vec();
+                let data = vec_vertices;
+                println!("{:?}", data);
+            } else {
+                panic!("Failed to generate terrain!")
+            }
         }
 
-        self.rays = self.lens.get_rays(
-            self.num_rays,
-            self.center_pos,
-            self.direction.normalize(),
-            self.draw_mode,
-            self.which_ghost,
-        );
-        self.vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&self.rays[..]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        // self.rays = self.lens.get_rays(
+        //     self.num_rays,
+        //     self.center_pos,
+        //     self.direction.normalize(),
+        //     self.draw_mode,
+        //     self.which_ghost,
+        // );
+        // self.vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Vertex Buffer"),
+        //     contents: bytemuck::cast_slice(&self.rays[..]),
+        //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        // });
+
         // let rays = self.lens.get_rays(self.num_rays, self.center_pos);
 
         // let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -777,7 +795,7 @@ impl Scene for PolyOptics {
         true
     }
 
-    fn update(&mut self, _dt: std::time::Duration, device: &wgpu::Device, _queue: &Queue) {
+    fn update(&mut self, _dt: std::time::Duration, device: &wgpu::Device, queue: &Queue) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
         //     self.cell_timer = SystemTime::now();
         //     self.update_cells(device, queue);
@@ -832,8 +850,32 @@ impl Scene for PolyOptics {
                 &self.sim_param_buffer,
                 self.format,
             );
-            self.conversion_render_pipeline = pipeline;
-            self.conversion_bind_group = bind_group;
+            self.boid_render_pipeline = pipeline;
+            self.render_bind_group = bind_group;
+            println!("took {:?}.", now.elapsed());
+        }
+
+        if self.compute_meta.modified().unwrap()
+            != std::fs::metadata("gpu/src/scenes/poly_optics/compute.wgsl")
+                .unwrap()
+                .modified()
+                .unwrap()
+        {
+            self.compute_meta =
+                std::fs::metadata("gpu/src/scenes/poly_optics/compute.wgsl").unwrap();
+            print!("reloading compute shader! ");
+            let now = Instant::now();
+            let (pipeline, bind_group, rays_buffer) = Self::raytrace_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &self.lens_data,
+                &self.lens_buffer,
+                self.num_rays,
+            );
+            self.compute_pipeline = pipeline;
+            self.compute_bind_group = bind_group;
+            self.rays_buffer = rays_buffer;
             println!("took {:?}.", now.elapsed());
         }
     }
@@ -878,17 +920,10 @@ impl Scene for PolyOptics {
             rpass.set_pipeline(&self.boid_render_pipeline);
             rpass.set_bind_group(0, &self.render_bind_group, &[]);
             // the three instance-local vertices
-            rpass.set_vertex_buffer(0, self.vertices_buffer.slice(..));
+            rpass.set_vertex_buffer(0, self.rays_buffer.slice(..));
             //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-            rpass.draw(
-                0..if self.draw_mode & 4 == 0 {
-                    self.rays.len() as u32 / 3
-                } else {
-                    0
-                },
-                0..1,
-            );
+            rpass.draw(0..self.num_rays, 0..1);
         }
 
         queue.submit(iter::once(encoder.finish()));
@@ -929,8 +964,6 @@ impl Scene for PolyOptics {
                 color_attachments: &color_attachments,
                 depth_stencil_attachment: None,
             };
-
-            // println!("{},{},{}", rays[3], rays[4], rays[5]);
 
             //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
             {
