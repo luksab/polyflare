@@ -341,7 +341,7 @@ fn main() {
                             .build_array(&ui, &mut optics_params.dir);
                     });
 
-                // poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
+                poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
                 poly.center_pos = optics_params.pos.into();
                 poly.direction = optics_params.dir.into();
 

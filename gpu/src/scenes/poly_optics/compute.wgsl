@@ -4,6 +4,13 @@ struct Ray {
   strength: f32;
 };
 
+struct Element {
+  position1: f32;
+  radius1  : f32;
+  position2: f32;
+  radius2  : f32;
+};
+
 [[block]]
 struct SimParams {
   opacity: f32;
@@ -13,11 +20,17 @@ struct SimParams {
 
 [[block]]
 struct Rays {
-  rays : [[stride(48)]] array<Ray>;
+  rays : [[stride(32)]] array<Ray>;
+};
+
+[[block]]
+struct Elements {
+  el : [[stride(16)]] array<Element>;
 };
 
 [[group(0), binding(0)]] var<uniform> params : SimParams;
 [[group(0), binding(1)]] var<storage, read_write> rays : Rays;
+[[group(0), binding(2)]] var<storage, read> elements : Elements;
 
 // fn grid_to_index(grid_pos: vec2<u32>) -> u32 {
 //   return grid_pos[0] + grid_pos[1] * params.side_len;
@@ -50,8 +63,9 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     return;
   }
 
-  rays.rays[index].o = vec3<f32>(params.opacity, 1., 0.);
-  rays.rays[index].strength = 0.;
+  rays.rays[index].o = vec3<f32>(params.opacity * f32(index) * 0.01, 1., 1.);
+  rays.rays[index].d = vec3<f32>(1., 1., 1.);
+  rays.rays[index].strength = 1.;
 
   // var old : u32 = cellsSrc.cells[index].alive;
 

@@ -92,7 +92,7 @@ impl PolyOptics {
                 module: &draw_shader,
                 entry_point: "main",
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 12 * 4,
+                    array_stride: 8 * 4,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
                         // r.o
@@ -109,7 +109,7 @@ impl PolyOptics {
                         },
                         // r.strength
                         wgpu::VertexAttribute {
-                            offset: 8 * 4,
+                            offset: 7 * 4,
                             shader_location: 2,
                             format: wgpu::VertexFormat::Float32,
                         },
@@ -354,7 +354,19 @@ impl PolyOptics {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new((num_rays * 48) as _),
+                            min_binding_size: wgpu::BufferSize::new((num_rays * 32) as _),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (lens_data.len() * mem::size_of::<f32>()) as _,
+                            ),
                         },
                         count: None,
                     },
@@ -379,8 +391,8 @@ impl PolyOptics {
         // buffer for all particles data of type [bool,...]
         // vec3: 16 bytes, 4 floats
         // vec3, vec3, float
-        let initial_ray_data = vec![0 as f32; (num_rays * 12) as usize];
-        println!("new ray buffer [{}]", num_rays * 12);
+        let initial_ray_data = vec![0 as f32; (num_rays * 8) as usize];
+        println!("new ray buffer [{}]", num_rays * 8);
         // for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
         //     particle_instance_chunk[0] = i as u32; // bool??
         //     particle_instance_chunk[1] = fastrand::f32(0..6) / 5; // bool??
@@ -406,6 +418,10 @@ impl PolyOptics {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: rays_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: lens_buffer.as_entire_binding(),
                 },
             ],
             label: None,
@@ -498,7 +514,7 @@ impl PolyOptics {
             &high_color_tex,
         );
 
-        let num_rays = 1;
+        let num_rays = 2;
         let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
             device,
             &sim_params,
@@ -590,7 +606,7 @@ impl PolyOptics {
         }
 
         if cfg!(debug_assertions) {
-            let output_buffer_size = (self.num_rays as f32 * 48.0) as wgpu::BufferAddress;
+            let output_buffer_size = (self.num_rays as f32 * 32.0) as wgpu::BufferAddress;
             let output_buffer_desc = wgpu::BufferDescriptor {
                 size: output_buffer_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
@@ -603,7 +619,7 @@ impl PolyOptics {
                 0,
                 &output_buffer,
                 0,
-                (self.num_rays * 48).into(),
+                (self.num_rays * 32).into(),
             );
 
             queue.submit(iter::once(encoder.finish()));
