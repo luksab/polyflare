@@ -4,11 +4,19 @@ struct Ray {
   strength: f32;
 };
 
+struct Glass {
+    /// ior vs air
+    ior: f32;
+    /// coating - modifies wavelength
+    // coating: ();
+};
+
 struct Element {
-  position1: f32;
-  radius1  : f32;
-  position2: f32;
-  radius2  : f32;
+  radius: f32;
+  glass: Glass;
+  position: f32;
+  entry: bool;
+  spherical: bool;
 };
 
 [[block]]
@@ -32,28 +40,200 @@ struct Elements {
 [[group(0), binding(1)]] var<storage, read_write> rays : Rays;
 [[group(0), binding(2)]] var<storage, read> elements : Elements;
 
-// fn grid_to_index(grid_pos: vec2<u32>) -> u32 {
-//   return grid_pos[0] + grid_pos[1] * params.side_len;
-// }
+fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
+  let s = 0.5 * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2))) * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2)));
+  let p = 0.5 * ((n1 * cos(t2) - n2 * cos(t1)) / (n1 * cos(t2) + n2 * cos(t1))) * ((n1 * cos(t2) - n2 * cos(t1)) / (n1 * cos(t2) + n2 * cos(t1)));
+  return s + p;
+}
 
-// fn index_to_grid(index: u32) -> vec2<u32> {
-//   let grid_pos = vec2<u32>(index%params.side_len, index/params.side_len);
-//   return grid_pos;
-// }
+fn propagate_element(
+    self: Ray,
+    radius: f32,
+    glass: Glass,
+    position: f32,
+    reflect: bool,
+    entry: bool,
+    cylindrical: bool,
+) -> Ray{
+    var ray = self;
+    var intersection: vec3<f32>;
+    if (cylindrical) {
+        // cylindrical: x is not affected by curvature
 
-// fn count_neighbours(pos: vec2<i32>) -> u32 {
-//   var count = u32(0);
-//   for (var i: i32 = -1; i <= 1; i = i + 1) {
-//     for (var j: i32 = -1; j <= 1; j = j + 1) {
-//       if (i != 0 || j != 0) {
-//         if (cellsSrc.cells[grid_to_index(vec2<u32>(pos - vec2<i32>(i,j)))].alive > u32(0)) {
-//           count = count + u32(1);
-//         }
-//       }
-//     }
-//   }
-//   return count;
-// }
+        // c: center of the lens surface if interpreted as an entire sphere
+        var cy: f32;
+        if (entry) {
+            cy = position + radius;
+        } else {
+            cy = position - radius;
+        };
+        let c = vec2<f32>(0., cy);
+        let o = vec2<f32>(ray.o.y,ray.o.z);
+        let d = normalize(vec2<f32>(ray.d.y, ray.d.z));
+        let delta = dot(d, o - c) * dot(d, o - c)
+                    - (length(o - c) * length(o - c) - radius * radius);
+
+        let d1 = -(dot(d, o - c)) - sqrt(delta);
+        let d2 = -(dot(d, o - c)) + sqrt(delta);
+
+        if ((entry == (ray.d.z > 0.)) == (radius > 0.)) {
+            intersection = ray.o + ray.d * d1;
+        } else {
+            intersection = ray.o + ray.d * d2;
+        }
+    } else {
+        // c: center of the lens surface if interpreted as an entire sphere
+        var cz: f32;
+        if (entry) {
+            cz = position + radius;
+        } else {
+            cz = position - radius;
+        };
+        let c = vec3<f32>(0., 0., cz);
+
+        let delta = dot(ray.d, ray.o - c) * dot(ray.d, ray.o - c)
+                    - (length(ray.o - c) * length(ray.o - c) - radius * radius);
+
+        let d1 = -(dot(ray.d, ray.o - c)) - sqrt(delta);
+        let d2 = -(dot(ray.d, ray.o - c)) + sqrt(delta);
+
+        if ((entry == (ray.d.z > 0.)) == (radius > 0.)) {
+            intersection = ray.o + ray.d * d1;
+        } else {
+            intersection = ray.o + ray.d * d2;
+        }
+    };
+
+    ray.o = intersection;
+
+    var normal: vec3<f32>;
+    if (cylindrical) {
+        var cy: f32;
+        if (entry) {
+            cy = position + radius;
+        } else {
+            cy = position - radius;
+        };
+        let c = vec2<f32>(0., cy);
+
+        let intersection = normalize(vec2<f32>(intersection.y, intersection.z));
+
+        let normal2d = intersection - c;
+
+        let intersection = vec3<f32> (0.0, normal2d.x, normal2d.y);
+
+        if ((entry == (ray.d.z > 0.)) == (radius > 0.)) {
+            normal = normalize(intersection);
+        } else {
+            normal = -(normalize(intersection));
+        }
+    } else {
+        var cz: f32;
+        if (entry) {
+            cz = position + radius;
+        } else {
+            cz = position - radius;
+        };
+        let c = vec3<f32>(0., 0., cz);
+
+        if ((entry == (ray.d.z > 0.)) == (radius > 0.)) {
+            normal = normalize((intersection - c));
+        } else {
+            normal = -(normalize(intersection - c));
+        }
+    };
+
+    if (reflect) {
+        let d_in = ray.d;
+
+        ray.d = ray.d - 2.0 * dot(normal, ray.d) * normal;
+
+        var a: f32;
+        if (entry == (ray.d.z > 0.)) {
+            a = glass.ior;
+        } else {
+            a = 1.0;
+        };
+        var b: f32;
+        if (entry == (ray.d.z > 0.)) {
+            b = 1.0;
+        } else {
+            b = glass.ior;
+        }
+
+        ray.strength = ray.strength * fresnel_r(
+            acos(dot(normalize(d_in), normal)),
+            acos(dot(normalize(ray.d), -normal)),
+            a,
+            b,
+        );
+    } else {
+        var eta: f32;
+        if (entry) { eta = 1.0 / glass.ior; } else { eta = glass.ior; };
+
+        // from https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/refract.xhtml
+        let k = 1.0 - eta * eta * (1.0 - dot(normal, ray.d) * dot(normal, ray.d));
+
+        let d_in = ray.d;
+
+        if (k < 0.0) {
+            // total reflection
+            // println!("total reflection");
+            ray.d = ray.d * 0.0; // or genDType(0.0)
+        } else {
+            ray.d = eta * ray.d - (eta * dot(normal, ray.d) + sqrt(k)) * normal;
+        }
+
+        var a: f32;
+        if (entry == (ray.d.z > 0.)) {
+            a = glass.ior;
+        } else {
+            a = 1.0;
+        };
+        var b: f32;
+        if (entry == (ray.d.z > 0.)) {
+            b = 1.0;
+        } else {
+            b = glass.ior;
+        }
+        ray.strength = ray.strength * (1.0
+            - fresnel_r(
+                acos(dot(normalize(d_in), -normal)),
+                acos(dot(normalize(ray.d), -normal)),
+                b,
+                a,
+            ));
+    }
+    return ray;
+}
+
+/// propagate a ray through an element
+///
+fn propagate(self: Ray, element: Element) -> Ray {
+    return propagate_element(
+        self,
+        element.radius,
+        element.glass,
+        element.position,
+        false,
+        element.entry,
+        !element.spherical,
+    );
+}
+
+/// reflect a Ray from an element
+///
+fn reflect(self: Ray, element: Element) -> Ray {
+    return propagate_element(
+        self,
+        element.radius,
+        element.glass,
+        element.position,
+        true,
+        element.entry,
+        !element.spherical,
+    );
+}
 
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
