@@ -308,6 +308,38 @@ impl Lens {
         elements
     }
 
+    /// get elements in form:
+    /// ```
+    /// struct Element {
+    ///   radius: f32;
+    ///   glass: Glass;
+    ///   position: f32;
+    ///   entry: bool;
+    ///   spherical: bool;
+    /// };
+    /// struct Glass {
+    /// ior vs air
+    ///   ior: f32;
+    ///   /// coating - modifies wavelength
+    ///   // coating: ();
+    /// };
+    /// ```
+    /// only works if elements are entry and exit alternatively
+    pub fn get_rt_elements_buffer(&self) -> Vec<f32> {
+        let mut elements = vec![];
+
+        for element in &self.elements {
+            elements.push(element.radius as f32);
+            elements.push(element.glass.ior as f32);
+            elements.push(element.position as f32);
+            elements.push(element.entry as i32 as f32);
+            elements.push(element.spherical as i32 as f32);
+        }
+
+        println!("el: {:?}", elements);
+        elements
+    }
+
     /// draws z y of the distance
     pub fn draw_rays(pixmap: &mut Pixmap, ray1: &Ray, ray2: &Ray) {
         let mut paint = tiny_skia::Paint::default();

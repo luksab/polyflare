@@ -1,22 +1,15 @@
 struct Ray {
   o: vec3<f32>;
-  d : vec3<f32>;
+  d: vec3<f32>;
   strength: f32;
-};
-
-struct Glass {
-    /// ior vs air
-    ior: f32;
-    /// coating - modifies wavelength
-    // coating: ();
 };
 
 struct Element {
   radius: f32;
-  glass: Glass;
+  glass: f32;
   position: f32;
-  entry: bool;
-  spherical: bool;
+  entry: f32;// 0: false, 1: true
+  spherical: f32;// 0: false, 1: true
 };
 
 [[block]]
@@ -33,7 +26,7 @@ struct Rays {
 
 [[block]]
 struct Elements {
-  el : [[stride(16)]] array<Element>;
+  el : [[stride(20)]] array<Element>;
 };
 
 [[group(0), binding(0)]] var<uniform> params : SimParams;
@@ -49,7 +42,7 @@ fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
 fn propagate_element(
     self: Ray,
     radius: f32,
-    glass: Glass,
+    glass: f32,
     position: f32,
     reflect: bool,
     entry: bool,
@@ -116,16 +109,16 @@ fn propagate_element(
         };
         let c = vec2<f32>(0., cy);
 
-        let intersection = normalize(vec2<f32>(intersection.y, intersection.z));
+        let intersection_2d = normalize(vec2<f32>(intersection.y, intersection.z));
 
-        let normal2d = intersection - c;
+        let normal2d = intersection_2d - c;
 
-        let intersection = vec3<f32> (0.0, normal2d.x, normal2d.y);
+        let intersection_3d = vec3<f32> (0.0, normal2d.x, normal2d.y);
 
         if ((entry == (ray.d.z > 0.)) == (radius > 0.)) {
-            normal = normalize(intersection);
+            normal = normalize(intersection_3d);
         } else {
-            normal = -(normalize(intersection));
+            normal = -(normalize(intersection_3d));
         }
     } else {
         var cz: f32;
@@ -150,7 +143,7 @@ fn propagate_element(
 
         var a: f32;
         if (entry == (ray.d.z > 0.)) {
-            a = glass.ior;
+            a = glass;
         } else {
             a = 1.0;
         };
@@ -158,7 +151,7 @@ fn propagate_element(
         if (entry == (ray.d.z > 0.)) {
             b = 1.0;
         } else {
-            b = glass.ior;
+            b = glass;
         }
 
         ray.strength = ray.strength * fresnel_r(
@@ -169,7 +162,7 @@ fn propagate_element(
         );
     } else {
         var eta: f32;
-        if (entry) { eta = 1.0 / glass.ior; } else { eta = glass.ior; };
+        if (entry) { eta = 1.0 / glass; } else { eta = glass; };
 
         // from https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/refract.xhtml
         let k = 1.0 - eta * eta * (1.0 - dot(normal, ray.d) * dot(normal, ray.d));
@@ -186,7 +179,7 @@ fn propagate_element(
 
         var a: f32;
         if (entry == (ray.d.z > 0.)) {
-            a = glass.ior;
+            a = glass;
         } else {
             a = 1.0;
         };
@@ -194,7 +187,7 @@ fn propagate_element(
         if (entry == (ray.d.z > 0.)) {
             b = 1.0;
         } else {
-            b = glass.ior;
+            b = glass;
         }
         ray.strength = ray.strength * (1.0
             - fresnel_r(
@@ -216,8 +209,8 @@ fn propagate(self: Ray, element: Element) -> Ray {
         element.glass,
         element.position,
         false,
-        element.entry,
-        !element.spherical,
+        element.entry > 0.,
+        !(element.spherical > 0.),
     );
 }
 
@@ -230,22 +223,50 @@ fn reflect(self: Ray, element: Element) -> Ray {
         element.glass,
         element.position,
         true,
-        element.entry,
-        !element.spherical,
+        element.entry > 0.,
+        !(element.spherical > 0.),
     );
 }
 
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
-  let total = arrayLength(&rays.rays);
+  let num_segments = arrayLength(&elements.el) * u32(2) + u32(2);
+  let total = arrayLength(&rays.rays) / num_segments;
   let index = global_invocation_id.x;
   if (index >= total) {
     return;
   }
 
-  rays.rays[index].o = vec3<f32>(params.opacity * f32(index) * 0.01, 1., 1.);
-  rays.rays[index].d = vec3<f32>(1., 1., 1.);
-  rays.rays[index].strength = 1.;
+//   rays.rays[index].o = vec3<f32>(params.opacity * f32(index) * 0.01, 1., 1.);
+//   rays.rays[index].d = vec3<f32>(1., 1., 1.);
+//   rays.rays[index].strength = 1.;
+
+  let num_rays = total;
+  let ray_num = index;
+  let width = 2.;
+
+  let center_pos = vec3<f32>(0.,0.7,-10.);
+  let direction = vec3<f32>(0.,0.,1.);
+
+  var pos = center_pos;
+  pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
+  // struct Ray {
+  //   o: vec3<f32>;
+  //   d : vec3<f32>;
+  //   strength: f32;
+  // };
+  var ray = Ray(pos, direction, 1.0);
+//   rays.rays[ray_num * num_segments] = ray;
+  for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
+    let element = elements.el[i];
+    rays.rays[ray_num * num_segments + i * u32(2)] = ray;
+    ray = propagate(ray, element);
+    rays.rays[ray_num * num_segments + i * u32(2) + u32(1)] = ray;
+  }
+  rays.rays[(ray_num + u32(1)) * num_segments - u32(2)] = ray;
+  ray.o = ray.o + ray.d * 100.;
+  rays.rays[(ray_num + u32(1)) * num_segments - u32(1)] = ray;
+//   rays.rays[(ray_num + u32(1)) * num_segments - u32(1)] = ray;
 
   // var old : u32 = cellsSrc.cells[index].alive;
 

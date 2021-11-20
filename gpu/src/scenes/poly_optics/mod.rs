@@ -20,6 +20,8 @@ pub struct PolyOptics {
     rays_buffer: wgpu::Buffer,
     lens_buffer: wgpu::Buffer,
     lens_data: Vec<f32>,
+    lens_rt_buffer: wgpu::Buffer,
+    lens_rt_data: Vec<f32>,
 
     // particle_bind_groups: Vec<wgpu::BindGroup>,
     render_bind_group: wgpu::BindGroup,
@@ -331,6 +333,8 @@ impl PolyOptics {
             ),
         });
 
+        println!("{:?}", lens_data);
+
         // create compute bind layout group and compute pipeline layout
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -487,6 +491,15 @@ impl PolyOptics {
                 | wgpu::BufferUsages::STORAGE,
         });
 
+        let lens_rt_data = lens.get_rt_elements_buffer();
+        let lens_rt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Lens drawing Buffer"),
+            contents: bytemuck::cast_slice(&lens_rt_data),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
             &sim_params,
@@ -502,8 +515,8 @@ impl PolyOptics {
             device,
             &sim_params,
             &sim_param_buffer,
-            &lens_data,
-            &lens_buffer,
+            &lens_rt_data,
+            &lens_rt_buffer,
             num_rays,
         );
 
@@ -542,6 +555,8 @@ impl PolyOptics {
             rays_buffer,
             lens_data,
             lens_buffer,
+            lens_rt_data,
+            lens_rt_buffer,
             convert_meta,
             draw_meta,
             compute_meta,
@@ -565,8 +580,8 @@ impl PolyOptics {
                 device,
                 &self.sim_params,
                 &self.sim_param_buffer,
-                &self.lens_data,
-                &self.lens_buffer,
+                &self.lens_rt_data,
+                &self.lens_rt_buffer,
                 self.num_rays,
             );
             self.compute_pipeline = compute_pipeline;
@@ -578,7 +593,7 @@ impl PolyOptics {
             label: Some("Render Encoder"),
         });
 
-        let work_group_count = 1;
+        let work_group_count = self.num_rays / 64;
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -616,10 +631,19 @@ impl PolyOptics {
                 let vertices = unsafe { data.align_to::<f32>().1 };
                 let vec_vertices = vertices.to_vec();
                 let data = vec_vertices;
-                println!("{:?}", data);
+
+                println!("----------------------------------------------------------------------------------");
+                for elements in data.chunks(8) {
+                    print!("o: {}, {}, {}  ", elements[0], elements[1], elements[2]);
+                    print!("d: {}, {}, {}  ", elements[4], elements[5], elements[6]);
+                    println!("s: {}", elements[7]);
+                }
+                // println!("{:?}", data);
             } else {
                 panic!("Failed to copy ray buffer!")
             }
+        } else {
+            queue.submit(iter::once(encoder.finish()));
         }
 
         // self.rays = self.lens.get_rays(
@@ -681,14 +705,34 @@ impl PolyOptics {
         }
 
         // buffer for elements
-        let lens_data = self.lens.get_elements_buffer();
-        let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        self.lens_data = self.lens.get_elements_buffer();
+        self.lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Lens drawing Buffer"),
-            contents: bytemuck::cast_slice(&lens_data),
+            contents: bytemuck::cast_slice(&self.lens_data),
             usage: wgpu::BufferUsages::UNIFORM
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::STORAGE,
         });
+        self.lens_rt_data = self.lens.get_rt_elements_buffer();
+        self.lens_rt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Lens drawing Buffer"),
+            contents: bytemuck::cast_slice(&self.lens_rt_data),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
+        let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
+            device,
+            &self.sim_params,
+            &self.sim_param_buffer,
+            &self.lens_rt_data,
+            &self.lens_rt_buffer,
+            self.num_rays,
+        );
+        self.compute_pipeline = compute_pipeline;
+        self.compute_bind_group = compute_bind_group;
+        self.rays_buffer = rays_buffer;
 
         let conversion_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -731,7 +775,7 @@ impl PolyOptics {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: wgpu::BufferSize::new(
-                                (lens_data.len() * mem::size_of::<f32>()) as _,
+                                (self.lens_data.len() * mem::size_of::<f32>()) as _,
                             ),
                         },
                         count: None,
@@ -757,7 +801,7 @@ impl PolyOptics {
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: lens_buffer.as_entire_binding(),
+                    resource: self.lens_buffer.as_entire_binding(),
                 },
             ],
             label: Some("texture_bind_group"),
@@ -864,8 +908,8 @@ impl Scene for PolyOptics {
                 device,
                 &self.sim_params,
                 &self.sim_param_buffer,
-                &self.lens_data,
-                &self.lens_buffer,
+                &self.lens_rt_data,
+                &self.lens_rt_buffer,
                 self.num_rays,
             );
             self.compute_pipeline = pipeline;

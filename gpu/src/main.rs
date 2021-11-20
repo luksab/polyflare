@@ -308,7 +308,7 @@ fn main() {
                     .position([600.0, 100.0], Condition::FirstUseEver)
                     .build(&ui, || {
                         ui.text(format!("Framerate: {:?}", fps));
-                        update_rays |= Slider::new("rays_exponent", 0., 5.)
+                        update_rays |= Slider::new("rays_exponent", 0., 6.5)
                             .build(&ui, &mut optics_params.ray_exponent);
                         update_poly |= update_rays;
                         ui.text(format!(
