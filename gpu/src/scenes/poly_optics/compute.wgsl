@@ -15,8 +15,12 @@ struct Element {
 [[block]]
 struct SimParams {
   opacity: f32;
+  width_scaled: f32;
+  height_scaled: f32;
   width: f32;
   height: f32;
+  draw_mode: f32;
+  which_ghost: f32;
 };
 
 [[block]]
@@ -216,7 +220,7 @@ fn propagate(self: Ray, element: Element) -> Ray {
 
 /// reflect a Ray from an element
 ///
-fn reflect(self: Ray, element: Element) -> Ray {
+fn reflect_ray(self: Ray, element: Element) -> Ray {
     return propagate_element(
         self,
         element.radius,
@@ -230,16 +234,27 @@ fn reflect(self: Ray, element: Element) -> Ray {
 
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
-  let num_segments = arrayLength(&elements.el) * u32(2) + u32(2);
+  let draw_mode = u32(params.draw_mode);//u32(1);
+  let which_ghost = u32(params.which_ghost);//u32(1);
+
+  var num_segments = u32((draw_mode & u32(2)) > u32(0)) * arrayLength(&elements.el) * u32(2) + u32(2);// if normal drawing
+  if ((draw_mode & u32(1)) > u32(0)) {
+    var ghost_num = u32(0);
+    for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
+        for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
+            ghost_num = ghost_num + u32(1);
+            if (ghost_num == which_ghost || which_ghost == u32(0)) {
+                num_segments = num_segments + (j - i) * u32(2) + u32(2) + arrayLength(&elements.el) * u32(2) + u32(2);
+            }
+        }
+    }
+  }
+//   let num_segments = arrayLength(&elements.el) * u32(2) + u32(2);
   let total = arrayLength(&rays.rays) / num_segments;
   let index = global_invocation_id.x;
   if (index >= total) {
     return;
   }
-
-//   rays.rays[index].o = vec3<f32>(params.opacity * f32(index) * 0.01, 1., 1.);
-//   rays.rays[index].d = vec3<f32>(1., 1., 1.);
-//   rays.rays[index].strength = 1.;
 
   let num_rays = total;
   let ray_num = index;
@@ -248,48 +263,91 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let center_pos = vec3<f32>(0.,0.7,-10.);
   let direction = vec3<f32>(0.,0.,1.);
 
-  var pos = center_pos;
-  pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-  // struct Ray {
-  //   o: vec3<f32>;
-  //   d : vec3<f32>;
-  //   strength: f32;
-  // };
-  var ray = Ray(pos, direction, 1.0);
-//   rays.rays[ray_num * num_segments] = ray;
-  for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
-    let element = elements.el[i];
-    rays.rays[ray_num * num_segments + i * u32(2)] = ray;
-    ray = propagate(ray, element);
-    rays.rays[ray_num * num_segments + i * u32(2) + u32(1)] = ray;
+  let ray_num_x = f32(ray_num / u32(10));
+  let ray_num_y = f32(ray_num % u32(10));
+
+  var counter = u32(0);
+  if ((draw_mode & u32(1)) > u32(0)) {
+    var ghost_num = u32(0);
+    for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
+        for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
+            ghost_num = ghost_num + u32(1);
+            if (ghost_num == which_ghost || which_ghost == u32(0)) {
+                // make new ray
+                var pos = center_pos;
+                // pos.x = pos.x + (ray_num_x / f32(num_rays) * width - width / 2.);
+                // pos.y = pos.y + (ray_num_y / f32(num_rays) * width - width / 2.);
+                pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
+                var ray = Ray(pos, direction, 1.0);
+
+                for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
+                    let element = elements.el[ele];
+                    // if we iterated through all elements up to
+                    // the first reflection point
+
+                    if (ele == j) {
+                        // reflect at the first element,
+                        // which is further down the optical path
+                        rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+                        ray = reflect_ray(ray, element);
+                        rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+                        counter = counter + u32(1);
+
+                        // propagate backwards through system
+                        // until the second reflection
+                        for (var k = j - u32(1); k > i; k = k - u32(1)) { // for k in (i + 1..j).rev() {
+                            rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+                            ray = propagate(ray, elements.el[k]);
+                            rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+                            counter = counter + u32(1);
+                        }
+                        rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+                        ray = reflect_ray(ray, elements.el[i]);
+                        rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+                        counter = counter + u32(1);
+
+                        for (var k = i + u32(1); k <= j; k = k + u32(1)) { // for k in i + 1..=j {
+                            rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+                            ray = propagate(ray, elements.el[k]);
+                            rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+                            counter = counter + u32(1);
+                        }
+                        // println!("strength: {}", ray.strength);
+                    } else {
+                        rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+                        ray = propagate(ray, element);
+                        rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+                        counter = counter + u32(1);
+                    }
+                }
+                rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+                ray.o = ray.o + ray.d * 100.;
+                rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+                counter = counter + u32(1);
+
+                // // only return rays that have made it through
+                // if (ray.d.magnitude() > 0.) {
+                //     rays.push(ray_collection);
+                //     rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+                //     counter = counter + u32(1);
+                // }
+            }
+        }
+    }
   }
-  rays.rays[(ray_num + u32(1)) * num_segments - u32(2)] = ray;
-  ray.o = ray.o + ray.d * 100.;
-  rays.rays[(ray_num + u32(1)) * num_segments - u32(1)] = ray;
-//   rays.rays[(ray_num + u32(1)) * num_segments - u32(1)] = ray;
-
-  // var old : u32 = cellsSrc.cells[index].alive;
-
-  // var alive = u32(0);
-
-  // let neighbours = count_neighbours(vec2<i32>(index_to_grid(index)));
-  // // if (neighbours < 2u32) {
-  // //   alive = u32(0);
-  // // } else { if (neighbours == 3u32 && old == u32(0)) {
-  // //   alive = u32(1);
-  // // } else { if (neighbours == 2u32 || neighbours == 3u32) {
-  // //   alive = old;
-  // // } else { if (neighbours > 3u32) {
-  // //   alive = u32(0);
-  // // }}}}
-
-  // if ((old != u32(0) && neighbours == u32(2) || neighbours == u32(3)) || 
-  //     (old == u32(0) && neighbours == u32(3))) {
-  //   alive = u32(1);
-  // } else {
-  //   alive = u32(0);
-  // }
-
-  // // Write back
-  // cellsDst.cells[index].alive = alive;
+  if ((draw_mode & u32(2)) > u32(0)) {
+    var pos = center_pos;
+    pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
+    var ray = Ray(pos, direction, 1.0);
+    for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
+        let element = elements.el[i];
+        rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+        ray = propagate(ray, element);
+        rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+        counter = counter + u32(1);
+    }
+    rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
+    ray.o = ray.o + ray.d * 100.;
+    rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
+  }
 }

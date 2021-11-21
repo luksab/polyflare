@@ -26,7 +26,18 @@ pub struct PolyOptics {
     // particle_bind_groups: Vec<wgpu::BindGroup>,
     render_bind_group: wgpu::BindGroup,
     sim_param_buffer: wgpu::Buffer,
-    pub sim_params: [f32; 5],
+    /// ```
+    /// struct SimParams {
+    ///   0:opacity: f32;
+    ///   1:width_scaled: f32;
+    ///   2:height_scaled: f32;
+    ///   3:width: f32;
+    ///   4:height: f32;
+    ///   5:draw_mode: f32;
+    ///   6:which_ghost: f32;
+    /// };
+    /// ```
+    pub sim_params: [f32; 7],
     // compute_pipeline: wgpu::ComputePipeline,
     // work_group_count: u32,
     // frame_num: usize,
@@ -49,7 +60,7 @@ pub struct PolyOptics {
 impl PolyOptics {
     fn shader_draw(
         device: &wgpu::Device,
-        sim_params: &[f32; 5],
+        sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         format: TextureFormat,
     ) -> (RenderPipeline, BindGroup) {
@@ -167,7 +178,7 @@ impl PolyOptics {
 
     fn convert_shader(
         device: &wgpu::Device,
-        sim_params: &[f32; 5],
+        sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         lens_data: &Vec<f32>,
         lens_buffer: &Buffer,
@@ -318,7 +329,7 @@ impl PolyOptics {
 
     fn raytrace_shader(
         device: &wgpu::Device,
-        sim_params: &[f32; 5],
+        sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         lens_data: &Vec<f32>,
         lens_buffer: &Buffer,
@@ -332,8 +343,6 @@ impl PolyOptics {
                     .into(),
             ),
         });
-
-        println!("{:?}", lens_data);
 
         // create compute bind layout group and compute pipeline layout
         let compute_bind_group_layout =
@@ -444,7 +453,16 @@ impl PolyOptics {
             Texture::create_color_texture(device, config, format, "high_color_tex");
 
         // buffer for simulation parameters uniform
-        let sim_params = [0.1, 512., 512., 512., 512.];
+        // struct SimParams {
+        //   opacity: f32;
+        //   width_scaled: f32;
+        //   height_scaled: f32;
+        //   width: f32;
+        //   height: f32;
+        //   draw_mode: f32;
+        //   which_ghost: f32;
+        // };
+        let sim_params = [0.1, 512., 512., 512., 512., 1.0, 1.0];
         let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
             contents: bytemuck::cast_slice(&sim_params),
@@ -675,6 +693,8 @@ impl PolyOptics {
     }
 
     pub fn update_buffers(&mut self, queue: &Queue, device: &wgpu::Device, update_size: bool) {
+        self.sim_params[5] = self.draw_mode as f32;
+        self.sim_params[6] = self.which_ghost as f32;
         queue.write_buffer(
             &self.sim_param_buffer,
             0,
