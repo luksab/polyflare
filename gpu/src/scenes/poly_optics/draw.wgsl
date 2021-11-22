@@ -22,12 +22,6 @@ struct SimParams {
 fn main(
     in: VertexInput,
 ) -> VertexOutput {
-    // let grid_pos = vec2<u32>(cell_num%params.side_len, cell_num/params.side_len);
-    // let offset = vec2<f32>(
-    //     f32(grid_pos[0])/f32(params.side_len), 
-    //     f32(grid_pos[1])/f32(params.side_len)) * 2.f32;
-    // let pos = (position + offset - vec2<f32>(0.9,0.9));
-
     let screenAspect = normalize(vec2<f32>(params.height, params.width));
 
     var out: VertexOutput;

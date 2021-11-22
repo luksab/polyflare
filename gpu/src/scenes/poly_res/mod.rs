@@ -1,38 +1,53 @@
-use std::{fs::read_to_string, iter, mem, time::Instant};
+use std::{fs::read_to_string, iter, mem, rc::Rc, sync::Mutex, time::Instant};
 
-use cgmath::InnerSpace;
 use wgpu::{
-    util::DeviceExt, BindGroup, Buffer, Queue, RenderPipeline, SurfaceConfiguration, TextureFormat,
-    TextureView,
+    util::DeviceExt, BindGroup, Buffer, ComputePipeline, Queue, RenderPipeline,
+    SurfaceConfiguration, TextureFormat, TextureView,
 };
 
 use crate::{scene::Scene, texture::Texture};
 
-use super::poly_optics;
+use super::{poly_optics, PolyOptics};
 
 pub struct PolyRes {
     boid_render_pipeline: wgpu::RenderPipeline,
     high_color_tex: Texture,
     conversion_render_pipeline: wgpu::RenderPipeline,
     conversion_bind_group: wgpu::BindGroup,
-    vertices_buffer: wgpu::Buffer,
+    compute_pipeline: ComputePipeline,
+    compute_bind_group: BindGroup,
+    dots_buffer: wgpu::Buffer,
 
     // particle_bind_groups: Vec<wgpu::BindGroup>,
     render_bind_group: wgpu::BindGroup,
     sim_param_buffer: wgpu::Buffer,
-    pub sim_params: [f32; 5],
-    num_dots: u32,
+    /// ```
+    /// struct SimParams {
+    ///   0:opacity: f32;
+    ///   1:width_scaled: f32;
+    ///   2:height_scaled: f32;
+    ///   3:width: f32;
+    ///   4:height: f32;
+    ///   5:draw_mode: f32;
+    ///   6:which_ghost: f32;
+    /// };
+    /// ```
+    pub sim_params: [f32; 7],
+    pub num_dots: u32,
 
     convert_meta: std::fs::Metadata,
     draw_meta: std::fs::Metadata,
+    compute_meta: std::fs::Metadata,
     format: TextureFormat,
     conf_format: TextureFormat,
+
+    poly: Rc<Mutex<PolyOptics>>,
 }
 
 impl PolyRes {
     fn shader_draw(
         device: &wgpu::Device,
-        sim_params: &[f32; 5],
+        sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         format: TextureFormat,
     ) -> (RenderPipeline, BindGroup) {
@@ -76,17 +91,25 @@ impl PolyRes {
                 module: &draw_shader,
                 entry_point: "main",
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 3 * 4,
+                    array_stride: 8 * 4,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
+                        // r.o
                         wgpu::VertexAttribute {
                             offset: 0,
                             shader_location: 0,
-                            format: wgpu::VertexFormat::Float32x2,
+                            format: wgpu::VertexFormat::Float32x3,
                         },
+                        // r.d
                         wgpu::VertexAttribute {
-                            offset: 2 * 4,
+                            offset: 4 * 4,
                             shader_location: 1,
+                            format: wgpu::VertexFormat::Float32x3,
+                        },
+                        // r.strength
+                        wgpu::VertexAttribute {
+                            offset: 7 * 4,
+                            shader_location: 2,
                             format: wgpu::VertexFormat::Float32,
                         },
                     ],
@@ -142,7 +165,7 @@ impl PolyRes {
 
     fn convert_shader(
         device: &wgpu::Device,
-        sim_params: &[f32; 5],
+        sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         format: &TextureFormat,
         high_color_tex: &Texture,
@@ -273,18 +296,132 @@ impl PolyRes {
         (conversion_render_pipeline, conversion_bind_group)
     }
 
-    pub async fn new(device: &wgpu::Device, config: &SurfaceConfiguration) -> Self {
-        // let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        //     label: None,
-        //     source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
-        // });
+    fn raytrace_shader(
+        device: &wgpu::Device,
+        sim_params: &[f32; 7],
+        sim_param_buffer: &Buffer,
+        lens_data: &Vec<f32>,
+        lens_buffer: &Buffer,
+        num_dots: u32,
+    ) -> (ComputePipeline, BindGroup, Buffer) {
+        let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(
+                read_to_string("gpu/src/scenes/poly_res/compute.wgsl")
+                    .expect("Shader could not be read.")
+                    .into(),
+            ),
+        });
 
+        // create compute bind layout group and compute pipeline layout
+        let compute_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (sim_params.len() * mem::size_of::<u32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new((num_dots * 32) as _),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (lens_data.len() * mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
+                ],
+                label: None,
+            });
+        let compute_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("compute"),
+                bind_group_layouts: &[&compute_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        // create compute pipeline
+        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute pipeline"),
+            layout: Some(&compute_pipeline_layout),
+            module: &compute_shader,
+            entry_point: "main",
+        });
+
+        // buffer for all particles data of type [bool,...]
+        // vec3: 16 bytes, 4 floats
+        // vec3, vec3, float
+        let initial_ray_data = vec![0.1 as f32; (num_dots * 8) as usize];
+        println!("new ray buffer [{}]", num_dots * 8);
+        // for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
+        //     particle_instance_chunk[0] = i as u32; // bool??
+        //     particle_instance_chunk[1] = fastrand::f32(0..6) / 5; // bool??
+        // }
+
+        let rays_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("Rays Buffer")),
+            contents: bytemuck::cast_slice(&initial_ray_data),
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC,
+        });
+
+        // create two bind groups, one for each buffer as the src
+        // where the alternate buffer is used as the dst
+        let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &compute_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: sim_param_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: rays_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: lens_buffer.as_entire_binding(),
+                },
+            ],
+            label: None,
+        });
+
+        (compute_pipeline, compute_bind_group, rays_buffer)
+    }
+
+    pub async fn new(
+        device: &wgpu::Device,
+        config: &SurfaceConfiguration,
+        poly: Rc<Mutex<PolyOptics>>,
+    ) -> Self {
         let format = wgpu::TextureFormat::Rgba16Float;
         let high_color_tex =
             Texture::create_color_texture(device, config, format, "high_color_tex");
 
         // buffer for simulation parameters uniform
-        let sim_params = [0.1, 512., 512., 512., 512.];
+        let sim_params = [0.1, 512., 512., 512., 512., 1., 1.];
         let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
             contents: bytemuck::cast_slice(&sim_params),
@@ -294,14 +431,6 @@ impl PolyRes {
         let (boid_render_pipeline, render_bind_group) =
             Self::shader_draw(device, &sim_params, &sim_param_buffer, format);
 
-        let rays = vec![0.0, 0.0];
-        // let vertex_buffer_data = [-1.0f32, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
-        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&rays[..]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
             &sim_params,
@@ -310,24 +439,42 @@ impl PolyRes {
             &high_color_tex,
         );
 
+        let num_dots = 2;
+        let poly_unlocked = poly.lock().unwrap();
+        let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
+            device,
+            &sim_params,
+            &sim_param_buffer,
+            &poly_unlocked.lens_rt_data,
+            &poly_unlocked.lens_rt_buffer,
+            num_dots,
+        );
+        drop(poly_unlocked);
+
         let convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").unwrap();
         let draw_meta = std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl").unwrap();
+        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").unwrap();
 
         Self {
             boid_render_pipeline,
 
             sim_param_buffer,
             sim_params,
-            vertices_buffer,
+            dots_buffer,
             render_bind_group,
             high_color_tex,
             conversion_render_pipeline,
             conversion_bind_group,
             convert_meta,
             draw_meta,
+            compute_meta,
             format,
             conf_format: config.format,
-            num_dots: 0,
+            num_dots,
+            compute_pipeline,
+            compute_bind_group,
+
+            poly,
         }
     }
 
@@ -339,30 +486,108 @@ impl PolyRes {
         );
     }
 
-    pub fn update_rays(&mut self, optics: &poly_optics::PolyOptics, device: &wgpu::Device) {
-        let rays = optics.lens.get_dots(
-            optics.num_rays,
-            optics.center_pos,
-            optics.direction.normalize(),
-            optics.draw_mode,
-            optics.which_ghost,
-            5.0,
-        );
-        // println!("num_dots: {}", rays.len() / 3);
-        self.num_dots = rays.len() as u32 / 3;
-        self.vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&rays[..]),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+    pub async fn update_rays(
+        &mut self,
+        optics: &poly_optics::PolyOptics,
+        device: &wgpu::Device,
+        queue: &Queue,
+        update_size: bool,
+    ) {
+        if update_size {
+            println!("update: {}", self.num_dots);
+            let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &optics.lens_rt_data,
+                &optics.lens_rt_buffer,
+                self.num_dots,
+            );
+            self.compute_pipeline = compute_pipeline;
+            self.compute_bind_group = compute_bind_group;
+            self.dots_buffer = dots_buffer;
+        }
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
         });
+
+        let work_group_count = (self.num_dots + 64 - 1) / 64; // round up
+        {
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.compute_pipeline);
+            cpass.set_bind_group(0, &self.compute_bind_group, &[]);
+            cpass.dispatch(work_group_count, 1, 1);
+        }
+
+        if cfg!(debug_assertions) {
+            let output_buffer_size = (self.num_dots * 32) as wgpu::BufferAddress;
+            let output_buffer_desc = wgpu::BufferDescriptor {
+                size: output_buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                label: Some("Ray DST"),
+                mapped_at_creation: false,
+            };
+            let output_buffer = device.create_buffer(&output_buffer_desc);
+            encoder.copy_buffer_to_buffer(
+                &self.dots_buffer,
+                0,
+                &output_buffer,
+                0,
+                (self.num_dots * 32).into(),
+            );
+
+            queue.submit(iter::once(encoder.finish()));
+
+            let buffer_slice = output_buffer.slice(..);
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+            device.poll(wgpu::Maintain::Wait);
+
+            if let Ok(()) = buffer_future.await {
+                let data = buffer_slice.get_mapped_range();
+
+                let vertices = unsafe { data.align_to::<f32>().1 };
+                let vec_vertices = vertices.to_vec();
+                let data = vec_vertices;
+
+                println!("----------------------------------------------------------------------------------");
+                for elements in data.chunks(8) {
+                    print!("o: {}, {}, {}  ", elements[0], elements[1], elements[2]);
+                    print!("d: {}, {}, {}  ", elements[4], elements[5], elements[6]);
+                    println!("s: {}", elements[7]);
+                }
+                // println!("{:?}", data);
+            } else {
+                panic!("Failed to copy ray buffer!")
+            }
+        } else {
+            queue.submit(iter::once(encoder.finish()));
+        }
     }
 
-    pub fn update_buffers(&mut self, queue: &Queue, device: &wgpu::Device) {
+    pub fn update_buffers(&mut self, queue: &Queue, device: &wgpu::Device, update_size: bool) {
+        let poly = self.poly.lock().unwrap();
+        self.sim_params[5] = poly.draw_mode as f32;
+        self.sim_params[6] = poly.which_ghost as f32;
         queue.write_buffer(
             &self.sim_param_buffer,
             0,
             bytemuck::cast_slice(&self.sim_params),
         );
+
+        let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
+            device,
+            &self.sim_params,
+            &self.sim_param_buffer,
+            &poly.lens_rt_data,
+            &poly.lens_rt_buffer,
+            self.num_dots,
+        );
+        self.compute_pipeline = compute_pipeline;
+        self.compute_bind_group = compute_bind_group;
+        self.dots_buffer = dots_buffer;
+        drop(poly);
 
         let conversion_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -441,7 +666,7 @@ impl Scene for PolyRes {
         self.high_color_tex =
             Texture::create_color_texture(device, config, format, "high_color_tex");
 
-        self.update_buffers(queue, device);
+        self.update_buffers(queue, device, false);
     }
 
     fn input(&mut self, _event: &winit::event::WindowEvent) -> bool {
@@ -495,6 +720,31 @@ impl Scene for PolyRes {
             self.render_bind_group = bind_group;
             println!("took {:?}.", now.elapsed());
         }
+
+        if self.compute_meta.modified().unwrap()
+            != std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl")
+                .unwrap()
+                .modified()
+                .unwrap()
+        {
+            self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").unwrap();
+            print!("reloading compute shader! ");
+            let now = Instant::now();
+            let poly_unlocked = self.poly.lock().unwrap();
+            let (pipeline, bind_group, dots_buffer) = Self::raytrace_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &poly_unlocked.lens_rt_data,
+                &poly_unlocked.lens_rt_buffer,
+                self.num_dots,
+            );
+            drop(poly_unlocked);
+            self.compute_pipeline = pipeline;
+            self.compute_bind_group = bind_group;
+            self.dots_buffer = dots_buffer;
+            println!("took {:?}.", now.elapsed());
+        }
     }
 
     fn render(
@@ -537,7 +787,7 @@ impl Scene for PolyRes {
             rpass.set_pipeline(&self.boid_render_pipeline);
             rpass.set_bind_group(0, &self.render_bind_group, &[]);
             // the three instance-local vertices
-            rpass.set_vertex_buffer(0, self.vertices_buffer.slice(..));
+            rpass.set_vertex_buffer(0, self.dots_buffer.slice(..));
             //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
             rpass.draw(0..self.num_dots, 0..1);

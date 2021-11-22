@@ -20,8 +20,8 @@ pub struct PolyOptics {
     rays_buffer: wgpu::Buffer,
     lens_buffer: wgpu::Buffer,
     lens_data: Vec<f32>,
-    lens_rt_buffer: wgpu::Buffer,
-    lens_rt_data: Vec<f32>,
+    pub lens_rt_buffer: wgpu::Buffer,
+    pub lens_rt_data: Vec<f32>,
 
     // particle_bind_groups: Vec<wgpu::BindGroup>,
     render_bind_group: wgpu::BindGroup,
@@ -611,7 +611,7 @@ impl PolyOptics {
             label: Some("Render Encoder"),
         });
 
-        let work_group_count = self.num_rays / 64;
+        let work_group_count = (self.num_rays + 64 - 1) / 64; // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -620,7 +620,7 @@ impl PolyOptics {
             cpass.dispatch(work_group_count, 1, 1);
         }
 
-        if cfg!(debug_assertions) {
+        if cfg!(debug_assertions) & false {
             let output_buffer_size = (self.num_rays * 32) as wgpu::BufferAddress;
             let output_buffer_desc = wgpu::BufferDescriptor {
                 size: output_buffer_size,

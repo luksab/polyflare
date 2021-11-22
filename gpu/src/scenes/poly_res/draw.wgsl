@@ -1,6 +1,7 @@
 struct VertexInput {
-    [[location(0)]] position: vec2<f32>;
-    [[location(1)]] strength: f32;
+    [[location(0)]] o: vec3<f32>;
+    [[location(1)]] d: vec3<f32>;
+    [[location(2)]] strength: f32;
 };
 
 struct VertexOutput {
@@ -21,10 +22,9 @@ struct SimParams {
 fn main(
     in: VertexInput,
 ) -> VertexOutput {
-    var pos = in.position / 4.;
-
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(pos, 0.,1.);
+    // out.clip_position = vec4<f32>(pos, 0.,1.);
+    out.clip_position = vec4<f32>(vec2<f32>(in.o.x, in.o.y) / 4.0, 0.,1.);
     // out.clip_position = vec4<f32>(0.5, 0.5, 0.,1.);
     out.strength = in.strength;
     return out;
@@ -33,6 +33,6 @@ fn main(
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   let s = in.strength * params.opacity;
-    return vec4<f32>(1.0, 1.0, 1.0, sqrt(in.strength) * params.opacity * 100.0);
+    return vec4<f32>(1.0, 1.0, 1.0, sqrt(in.strength) * params.opacity);
     // return vec4<f32>(1.0, 1.0, 1.0, 0.0);
 }

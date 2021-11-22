@@ -1,4 +1,5 @@
 {
     "nixEnvSelector.suggestion": false,
-    "nixEnvSelector.nixFile": "${workspaceRoot}/shell.nix"
+    "nixEnvSelector.nixFile": "${workspaceRoot}/shell.nix",
+    "cmake.configureOnOpen": false
 }
