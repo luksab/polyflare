@@ -19,6 +19,7 @@ use state::State;
 
 mod scenes;
 
+/// Parameter for the GUI
 struct Parms {
     ray_exponent: f64,
     dots_exponent: f64,
@@ -26,26 +27,27 @@ struct Parms {
     pos: [f64; 3],
     dir: [f64; 3],
     opacity: f32,
+    sensor_dist: f32,
 }
 
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
 
-    // initialize a state
+    // state saves all the scenes and manages them
     let mut state = pollster::block_on(State::new(&event_loop, wgpu::Backends::all()));
 
     let mut optics_params = Parms {
         ray_exponent: 2.7,
-        dots_exponent: 2.7,
+        dots_exponent: 7.,
         draw: 1,
         pos: [0.0, 0.0, -7.0],
         dir: [0.0, 0.1, 1.0],
         opacity: 0.1,
+        sensor_dist: 10.,
     };
 
     // create scenes and push into state
-
     let game_of_life = Rc::new(Mutex::new(pollster::block_on(scenes::GameOfLife::new(
         &state.device,
         &state.config,
@@ -120,7 +122,7 @@ fn main() {
         imgui_winit_support::HiDpiMode::Default,
     );
     // don't save imgui prefrences
-    imgui.set_ini_filename(None);
+    // imgui.set_ini_filename(None);
 
     // Set font for imgui
     {
@@ -354,14 +356,20 @@ fn main() {
                 poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(optics_params.dots_exponent) as u32;
                 poly_res.num_dots = 10.0_f64.powf(optics_params.dots_exponent) as u32;
-                poly.center_pos = optics_params.pos.into();
-                poly.direction = optics_params.dir.into();
                 poly_res.pos_params[0] = optics_params.pos[0] as f32;
                 poly_res.pos_params[1] = optics_params.pos[1] as f32;
                 poly_res.pos_params[2] = optics_params.pos[2] as f32;
                 poly_res.pos_params[4] = optics_params.dir[0] as f32;
                 poly_res.pos_params[5] = optics_params.dir[1] as f32;
                 poly_res.pos_params[6] = optics_params.dir[2] as f32;
+
+                poly.pos_params[0] = optics_params.pos[0] as f32;
+                poly.pos_params[1] = optics_params.pos[1] as f32;
+                poly.pos_params[2] = optics_params.pos[2] as f32;
+                poly.pos_params[4] = optics_params.dir[0] as f32;
+                poly.pos_params[5] = optics_params.dir[1] as f32;
+                poly.pos_params[6] = optics_params.dir[2] as f32;
+                poly.write_buffer(&state.queue);
 
                 pollster::block_on(poly.update_rays(&state.device, &state.queue, update_rays));
                 pollster::block_on(poly_res.update_rays(
@@ -398,6 +406,13 @@ fn main() {
                             update_lens |= Slider::new(format!("d_next##{}", i), -3., 6.)
                                 .build(&ui, &mut element.3);
                             ui.separator();
+                        }
+                        if Slider::new("sensor distance", 0., 20.).build(&ui, &mut optics_params.sensor_dist) {
+                            poly_res.pos_params[8] = optics_params.sensor_dist;
+                            poly_res.write_buffer(&state.queue);
+
+                            poly.pos_params[8] = optics_params.sensor_dist;
+                            poly.write_buffer(&state.queue);
                         }
                     });
 

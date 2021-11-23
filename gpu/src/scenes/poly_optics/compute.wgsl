@@ -24,6 +24,12 @@ struct SimParams {
 };
 
 [[block]]
+struct PosParams {
+  init: Ray;
+  sensor: f32;
+};
+
+[[block]]
 struct Rays {
   rays : [[stride(32)]] array<Ray>;
 };
@@ -36,6 +42,8 @@ struct Elements {
 [[group(0), binding(0)]] var<uniform> params : SimParams;
 [[group(0), binding(1)]] var<storage, read_write> rays : Rays;
 [[group(0), binding(2)]] var<storage, read> elements : Elements;
+
+[[group(1), binding(0)]] var<uniform> posParams : PosParams;
 
 fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
   let s = 0.5 * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2))) * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2)));
@@ -53,6 +61,7 @@ fn propagate_element(
     cylindrical: bool,
 ) -> Ray{
     var ray = self;
+    ray.d = normalize(ray.d);
     var intersection: vec3<f32>;
     if (cylindrical) {
         // cylindrical: x is not affected by curvature
@@ -260,8 +269,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let ray_num = index;
   let width = 2.;
 
-  let center_pos = vec3<f32>(0.,0.7,-10.);
-  let direction = vec3<f32>(0.,0.,1.);
+  let center_pos = posParams.init.o;
 
   let ray_num_x = f32(ray_num / u32(10));
   let ray_num_y = f32(ray_num % u32(10));
@@ -274,11 +282,11 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
             ghost_num = ghost_num + u32(1);
             if (ghost_num == which_ghost || which_ghost == u32(0)) {
                 // make new ray
-                var pos = center_pos;
                 // pos.x = pos.x + (ray_num_x / f32(num_rays) * width - width / 2.);
                 // pos.y = pos.y + (ray_num_y / f32(num_rays) * width - width / 2.);
-                pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-                var ray = Ray(pos, direction, 1.0);
+                var dir = posParams.init.d;
+                dir.y = dir.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
+                var ray = Ray(center_pos, dir, 1.0);
 
                 for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
                     let element = elements.el[ele];
@@ -336,9 +344,9 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     }
   }
   if ((draw_mode & u32(2)) > u32(0)) {
-    var pos = center_pos;
-    pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-    var ray = Ray(pos, direction, 1.0);
+    var dir = posParams.init.d;
+    dir.y = dir.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
+    var ray = Ray(center_pos, dir, 1.0);
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];
         rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
@@ -347,7 +355,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         counter = counter + u32(1);
     }
     rays.rays[ray_num * num_segments + counter * u32(2)] = ray;
-    ray.o = ray.o + ray.d * 100.;
+    ray.o = ray.o + ray.d * 10.;
     rays.rays[ray_num * num_segments + counter * u32(2) + u32(1)] = ray;
   }
 }

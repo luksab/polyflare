@@ -13,10 +13,12 @@ pub struct State {
     pub window: Window,
     pub surface: wgpu::Surface,
     pub size: winit::dpi::PhysicalSize<u32>,
+    /// scaling for high dpi
     pub scale_factor: f64,
     pub device: wgpu::Device,
     pub adapter: wgpu::Adapter,
     pub queue: wgpu::Queue,
+    /// `SurfaceConfiguration` of the main window
     pub config: wgpu::SurfaceConfiguration,
 
     /// the scenes saved in the state struct
@@ -27,6 +29,8 @@ impl State {
     /// create a new state, does not create any scenes
     ///
     /// add those by calling `state.scenes.push(scene)`
+    ///
+    /// backend is one of  `VULKAN, GL, METAL, DX12, DX12, BROWSER_WEBGPU, PRIMARY`
     pub async fn new(event_loop: &EventLoop<()>, backend: Backends) -> Self {
         // get the title at compile time from env
         let title = env!("CARGO_PKG_NAME");
@@ -67,7 +71,7 @@ impl State {
                         max_storage_textures_per_shader_stage: 4, // default
                         max_uniform_buffers_per_shader_stage: 12, // default
                         max_uniform_buffer_binding_size: 16384, // default
-                        max_storage_buffer_binding_size: u32::MAX, // default
+                        max_storage_buffer_binding_size: u32::MAX, // 128 << 20, // default
                         max_vertex_buffers: 8,          // default
                         max_vertex_attributes: 16,      // default
                         max_vertex_buffer_array_stride: 2048, // default
@@ -80,8 +84,6 @@ impl State {
             )
             .await
             .unwrap();
-
-        println!("{:?}", surface.get_preferred_format(&adapter).unwrap());
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -110,32 +112,35 @@ impl State {
         }
     }
 
-    /// call this when the window is resized.
+    /// call this when the main window is resized.
     ///
     /// internally calls resize on all scenes
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: Option<&f64>) {
+        // check that the size is real
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-        }
-        for scene in &mut self.scenes {
-            scene.lock().unwrap().resize(
-                self.size,
-                *scale_factor.unwrap_or(&self.scale_factor),
-                &self.device,
-                &self.config,
-                &self.queue,
-            )
+            for scene in &mut self.scenes {
+                scene.lock().unwrap().resize(
+                    self.size,
+                    *scale_factor.unwrap_or(&self.scale_factor),
+                    &self.device,
+                    &self.config,
+                    &self.queue,
+                )
+            }
         }
     }
 
     /// let all scenes handle a WindowEvent
     pub fn input(&mut self, event: &WindowEvent) -> bool {
+        // go through all scenes and let them handle input
         for scene in &mut self.scenes {
             scene.lock().unwrap().input(event);
         }
+        // nothing to do as of yet
         match event {
             _ => false,
         }
@@ -143,12 +148,15 @@ impl State {
 
     /// update all scenes - call this once a frame
     pub fn update(&mut self, dt: std::time::Duration) {
+        // go through all scenes and call their update
         for scene in &mut self.scenes {
             scene.lock().unwrap().update(dt, &self.device, &self.queue);
         }
     }
 
     /// render the scene at index `index`
+    /// 
+    /// `depth_view`: for 3d - 2d scenes don't need a depth Texture
     pub fn render(
         &mut self,
         view: &TextureView,

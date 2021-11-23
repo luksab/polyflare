@@ -35,7 +35,7 @@ pub struct PolyRes {
     /// ```
     pub sim_params: [f32; 7],
     pos_params_buffer: wgpu::Buffer,
-    pub pos_params: [f32; 8],
+    pub pos_params: [f32; 12],
     pub num_dots: u32,
 
     convert_meta: std::fs::Metadata,
@@ -305,7 +305,7 @@ impl PolyRes {
         sim_param_buffer: &Buffer,
         lens_data: &Vec<f32>,
         lens_buffer: &Buffer,
-        pos_params: &[f32; 8],
+        pos_params: &[f32; 12],
         pos_params_buffer: &Buffer,
         num_dots: u32,
     ) -> (ComputePipeline, BindGroup, BindGroup, Buffer) {
@@ -394,11 +394,6 @@ impl PolyRes {
         // vec3: 16 bytes, 4 floats
         // vec3, vec3, float
         let initial_ray_data = vec![0.1 as f32; (num_dots * 8) as usize];
-        println!("new ray buffer [{}]", num_dots * 8);
-        // for (i, particle_instance_chunk) in &mut initial_particle_data.chunks_mut(2).enumerate() {
-        //     particle_instance_chunk[0] = i as u32; // bool??
-        //     particle_instance_chunk[1] = fastrand::f32(0..6) / 5; // bool??
-        // }
 
         let rays_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&format!("Rays Buffer")),
@@ -474,25 +469,14 @@ impl PolyRes {
             &high_color_tex,
         );
 
-        let pos_params = [0., 0., 0., 0., 0., 0., 1., 1.];
+        let num_dots = 2;
+        let poly_unlocked = poly.lock().unwrap();
+        let pos_params = poly_unlocked.pos_params;
         let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
             contents: bytemuck::cast_slice(&pos_params),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
-
-        let num_dots = 2;
-        let poly_unlocked = poly.lock().unwrap();
-        let pos_params = [
-            poly_unlocked.center_pos.x as f32,
-            poly_unlocked.center_pos.y as f32,
-            poly_unlocked.center_pos.z as f32,
-            0.,
-            poly_unlocked.direction.x as f32,
-            poly_unlocked.direction.y as f32,
-            poly_unlocked.direction.z as f32,
-            1.,
-        ];
         let (compute_pipeline, compute_bind_group, pos_bind_group, dots_buffer) =
             Self::raytrace_shader(
                 device,
@@ -541,6 +525,12 @@ impl PolyRes {
             &self.sim_param_buffer,
             0,
             bytemuck::cast_slice(&self.sim_params),
+        );
+
+        queue.write_buffer(
+            &self.pos_params_buffer,
+            0,
+            bytemuck::cast_slice(&self.pos_params),
         );
     }
 

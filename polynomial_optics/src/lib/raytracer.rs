@@ -336,7 +336,6 @@ impl Lens {
             elements.push(element.spherical as i32 as f32);
         }
 
-        println!("el: {:?}", elements);
         elements
     }
 

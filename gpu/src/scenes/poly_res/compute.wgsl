@@ -26,6 +26,7 @@ struct SimParams {
 [[block]]
 struct PosParams {
   init: Ray;
+  sensor: f32;
 };
 
 [[block]]
@@ -60,6 +61,7 @@ fn propagate_element(
     cylindrical: bool,
 ) -> Ray{
     var ray = self;
+    ray.d = normalize(ray.d);
     var intersection: vec3<f32>;
     if (cylindrical) {
         // cylindrical: x is not affected by curvature
@@ -322,7 +324,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                         ray = propagate(ray, element);
                     }
                 }
-                ray = intersect_ray(ray, 10.);
+                ray = intersect_ray(ray, posParams.sensor);
 
                 // only return rays that have made it through
                 if (length(ray.d) > 0. && ray.strength > 0.) {
@@ -348,7 +350,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     }
     // ray.o = ray.o + ray.d * 100.;
     // rays.rays[0] = ray;
-    ray = intersect_ray(ray, 10.);
+    ray = intersect_ray(ray, posParams.sensor);
     rays.rays[ray_num * num_segments + counter] = ray;
   }
 
