@@ -67,7 +67,7 @@ impl State {
                         max_storage_textures_per_shader_stage: 4, // default
                         max_uniform_buffers_per_shader_stage: 12, // default
                         max_uniform_buffer_binding_size: 16384, // default
-                        max_storage_buffer_binding_size: 128 << 20, // default
+                        max_storage_buffer_binding_size: u32::MAX, // default
                         max_vertex_buffers: 8,          // default
                         max_vertex_attributes: 16,      // default
                         max_vertex_buffer_array_stride: 2048, // default

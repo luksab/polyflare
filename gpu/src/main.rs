@@ -21,6 +21,7 @@ mod scenes;
 
 struct Parms {
     ray_exponent: f64,
+    dots_exponent: f64,
     draw: u32,
     pos: [f64; 3],
     dir: [f64; 3],
@@ -36,6 +37,7 @@ fn main() {
 
     let mut optics_params = Parms {
         ray_exponent: 2.7,
+        dots_exponent: 2.7,
         draw: 1,
         pos: [0.0, 0.0, -7.0],
         dir: [0.0, 0.1, 1.0],
@@ -316,6 +318,13 @@ fn main() {
                             10.0_f64.powf(optics_params.ray_exponent) as u32
                         ));
 
+                        update_rays |= Slider::new("dots_exponent", 0., 10.)
+                            .build(&ui, &mut optics_params.dots_exponent);
+                        ui.text(format!(
+                            "dots: {}",
+                            10.0_f64.powf(optics_params.dots_exponent) as u32
+                        ));
+
                         if Slider::new("opacity", 0., 1.).build(&ui, &mut optics_params.opacity) {
                             poly.sim_params[0] = optics_params.opacity.powf(3.);
                             poly_res.sim_params[0] = optics_params.opacity.powf(3.);
@@ -343,9 +352,16 @@ fn main() {
                     });
 
                 poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
-                poly_res.num_dots = 10.0_f64.powf(optics_params.ray_exponent) as u32;
+                // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(optics_params.dots_exponent) as u32;
+                poly_res.num_dots = 10.0_f64.powf(optics_params.dots_exponent) as u32;
                 poly.center_pos = optics_params.pos.into();
                 poly.direction = optics_params.dir.into();
+                poly_res.pos_params[0] = optics_params.pos[0] as f32;
+                poly_res.pos_params[1] = optics_params.pos[1] as f32;
+                poly_res.pos_params[2] = optics_params.pos[2] as f32;
+                poly_res.pos_params[4] = optics_params.dir[0] as f32;
+                poly_res.pos_params[5] = optics_params.dir[1] as f32;
+                poly_res.pos_params[6] = optics_params.dir[2] as f32;
 
                 pollster::block_on(poly.update_rays(&state.device, &state.queue, update_rays));
                 pollster::block_on(poly_res.update_rays(
@@ -409,6 +425,9 @@ fn main() {
                     poly.lens.elements = elements;
                     poly.update_buffers(&state.queue, &state.device, false);
                     // we don't need poly for the rest of this function
+                    drop(poly);
+                    poly_res.update_buffers(&state.queue, &state.device, false)
+                } else if update_poly {
                     drop(poly);
                     poly_res.update_buffers(&state.queue, &state.device, false)
                 }

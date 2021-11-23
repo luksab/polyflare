@@ -16,6 +16,7 @@ pub struct PolyRes {
     conversion_bind_group: wgpu::BindGroup,
     compute_pipeline: ComputePipeline,
     compute_bind_group: BindGroup,
+    pos_bind_group: BindGroup,
     dots_buffer: wgpu::Buffer,
 
     // particle_bind_groups: Vec<wgpu::BindGroup>,
@@ -33,6 +34,8 @@ pub struct PolyRes {
     /// };
     /// ```
     pub sim_params: [f32; 7],
+    pos_params_buffer: wgpu::Buffer,
+    pub pos_params: [f32; 8],
     pub num_dots: u32,
 
     convert_meta: std::fs::Metadata,
@@ -302,8 +305,10 @@ impl PolyRes {
         sim_param_buffer: &Buffer,
         lens_data: &Vec<f32>,
         lens_buffer: &Buffer,
+        pos_params: &[f32; 8],
+        pos_params_buffer: &Buffer,
         num_dots: u32,
-    ) -> (ComputePipeline, BindGroup, Buffer) {
+    ) -> (ComputePipeline, BindGroup, BindGroup, Buffer) {
         let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
@@ -354,10 +359,26 @@ impl PolyRes {
                 ],
                 label: None,
             });
+        let pos_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(
+                            (pos_params.len() * mem::size_of::<u32>()) as _,
+                        ),
+                    },
+                    count: None,
+                }],
+                label: None,
+            });
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("compute"),
-                bind_group_layouts: &[&compute_bind_group_layout],
+                bind_group_layouts: &[&compute_bind_group_layout, &pos_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -408,7 +429,21 @@ impl PolyRes {
             label: None,
         });
 
-        (compute_pipeline, compute_bind_group, rays_buffer)
+        let pos_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &pos_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: pos_params_buffer.as_entire_binding(),
+            }],
+            label: None,
+        });
+
+        (
+            compute_pipeline,
+            compute_bind_group,
+            pos_bind_group,
+            rays_buffer,
+        )
     }
 
     pub async fn new(
@@ -439,16 +474,36 @@ impl PolyRes {
             &high_color_tex,
         );
 
+        let pos_params = [0., 0., 0., 0., 0., 0., 1., 1.];
+        let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Simulation Parameter Buffer"),
+            contents: bytemuck::cast_slice(&pos_params),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let num_dots = 2;
         let poly_unlocked = poly.lock().unwrap();
-        let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
-            device,
-            &sim_params,
-            &sim_param_buffer,
-            &poly_unlocked.lens_rt_data,
-            &poly_unlocked.lens_rt_buffer,
-            num_dots,
-        );
+        let pos_params = [
+            poly_unlocked.center_pos.x as f32,
+            poly_unlocked.center_pos.y as f32,
+            poly_unlocked.center_pos.z as f32,
+            0.,
+            poly_unlocked.direction.x as f32,
+            poly_unlocked.direction.y as f32,
+            poly_unlocked.direction.z as f32,
+            1.,
+        ];
+        let (compute_pipeline, compute_bind_group, pos_bind_group, dots_buffer) =
+            Self::raytrace_shader(
+                device,
+                &sim_params,
+                &sim_param_buffer,
+                &poly_unlocked.lens_rt_data,
+                &poly_unlocked.lens_rt_buffer,
+                &pos_params,
+                &pos_params_buffer,
+                num_dots,
+            );
         drop(poly_unlocked);
 
         let convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").unwrap();
@@ -465,6 +520,8 @@ impl PolyRes {
             high_color_tex,
             conversion_render_pipeline,
             conversion_bind_group,
+            pos_bind_group,
+            pos_params_buffer,
             convert_meta,
             draw_meta,
             compute_meta,
@@ -475,6 +532,7 @@ impl PolyRes {
             compute_bind_group,
 
             poly,
+            pos_params,
         }
     }
 
@@ -495,16 +553,20 @@ impl PolyRes {
     ) {
         if update_size {
             println!("update: {}", self.num_dots);
-            let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
-                device,
-                &self.sim_params,
-                &self.sim_param_buffer,
-                &optics.lens_rt_data,
-                &optics.lens_rt_buffer,
-                self.num_dots,
-            );
+            let (compute_pipeline, compute_bind_group, pos_bind_group, dots_buffer) =
+                Self::raytrace_shader(
+                    device,
+                    &self.sim_params,
+                    &self.sim_param_buffer,
+                    &optics.lens_rt_data,
+                    &optics.lens_rt_buffer,
+                    &self.pos_params,
+                    &self.pos_params_buffer,
+                    self.num_dots,
+                );
             self.compute_pipeline = compute_pipeline;
             self.compute_bind_group = compute_bind_group;
+            self.pos_bind_group = pos_bind_group;
             self.dots_buffer = dots_buffer;
         }
 
@@ -518,6 +580,7 @@ impl PolyRes {
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &self.compute_bind_group, &[]);
+            cpass.set_bind_group(1, &self.pos_bind_group, &[]);
             cpass.dispatch(work_group_count, 1, 1);
         }
 
@@ -576,17 +639,29 @@ impl PolyRes {
             bytemuck::cast_slice(&self.sim_params),
         );
 
-        let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
-            device,
-            &self.sim_params,
-            &self.sim_param_buffer,
-            &poly.lens_rt_data,
-            &poly.lens_rt_buffer,
-            self.num_dots,
+        queue.write_buffer(
+            &self.pos_params_buffer,
+            0,
+            bytemuck::cast_slice(&self.pos_params),
         );
-        self.compute_pipeline = compute_pipeline;
-        self.compute_bind_group = compute_bind_group;
-        self.dots_buffer = dots_buffer;
+
+        if update_size {
+            let (compute_pipeline, compute_bind_group, pos_bind_group, dots_buffer) =
+                Self::raytrace_shader(
+                    device,
+                    &self.sim_params,
+                    &self.sim_param_buffer,
+                    &poly.lens_rt_data,
+                    &poly.lens_rt_buffer,
+                    &self.pos_params,
+                    &self.pos_params_buffer,
+                    self.num_dots,
+                );
+            self.compute_pipeline = compute_pipeline;
+            self.compute_bind_group = compute_bind_group;
+            self.pos_bind_group = pos_bind_group;
+            self.dots_buffer = dots_buffer;
+        }
         drop(poly);
 
         let conversion_bind_group_layout =
@@ -731,17 +806,20 @@ impl Scene for PolyRes {
             print!("reloading compute shader! ");
             let now = Instant::now();
             let poly_unlocked = self.poly.lock().unwrap();
-            let (pipeline, bind_group, dots_buffer) = Self::raytrace_shader(
+            let (pipeline, bind_group, pos_bind_group, dots_buffer) = Self::raytrace_shader(
                 device,
                 &self.sim_params,
                 &self.sim_param_buffer,
                 &poly_unlocked.lens_rt_data,
                 &poly_unlocked.lens_rt_buffer,
+                &self.pos_params,
+                &self.pos_params_buffer,
                 self.num_dots,
             );
             drop(poly_unlocked);
             self.compute_pipeline = pipeline;
             self.compute_bind_group = bind_group;
+            self.pos_bind_group = pos_bind_group;
             self.dots_buffer = dots_buffer;
             println!("took {:?}.", now.elapsed());
         }
