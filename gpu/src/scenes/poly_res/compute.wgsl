@@ -1,9 +1,12 @@
+/// one Ray with origin, direction, and strength
 struct Ray {
   o: vec3<f32>;
   d: vec3<f32>;
   strength: f32;
 };
 
+/// one Lens Element 
+/// - one optical interface between glass and air
 struct Element {
   radius: f32;
   glass: f32;
@@ -15,6 +18,7 @@ struct Element {
 [[block]]
 struct SimParams {
   opacity: f32;
+  /// scaled for high dpi screens
   width_scaled: f32;
   height_scaled: f32;
   width: f32;
@@ -24,8 +28,11 @@ struct SimParams {
 };
 
 [[block]]
+// static parameters for positions
 struct PosParams {
+  // the Ray to be modified as a base for ray tracing
   init: Ray;
+  // position of the sensor in the optical plane
   sensor: f32;
 };
 
@@ -35,6 +42,7 @@ struct Rays {
 };
 
 [[block]]
+/// all the Elements of the Lens under test
 struct Elements {
   el : [[stride(20)]] array<Element>;
 };
@@ -45,12 +53,15 @@ struct Elements {
 
 [[group(1), binding(0)]] var<uniform> posParams : PosParams;
 
+/// calculate the fresnel term for an intersection
 fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
   let s = 0.5 * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2))) * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2)));
   let p = 0.5 * ((n1 * cos(t2) - n2 * cos(t1)) / (n1 * cos(t2) + n2 * cos(t1))) * ((n1 * cos(t2) - n2 * cos(t1)) / (n1 * cos(t2) + n2 * cos(t1)));
   return s + p;
 }
 
+/// the main ray tracing function - propagates a Ray to the given Element and
+/// returns a new Ray at that intersection in the direction after the Element
 fn propagate_element(
     self: Ray,
     radius: f32,
@@ -63,6 +74,7 @@ fn propagate_element(
     var ray = self;
     ray.d = normalize(ray.d);
     var intersection: vec3<f32>;
+    // calculate the intersection point
     if (cylindrical) {
         // cylindrical: x is not affected by curvature
 
@@ -113,6 +125,7 @@ fn propagate_element(
     ray.o = intersection;
 
     var normal: vec3<f32>;
+    // calculate the normal at the intersection
     if (cylindrical) {
         var cy: f32;
         if (entry) {
@@ -149,6 +162,7 @@ fn propagate_element(
         }
     };
 
+    // calculate the new direction of the Ray
     if (reflect) {
         let d_in = ray.d;
 
@@ -241,6 +255,7 @@ fn reflect_ray(self: Ray, element: Element) -> Ray {
     );
 }
 
+// intersect a ray with the sensor / any plane on the optical axis
 fn intersect_ray(self: Ray, plane: f32) -> Ray {
     let diff = plane - self.o.z;
     let num_z = diff / self.d.z;
@@ -257,8 +272,9 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let draw_mode = u32(params.draw_mode);//u32(1);
   let which_ghost = u32(params.which_ghost);//u32(1);
 
+  // calculate the number of dots for a given input ray
   var num_segments = u32((draw_mode & u32(2)) > u32(0));// if normal drawing
-  if ((draw_mode & u32(1)) > u32(0)) {
+  if ((draw_mode & u32(1)) > u32(0)) { // if ghost drawing
     var ghost_num = u32(0);
     for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
         for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
@@ -269,31 +285,38 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         }
     }
   }
-  // num_segments = u32(4);
-//   let num_segments = arrayLength(&elements.el) * u32(2) + u32(2);
+  // the total number of possible shader executions
   let total = arrayLength(&rays.rays) / num_segments + u32(1);
   let index = global_invocation_id.x;
-  if (index >= total) {
+  if (index >= total) { // if we don't fit in the buffer - return early
     return;
   }
 
   let num_rays = total;
   let ray_num = index;
+
+  // how much to move the rays by to sample
   let width = 1.0;
 
+  // we need the sqrt to scale the movement in each direction by
   let sqrt_num = u32(sqrt(f32(num_rays)));
   let ray_num_x = f32(ray_num / sqrt_num);
   let ray_num_y = f32(ray_num % sqrt_num);
 
+  // how many dots have we added to the buffer
   var counter = u32(0);
   if ((draw_mode & u32(1)) > u32(0)) {
+    // which ghost are we on
     var ghost_num = u32(0);
+    // iterate through all combinations of Elements to draw the ghosts
     for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
         for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
             ghost_num = ghost_num + u32(1);
+            // if we want to draw this ghost or we want to draw all ghosts
             if (ghost_num == which_ghost || which_ghost == u32(0)) {
                 // make new ray
                 var dir = posParams.init.d;
+                // modify both directions according to our index
                 dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
                 dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
                 // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
@@ -338,24 +361,21 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         }
     }
   }
+  // if we want to draw normally
   if ((draw_mode & u32(2)) > u32(0)) {
     var pos = posParams.init.o;
     // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
     pos.x = pos.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
     pos.y = pos.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
     var ray = Ray(pos, posParams.init.d, 1.0);
+    // iterate through all Elements and propagate the Ray through
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];
         ray = propagate(ray, element);
     }
-    // ray.o = ray.o + ray.d * 100.;
-    // rays.rays[0] = ray;
+    // intersect the ray with the sensor
     ray = intersect_ray(ray, posParams.sensor);
+    // save the Ray in the current buffer position
     rays.rays[ray_num * num_segments + counter] = ray;
   }
-
-//   var pos = posParams.init.o;
-//   pos.x = pos.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
-//   var ray = Ray(pos, posParams.init.d, 1.0);
-//   rays.rays[ray_num] = ray;
 }
