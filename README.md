@@ -5,3 +5,6 @@ This uses the [polynomial_optics](https://github.com/luksab/polyflare/tree/maste
 Polynomial_optics also contains the CPU code for raytracing though the lens system and fitting a dense polynomial to it and selecting a sparse one from that.
 
 All the GPU code is in the [gpu crate](https://github.com/luksab/polyflare/tree/master/gpu).
+
+## Example output
+![example](./screenshot.PNG)
