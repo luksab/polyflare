@@ -39,6 +39,8 @@ pub struct Glass {
     pub ior: f64,
     /// coating - modifies wavelength
     pub coating: (),
+    pub entry: bool,
+    pub spherical: bool,
 }
 
 /// # One element in a lens system
@@ -68,10 +70,14 @@ pub struct Glass {
 pub struct Element {
     /// One optical interface
     pub radius: f64,
-    pub glass: Glass,
     pub position: f64,
-    pub entry: bool,
-    pub spherical: bool,
+    pub properties: Properties,
+}
+
+#[derive(Debug)]
+pub enum Properties {
+    Glass(Glass),
+    Aperture(u32),
 }
 
 impl Ray {
@@ -250,27 +256,33 @@ impl Ray {
     /// propagate a ray through an element
     ///
     pub fn propagate(&mut self, element: &Element) {
-        self.propagate_element(
-            &element.radius,
-            &element.glass,
-            element.position,
-            false,
-            element.entry,
-            !element.spherical,
-        );
+        match element.properties {
+            Properties::Glass(glass) => self.propagate_element(
+                &element.radius,
+                &glass,
+                element.position,
+                false,
+                glass.entry,
+                !glass.entry,
+            ),
+            Properties::Aperture(properties) => todo!(),
+        };
     }
 
     /// reflect a Ray from an element
     ///
     pub fn reflect(&mut self, element: &Element) {
-        self.propagate_element(
-            &element.radius,
-            &element.glass,
-            element.position,
-            true,
-            element.entry,
-            !element.spherical,
-        );
+        match element.properties {
+            Properties::Glass(glass) => self.propagate_element(
+                &element.radius,
+                &glass,
+                element.position,
+                true,
+                glass.entry,
+                !glass.entry,
+            ),
+            Properties::Aperture(properties) => todo!(),
+        };
     }
 }
 
@@ -298,13 +310,17 @@ impl Lens {
         let mut elements = vec![];
 
         for element in &self.elements {
-            match element.entry {
-                true => elements.push((element.position + element.radius) as f32),
-                false => elements.push((element.position - element.radius) as f32),
+            match element.properties {
+                Properties::Glass(glass) => {
+                    match glass.entry {
+                        true => elements.push((element.position + element.radius) as f32),
+                        false => elements.push((element.position - element.radius) as f32),
+                    }
+                    elements.push(element.radius as f32);
+                }
+                Properties::Aperture(aperture) => elements.push(element.position as f32), //TODO: render Aperture
             }
-            elements.push(element.radius as f32);
         }
-
         elements
     }
 
@@ -329,11 +345,22 @@ impl Lens {
         let mut elements = vec![];
 
         for element in &self.elements {
-            elements.push(element.radius as f32);
-            elements.push(element.glass.ior as f32);
-            elements.push(element.position as f32);
-            elements.push(element.entry as i32 as f32);
-            elements.push(element.spherical as i32 as f32);
+            match element.properties {
+                Properties::Glass(glass) => {
+                    elements.push(element.radius as f32);
+                    elements.push(glass.ior as f32);
+                    elements.push(element.position as f32);
+                    elements.push(glass.entry as i32 as f32);
+                    elements.push(glass.spherical as i32 as f32);
+                }
+                Properties::Aperture(aperture) => {
+                    elements.push(element.radius as f32);
+                    elements.push(aperture as f32);
+                    elements.push(element.position as f32);
+                    elements.push(2. as f32);
+                    elements.push(2. as f32);
+                }
+            }
         }
 
         elements

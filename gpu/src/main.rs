@@ -1,6 +1,6 @@
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
-use polynomial_optics::Element;
+use polynomial_optics::{Element, Glass, Properties};
 use std::rc::Rc;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
@@ -67,12 +67,9 @@ fn main() {
     ))));
     state.scenes.push(poly_res.clone());
 
-    let glass = polynomial_optics::Glass {
-        ior: 1.5,
-        coating: (),
-    };
     // r1, d1, r2, distance to next lens
-    let mut lens_ui: Vec<(f32, f32, f32, f32)> = vec![(3., 0., 3., 3.), (3., 3., 3., 3.)];
+    let mut lens_ui: Vec<(f32, f32, f32, f32, bool)> =
+        vec![(3., 0., 3., 3., true), (3., 3., 3., 3., true)];
     // init lens
     {
         let mut poly = poly_optics.lock().unwrap();
@@ -80,21 +77,35 @@ fn main() {
         let mut dst: f32 = -5.;
         for element in &lens_ui {
             dst += element.1;
-            elements.push(Element {
-                radius: element.0 as f64,
-                glass,
-                position: dst as f64,
-                entry: true,
-                spherical: true,
-            });
-            dst += element.3;
-            elements.push(Element {
-                radius: element.2 as f64,
-                glass,
-                position: dst as f64,
-                entry: false,
-                spherical: true,
-            });
+            if element.4 {
+                elements.push(Element {
+                    radius: element.0 as f64,
+                    properties: Properties::Glass(Glass {
+                        ior: 1.5,
+                        coating: (),
+                        entry: true,
+                        spherical: true,
+                    }),
+                    position: dst as f64,
+                });
+                dst += element.3;
+                elements.push(Element {
+                    radius: element.2 as f64,
+                    properties: Properties::Glass(Glass {
+                        ior: 1.5,
+                        coating: (),
+                        entry: false,
+                        spherical: true,
+                    }),
+                    position: dst as f64,
+                });
+            } else {
+                elements.push(Element {
+                    radius: element.0 as f64,
+                    properties: Properties::Aperture(element.1 as u32),
+                    position: dst as f64,
+                });
+            }
         }
         poly.lens.elements = elements;
         poly.update_buffers(&state.queue, &state.device, true);
@@ -380,6 +391,7 @@ fn main() {
                 ));
 
                 let mut update_lens = update_rays;
+                let mut update_size = false;
                 imgui::Window::new("Lens")
                     .size([400.0, 250.0], Condition::FirstUseEver)
                     .position([100.0, 100.0], Condition::FirstUseEver)
@@ -405,6 +417,9 @@ fn main() {
                                 .build(&ui, &mut element.2);
                             update_lens |= Slider::new(format!("d_next##{}", i), -3., 6.)
                                 .build(&ui, &mut element.3);
+
+                            update_size |= ui.checkbox(format!("button##{}", i), &mut element.4);
+                            update_lens |= update_size;
                             ui.separator();
                         }
                         if Slider::new("sensor distance", 0., 20.)
@@ -423,30 +438,44 @@ fn main() {
                     let mut dst: f32 = -5.;
                     for element in &lens_ui {
                         dst += element.1;
-                        elements.push(Element {
-                            radius: element.0 as f64,
-                            glass,
-                            position: dst as f64,
-                            entry: true,
-                            spherical: true,
-                        });
-                        dst += element.3;
-                        elements.push(Element {
-                            radius: element.2 as f64,
-                            glass,
-                            position: dst as f64,
-                            entry: false,
-                            spherical: true,
-                        });
+                        if element.4 {
+                            elements.push(Element {
+                                radius: element.0 as f64,
+                                properties: Properties::Glass(Glass {
+                                    ior: 1.5,
+                                    coating: (),
+                                    entry: true,
+                                    spherical: true,
+                                }),
+                                position: dst as f64,
+                            });
+                            dst += element.3;
+                            elements.push(Element {
+                                radius: element.2 as f64,
+                                properties: Properties::Glass(Glass {
+                                    ior: 1.5,
+                                    coating: (),
+                                    entry: false,
+                                    spherical: true,
+                                }),
+                                position: dst as f64,
+                            });
+                        } else {
+                            elements.push(Element {
+                                radius: element.0 as f64,
+                                properties: Properties::Aperture((element.2 * 5.) as u32),
+                                position: dst as f64,
+                            });
+                        }
                     }
                     poly.lens.elements = elements;
-                    poly.update_buffers(&state.queue, &state.device, false);
+                    poly.update_buffers(&state.queue, &state.device, update_size);
                     // we don't need poly for the rest of this function
                     drop(poly);
                     poly_res.update_buffers(&state.queue, &state.device, true)
                 } else if update_poly {
                     drop(poly);
-                    poly_res.update_buffers(&state.queue, &state.device, false)
+                    poly_res.update_buffers(&state.queue, &state.device, update_size)
                 }
 
                 // Render PolyRes

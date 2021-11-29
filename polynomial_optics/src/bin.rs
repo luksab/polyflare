@@ -61,24 +61,24 @@ fn main() {
     let radius = 3.0;
     let lens_entry = Element {
         radius,
-        glass: Glass {
+        properties: Properties::Glass(Glass {
             ior: 1.5,
             coating: (),
-        },
+            entry: true,
+            spherical: true,
+        }),
         position: -2.0,
-        entry: true,
-        spherical: true,
     };
     let lens_exit_pos = 1.0;
     let lens_exit = Element {
         radius,
-        glass: Glass {
+        properties: Properties::Glass(Glass {
             ior: 1.5,
             coating: (),
-        },
+            entry: false,
+            spherical: true,
+        }),
         position: lens_exit_pos,
-        entry: false,
-        spherical: true,
     };
     line.width = 3.0;
     // lens entry

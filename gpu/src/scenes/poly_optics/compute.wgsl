@@ -7,8 +7,8 @@ struct Ray {
 struct Element {
   radius: f32;
   glass: f32;
-  position: f32;
-  entry: f32;// 0: false, 1: true
+  position: f32;// num_blades if aperture
+  entry: f32;// 0: false, 1: true, 2: aperture
   spherical: f32;// 0: false, 1: true
 };
 
@@ -218,18 +218,51 @@ fn propagate_element(
     return ray;
 }
 
+// intersect a ray with the sensor / any plane on the optical axis
+fn intersect_ray_to_ray(self: Ray, plane: f32) -> Ray {
+    let diff = plane - self.o.z;
+    let num_z = diff / self.d.z;
+
+    let intersect = self.o + self.d * num_z;
+    var ray = self;
+    ray.o = intersect;
+    return ray;
+}
+
+let tpi: f32 = 6.283185307179586;
+fn clip_ray_poly(self: Ray, pos: f32, num_edge: u32, size: f32) -> bool{
+    let ray = intersect_ray_to_ray(self, pos);
+    var clipped = false;
+    for (var i = u32(0); i < num_edge; i = i + u32(1)) {
+        let part = f32(i) * tpi / f32(num_edge);
+        let dir = vec2<f32>(cos(part), sin(part));
+
+        let dist = dot(dir, ray.o.xy);
+        clipped = clipped || (dist > size);
+    }
+    return clipped;
+}
+
 /// propagate a ray through an element
 ///
 fn propagate(self: Ray, element: Element) -> Ray {
-    return propagate_element(
-        self,
-        element.radius,
-        element.glass,
-        element.position,
-        false,
-        element.entry > 0.,
-        !(element.spherical > 0.),
-    );
+    if (element.entry > 1.) {
+        var ray = self;
+        // ray.strength = self.strength * f32(u32(clip_ray_poly(self, u32(element.position), element.radius)));
+        let pass = !clip_ray_poly(self, element.position, u32(element.glass), element.radius);
+        ray.strength = self.strength * f32(u32(pass));
+        return ray;
+    } else {
+        return propagate_element(
+            self,
+            element.radius,
+            element.glass,
+            element.position,
+            false,
+            element.entry > 0.,
+            !(element.spherical > 0.),
+        );
+    }
 }
 
 /// reflect a Ray from an element
