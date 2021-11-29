@@ -210,6 +210,11 @@ fn propagate_element(
                 a,
             ));
     }
+
+    if (!(ray.strength > 0.)) {
+        ray.strength = 0.;
+    }
+
     return ray;
 }
 

@@ -363,11 +363,12 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   }
   // if we want to draw normally
   if ((draw_mode & u32(2)) > u32(0)) {
-    var pos = posParams.init.o;
-    // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-    pos.x = pos.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
-    pos.y = pos.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
-    var ray = Ray(pos, posParams.init.d, 1.0);
+    // make new ray
+    var dir = posParams.init.d;
+    // modify both directions according to our index
+    dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
+    dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+    var ray = Ray(posParams.init.o, dir, 1.0);
     // iterate through all Elements and propagate the Ray through
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];

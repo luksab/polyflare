@@ -1,3 +1,10 @@
+/// one Ray with origin, direction, and strength
+struct Ray {
+  o: vec3<f32>;
+  d: vec3<f32>;
+  strength: f32;
+};
+
 struct Element {
   position1: f32;
   radius1  : f32;
@@ -27,8 +34,19 @@ struct Elements {
   el : [[stride(16)]] array<Element>;
 };
 
+[[block]]
+// static parameters for positions
+struct PosParams {
+  // the Ray to be modified as a base for ray tracing
+  init: Ray;
+  // position of the sensor in the optical plane
+  sensor: f32;
+};
+
 [[group(0), binding(2)]] var<uniform> params : SimParams;
 [[group(0), binding(3)]] var<storage, read> elements : Elements;
+
+[[group(1), binding(0)]] var<uniform> posParams : PosParams;
 
 [[stage(vertex)]]
 fn main(
@@ -83,6 +101,11 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
                 bg = vec4<f32>(0.3,0.3,0.4,1.0);
             }
         }
+    }
+
+    let plane = posParams.sensor / 4.;//(posParams.sensor + 1.8) / 4.5;
+    if (plane > pos_lens.x && plane < pos_lens.x + .01){
+        bg = vec4<f32>(0.3,0.3,0.4,1.0);
     }
 
     let color = bg * (1.0 - sample.a) + sample;

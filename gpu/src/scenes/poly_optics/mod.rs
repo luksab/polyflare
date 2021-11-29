@@ -62,7 +62,7 @@ pub struct PolyOptics {
     /// Which ghost to render
     pub which_ghost: u32,
     /// Normal drawing: `draw_mode & 1`
-    /// 
+    ///
     /// Ghost drawing: `draw_mode & 2`
     pub draw_mode: u32,
 
@@ -80,6 +80,8 @@ pub struct PolyOptics {
 }
 
 impl PolyOptics {
+    /// (re)load ray drawing shader.
+    /// It will read the shader code from disk
     fn shader_draw(
         device: &wgpu::Device,
         sim_params: &[f32; 7],
@@ -198,12 +200,18 @@ impl PolyOptics {
         (boid_render_pipeline, render_bind_group)
     }
 
+    /// (re)load ray color space conversion shader.
+    /// It will read the shader code from disk
+    ///
+    /// This shader will also draw the reprensation lens
     fn convert_shader(
         device: &wgpu::Device,
         sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         lens_data: &Vec<f32>,
         lens_buffer: &Buffer,
+        pos_params: &[f32; 12],
+        pos_params_buffer: &Buffer,
         format: &TextureFormat,
         high_color_tex: &Texture,
     ) -> (RenderPipeline, BindGroup) {
@@ -279,10 +287,27 @@ impl PolyOptics {
             ],
             label: Some("texture_bind_group"),
         });
+
+        let pos_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(
+                            (pos_params.len() * mem::size_of::<u32>()) as _,
+                        ),
+                    },
+                    count: None,
+                }],
+                label: None,
+            });
         let conversion_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Conversion Pipeline Layout"),
-                bind_group_layouts: &[&conversion_bind_group_layout],
+                bind_group_layouts: &[&conversion_bind_group_layout, &pos_bind_group_layout],
                 push_constant_ranges: &[],
             });
         let conversion_render_pipeline = {
@@ -349,6 +374,8 @@ impl PolyOptics {
         (conversion_render_pipeline, conversion_bind_group)
     }
 
+    /// (re)load ray tracing shader.
+    /// It will read the shader code from disk
     fn raytrace_shader(
         device: &wgpu::Device,
         sim_params: &[f32; 7],
@@ -413,7 +440,7 @@ impl PolyOptics {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
+                    visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -567,16 +594,6 @@ impl PolyOptics {
                 | wgpu::BufferUsages::STORAGE,
         });
 
-        let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
-            device,
-            &sim_params,
-            &sim_param_buffer,
-            &lens_data,
-            &lens_buffer,
-            &config.format,
-            &high_color_tex,
-        );
-
         let center_pos = Vector3 {
             x: 0.0,
             y: 0.0,
@@ -588,8 +605,6 @@ impl PolyOptics {
             z: 1.0,
         }
         .normalize();
-
-        let num_rays = 2;
         let pos_params = [
             center_pos.x as f32,
             center_pos.y as f32,
@@ -609,6 +624,20 @@ impl PolyOptics {
             contents: bytemuck::cast_slice(&pos_params),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
+
+        let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
+            device,
+            &sim_params,
+            &sim_param_buffer,
+            &lens_data,
+            &lens_buffer,
+            &pos_params,
+            &pos_params_buffer,
+            &config.format,
+            &high_color_tex,
+        );
+
+        let num_rays = 2;
         let (compute_pipeline, compute_bind_group, pos_bind_group, rays_buffer) =
             Self::raytrace_shader(
                 device,
@@ -808,6 +837,8 @@ impl PolyOptics {
                 &self.sim_param_buffer,
                 &lens_data,
                 &lens_buffer,
+                &self.pos_params,
+                &self.pos_params_buffer,
                 &self.conf_format,
                 &self.high_color_tex,
             );
@@ -981,6 +1012,8 @@ impl Scene for PolyOptics {
                 &self.sim_param_buffer,
                 &lens_data,
                 &lens_buffer,
+                &self.pos_params,
+                &self.pos_params_buffer,
                 &self.conf_format,
                 &self.high_color_tex,
             );
@@ -1100,7 +1133,7 @@ impl Scene for PolyOptics {
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             });
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
+                label: Some("Poly_optics conversion Encoder"),
             });
 
             // create render pass descriptor and its color attachments
@@ -1118,7 +1151,7 @@ impl Scene for PolyOptics {
                 },
             }];
             let render_pass_descriptor = wgpu::RenderPassDescriptor {
-                label: None,
+                label: Some("poly_optics conversion"),
                 color_attachments: &color_attachments,
                 depth_stencil_attachment: None,
             };
@@ -1129,6 +1162,7 @@ impl Scene for PolyOptics {
                 let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
                 rpass.set_pipeline(&self.conversion_render_pipeline);
                 rpass.set_bind_group(0, &self.conversion_bind_group, &[]);
+                rpass.set_bind_group(1, &self.pos_bind_group, &[]);
                 // the three instance-local vertices
                 rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
                 //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));

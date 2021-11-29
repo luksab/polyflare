@@ -407,7 +407,9 @@ fn main() {
                                 .build(&ui, &mut element.3);
                             ui.separator();
                         }
-                        if Slider::new("sensor distance", 0., 20.).build(&ui, &mut optics_params.sensor_dist) {
+                        if Slider::new("sensor distance", 0., 20.)
+                            .build(&ui, &mut optics_params.sensor_dist)
+                        {
                             poly_res.pos_params[8] = optics_params.sensor_dist;
                             poly_res.write_buffer(&state.queue);
 
@@ -441,7 +443,7 @@ fn main() {
                     poly.update_buffers(&state.queue, &state.device, false);
                     // we don't need poly for the rest of this function
                     drop(poly);
-                    poly_res.update_buffers(&state.queue, &state.device, false)
+                    poly_res.update_buffers(&state.queue, &state.device, true)
                 } else if update_poly {
                     drop(poly);
                     poly_res.update_buffers(&state.queue, &state.device, false)
@@ -583,9 +585,7 @@ fn main() {
                             Some(&renderer.textures.get(depth_texture_id).unwrap().view()),
                             0,
                         ) {
-                            Ok(_) => {
-                                frames_since_last_sec += 1;
-                            }
+                            Ok(_) => {}
                             // Reconfigure the surface if lost
                             Err(wgpu::SurfaceError::Lost) => {
                                 state.resize(state.size, None);
