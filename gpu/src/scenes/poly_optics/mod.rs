@@ -700,7 +700,7 @@ impl PolyOptics {
         );
     }
 
-    pub async fn update_rays(&mut self, device: &wgpu::Device, queue: &Queue, update_size: bool) {
+    pub fn update_rays(&mut self, device: &wgpu::Device, queue: &Queue, update_size: bool) {
         if update_size {
             println!("update: {}", self.num_rays);
             let (compute_pipeline, compute_bind_group, pos_bind_group, rays_buffer) =
@@ -757,7 +757,7 @@ impl PolyOptics {
             let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
             device.poll(wgpu::Maintain::Wait);
 
-            if let Ok(()) = buffer_future.await {
+            if let Ok(()) = pollster::block_on(buffer_future) {
                 let data = buffer_slice.get_mapped_range();
 
                 let vertices = unsafe { data.align_to::<f32>().1 };

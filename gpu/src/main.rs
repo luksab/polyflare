@@ -19,13 +19,50 @@ use state::State;
 
 mod scenes;
 
+fn get_lens(lens_ui: &Vec<(f32, f32, f32, f32, bool)>) -> Vec<polynomial_optics::Element> {
+    let mut elements: Vec<Element> = vec![];
+    let mut dst: f32 = -5.;
+    for element in lens_ui {
+        dst += element.1;
+        if element.4 {
+            elements.push(Element {
+                radius: element.0 as f64,
+                properties: Properties::Glass(Glass {
+                    ior: 1.5,
+                    coating: (),
+                    entry: true,
+                    spherical: true,
+                }),
+                position: dst as f64,
+            });
+            dst += element.3;
+            elements.push(Element {
+                radius: element.2 as f64,
+                properties: Properties::Glass(Glass {
+                    ior: 1.5,
+                    coating: (),
+                    entry: false,
+                    spherical: true,
+                }),
+                position: dst as f64,
+            });
+        } else {
+            elements.push(Element {
+                radius: element.0 as f64,
+                properties: Properties::Aperture(element.1 as u32),
+                position: dst as f64,
+            });
+        }
+    }
+    elements
+}
 /// Parameter for the GUI
 struct Parms {
     ray_exponent: f64,
     dots_exponent: f64,
     draw: u32,
-    pos: [f64; 3],
-    dir: [f64; 3],
+    pos: [f32; 3],
+    dir: [f32; 3],
     opacity: f32,
     sensor_dist: f32,
 }
@@ -48,12 +85,6 @@ fn main() {
     };
 
     // create scenes and push into state
-    let game_of_life = Rc::new(Mutex::new(pollster::block_on(scenes::GameOfLife::new(
-        &state.device,
-        &state.config,
-    ))));
-    state.scenes.push(game_of_life.clone());
-
     let poly_optics = Rc::new(Mutex::new(pollster::block_on(scenes::PolyOptics::new(
         &state.device,
         &state.config,
@@ -67,57 +98,15 @@ fn main() {
     ))));
     state.scenes.push(poly_res.clone());
 
-    // r1, d1, r2, distance to next lens
+    // r1, d1, r2, distance to next lens, is_glass
     let mut lens_ui: Vec<(f32, f32, f32, f32, bool)> =
         vec![(3., 0., 3., 3., true), (3., 3., 3., 3., true)];
     // init lens
     {
         let mut poly = poly_optics.lock().unwrap();
-        let mut elements: Vec<Element> = vec![];
-        let mut dst: f32 = -5.;
-        for element in &lens_ui {
-            dst += element.1;
-            if element.4 {
-                elements.push(Element {
-                    radius: element.0 as f64,
-                    properties: Properties::Glass(Glass {
-                        ior: 1.5,
-                        coating: (),
-                        entry: true,
-                        spherical: true,
-                    }),
-                    position: dst as f64,
-                });
-                dst += element.3;
-                elements.push(Element {
-                    radius: element.2 as f64,
-                    properties: Properties::Glass(Glass {
-                        ior: 1.5,
-                        coating: (),
-                        entry: false,
-                        spherical: true,
-                    }),
-                    position: dst as f64,
-                });
-            } else {
-                elements.push(Element {
-                    radius: element.0 as f64,
-                    properties: Properties::Aperture(element.1 as u32),
-                    position: dst as f64,
-                });
-            }
-        }
-        poly.lens.elements = elements;
+        poly.lens.elements = get_lens(&lens_ui);
         poly.update_buffers(&state.queue, &state.device, true);
     }
-
-    // let demo = pollster::block_on(scenes::Demo3d::new(
-    //     &state.device,
-    //     &state.queue,
-    //     &state.config,
-    // ));
-
-    // state.scenes.push(Box::new(demo));
 
     let mut last_render_time = std::time::Instant::now();
     let mut last_sec = SystemTime::now();
@@ -171,23 +160,6 @@ fn main() {
 
     let mut window_render_size: [f32; 2] = [640.0, 480.0];
 
-    // Stores a texture for displaying with imgui::Image(),
-    // also as a texture view for rendering into it
-    let window_texture_id = {
-        let texture_config = TextureConfig {
-            size: wgpu::Extent3d {
-                width: window_render_size[0] as u32,
-                height: window_render_size[1] as u32,
-                ..Default::default()
-            },
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            ..Default::default()
-        };
-
-        let texture = Texture::new(&state.device, &renderer, texture_config);
-        renderer.textures.insert(texture)
-    };
-
     let res_window_texture_id = {
         let texture_config = TextureConfig {
             size: wgpu::Extent3d {
@@ -203,31 +175,12 @@ fn main() {
         renderer.textures.insert(texture)
     };
 
-    let depth_texture_id = {
-        let depth_texture = Texture::new(
-            &state.device,
-            &renderer,
-            TextureConfig {
-                size: wgpu::Extent3d {
-                    width: window_render_size[0] as u32,
-                    height: window_render_size[1] as u32,
-                    ..Default::default()
-                },
-                usage: wgpu::TextureUsages::TEXTURE_BINDING,
-                format: Some(wgpu::TextureFormat::Depth32Float),
-                ..Default::default()
-            },
-        );
-        renderer.textures.insert(depth_texture)
-    };
-
     let mut first_frame = true;
 
     event_loop.run(move |event, _, control_flow| {
         if last_sec.elapsed().unwrap().as_secs() > 1 {
             last_sec = SystemTime::now();
             fps = frames_since_last_sec;
-            // println!("fps: {}", frames_since_last_sec);
             frames_since_last_sec = 0;
         }
 
@@ -303,7 +256,7 @@ fn main() {
                 );
 
                 // Render demo3d
-                match state.render(&view, Some(&depth_texture.view), 1) {
+                match state.render(&view, Some(&depth_texture.view), 0) {
                     Ok(_) => {
                         frames_since_last_sec += 1;
                     }
@@ -367,28 +320,16 @@ fn main() {
                 poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(optics_params.dots_exponent) as u32;
                 poly_res.num_dots = 10.0_f64.powf(optics_params.dots_exponent) as u32;
-                poly_res.pos_params[0] = optics_params.pos[0] as f32;
-                poly_res.pos_params[1] = optics_params.pos[1] as f32;
-                poly_res.pos_params[2] = optics_params.pos[2] as f32;
-                poly_res.pos_params[4] = optics_params.dir[0] as f32;
-                poly_res.pos_params[5] = optics_params.dir[1] as f32;
-                poly_res.pos_params[6] = optics_params.dir[2] as f32;
+                poly_res.pos_params[0..3].copy_from_slice(&optics_params.pos[0..3]);
+                poly_res.pos_params[4..7].copy_from_slice(&optics_params.dir[0..3]);
 
-                poly.pos_params[0] = optics_params.pos[0] as f32;
-                poly.pos_params[1] = optics_params.pos[1] as f32;
-                poly.pos_params[2] = optics_params.pos[2] as f32;
-                poly.pos_params[4] = optics_params.dir[0] as f32;
-                poly.pos_params[5] = optics_params.dir[1] as f32;
-                poly.pos_params[6] = optics_params.dir[2] as f32;
+                poly.pos_params[0..3].copy_from_slice(&optics_params.pos[0..3]);
+                poly.pos_params[4..7].copy_from_slice(&optics_params.dir[0..3]);
+
                 poly.write_buffer(&state.queue);
 
-                pollster::block_on(poly.update_rays(&state.device, &state.queue, update_rays));
-                pollster::block_on(poly_res.update_rays(
-                    &poly,
-                    &state.device,
-                    &state.queue,
-                    update_rays,
-                ));
+                poly.update_rays(&state.device, &state.queue, update_rays);
+                poly_res.update_rays(&poly, &state.device, &state.queue, update_rays);
 
                 let mut update_lens = update_rays;
                 let mut update_size = false;
@@ -396,9 +337,6 @@ fn main() {
                     .size([400.0, 250.0], Condition::FirstUseEver)
                     .position([100.0, 100.0], Condition::FirstUseEver)
                     .build(&ui, || {
-                        // ui.text(format!("Framerate: {:?}", fps));
-                        // Slider::new("first radius", 0., 5.)
-                        //     .build(&ui, &mut poly.lens.elements[0].);
                         let num_ghosts =
                             (poly.lens.elements.len() * poly.lens.elements.len()) as u32;
                         update_lens |= Slider::new("which ghost", 0, num_ghosts)
@@ -434,41 +372,7 @@ fn main() {
                     });
 
                 if update_lens {
-                    let mut elements: Vec<Element> = vec![];
-                    let mut dst: f32 = -5.;
-                    for element in &lens_ui {
-                        dst += element.1;
-                        if element.4 {
-                            elements.push(Element {
-                                radius: element.0 as f64,
-                                properties: Properties::Glass(Glass {
-                                    ior: 1.5,
-                                    coating: (),
-                                    entry: true,
-                                    spherical: true,
-                                }),
-                                position: dst as f64,
-                            });
-                            dst += element.3;
-                            elements.push(Element {
-                                radius: element.2 as f64,
-                                properties: Properties::Glass(Glass {
-                                    ior: 1.5,
-                                    coating: (),
-                                    entry: false,
-                                    spherical: true,
-                                }),
-                                position: dst as f64,
-                            });
-                        } else {
-                            elements.push(Element {
-                                radius: element.0 as f64,
-                                properties: Properties::Aperture((element.2 * 5.) as u32),
-                                position: dst as f64,
-                            });
-                        }
-                    }
-                    poly.lens.elements = elements;
+                    poly.lens.elements = get_lens(&lens_ui);
                     poly.update_buffers(&state.queue, &state.device, update_size);
                     // we don't need poly for the rest of this function
                     drop(poly);
@@ -486,15 +390,6 @@ fn main() {
                         .size([512.0, 512.0], Condition::FirstUseEver)
                         .position([700., 50.], Condition::FirstUseEver)
                         .build(&ui, || {
-                            // new_example_size = Some(ui.content_region_avail());
-                            // ui.text("Hello world!");
-                            // ui.text("This...is...imgui-rs on WGPU!");
-                            // ui.separator();
-                            // let mouse_pos = ui.io().mouse_pos;
-                            // ui.text(format!(
-                            //     "Mouse Position: ({:.1},{:.1})",
-                            //     mouse_pos[0], mouse_pos[1]
-                            // ));
                             new_window_size = Some(ui.content_region_avail());
                             imgui::Image::new(res_window_texture_id, new_window_size.unwrap())
                                 .build(&ui);
@@ -532,87 +427,7 @@ fn main() {
                         match state.render(
                             &renderer.textures.get(res_window_texture_id).unwrap().view(),
                             None,
-                            2,
-                        ) {
-                            Ok(_) => {}
-                            // Reconfigure the surface if lost
-                            Err(wgpu::SurfaceError::Lost) => {
-                                state.resize(state.size, None);
-                            }
-                            // The system is out of memory, we should probably quit
-                            Err(wgpu::SurfaceError::OutOfMemory) => {
-                                *control_flow = ControlFlow::Exit
-                            }
-                            // All other errors (Outdated, Timeout) should be resolved by the next frame
-                            Err(e) => eprintln!("{:?}", e),
-                        }
-                    }
-                }
-
-                // Render GameOfLife
-                {
-                    // Store the new size of Image() or None to indicate that the window is collapsed.
-                    let mut new_window_size: Option<[f32; 2]> = None;
-                    imgui::Window::new("Hello World")
-                        .size([512.0, 512.0], Condition::FirstUseEver)
-                        .collapsed(true, Condition::FirstUseEver)
-                        .build(&ui, || {
-                            // new_example_size = Some(ui.content_region_avail());
-                            // ui.text("Hello world!");
-                            // ui.text("This...is...imgui-rs on WGPU!");
-                            // ui.separator();
-                            // let mouse_pos = ui.io().mouse_pos;
-                            // ui.text(format!(
-                            //     "Mouse Position: ({:.1},{:.1})",
-                            //     mouse_pos[0], mouse_pos[1]
-                            // ));
-                            new_window_size = Some(ui.content_region_avail());
-                            imgui::Image::new(window_texture_id, new_window_size.unwrap())
-                                .build(&ui);
-                        });
-
-                    if let Some(size) = new_window_size {
-                        // Resize render target, which is optional
-                        if size != window_render_size && size[0] >= 1.0 && size[1] >= 1.0 {
-                            window_render_size = size;
-                            let scale = &ui.io().display_framebuffer_scale;
-                            let texture_config = TextureConfig {
-                                size: Extent3d {
-                                    width: (window_render_size[0] * scale[0]) as u32,
-                                    height: (window_render_size[1] * scale[1]) as u32,
-                                    ..Default::default()
-                                },
-                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                                ..Default::default()
-                            };
-                            renderer.textures.replace(
-                                window_texture_id,
-                                Texture::new(&state.device, &renderer, texture_config),
-                            );
-                            let depth_texture = Texture::new(
-                                &state.device,
-                                &renderer,
-                                TextureConfig {
-                                    size: wgpu::Extent3d {
-                                        width: (window_render_size[0] * scale[0]) as u32,
-                                        height: (window_render_size[1] * scale[1]) as u32,
-                                        ..Default::default()
-                                    },
-                                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                                        | wgpu::TextureUsages::TEXTURE_BINDING,
-                                    format: Some(wgpu::TextureFormat::Depth32Float),
-                                    ..Default::default()
-                                },
-                            );
-                            renderer.textures.replace(depth_texture_id, depth_texture);
-                        }
-
-                        // Only render contents if the window is not collapsed
-                        match state.render(
-                            &renderer.textures.get(window_texture_id).unwrap().view(),
-                            Some(&renderer.textures.get(depth_texture_id).unwrap().view()),
-                            0,
+                            1,
                         ) {
                             Ok(_) => {}
                             // Reconfigure the surface if lost
@@ -645,8 +460,7 @@ fn main() {
                             view: &view,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Load, // Do not clear
-                                // load: wgpu::LoadOp::Clear(clear_color),
+                                load: wgpu::LoadOp::Load, // Do not draw over debug
                                 store: true,
                             },
                         }],

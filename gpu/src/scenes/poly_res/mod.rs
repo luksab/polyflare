@@ -534,7 +534,7 @@ impl PolyRes {
         );
     }
 
-    pub async fn update_rays(
+    pub fn update_rays(
         &mut self,
         optics: &poly_optics::PolyOptics,
         device: &wgpu::Device,
@@ -597,7 +597,7 @@ impl PolyRes {
             let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
             device.poll(wgpu::Maintain::Wait);
 
-            if let Ok(()) = buffer_future.await {
+            if let Ok(()) = pollster::block_on(buffer_future) {
                 let data = buffer_slice.get_mapped_range();
 
                 let vertices = unsafe { data.align_to::<f32>().1 };
