@@ -1,6 +1,3 @@
-use std::time::Instant;
-
-use cgmath::Vector3;
 use tiny_skia::*;
 
 mod line;
