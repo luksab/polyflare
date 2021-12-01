@@ -552,7 +552,7 @@ impl<
                             .sum::<N>()
                             / points
                                 .iter()
-                                .map(|(x, y, z, w, d)| {
+                                .map(|(x, y, z, w, _)| {
                                     (*x).upow(2 * i)
                                         * (*y).upow(2 * j)
                                         * (*z).upow(2 * k)
