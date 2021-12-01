@@ -33,6 +33,6 @@ fn main(
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   let s = in.strength * params.opacity;
-    return vec4<f32>(1.0, 1.0, 1.0, sqrt(in.strength) * params.opacity);
+    return vec4<f32>(1.0, 1.0, 1.0, in.strength * params.opacity);
     // return vec4<f32>(1.0, 1.0, 1.0, 0.0);
 }

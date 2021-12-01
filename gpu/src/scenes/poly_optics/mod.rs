@@ -664,7 +664,7 @@ impl PolyOptics {
 
             draw_mode: 2,
             num_rays,
-            which_ghost: 2,
+            which_ghost: 0,
             high_color_tex,
             conversion_render_pipeline,
             conversion_bind_group,

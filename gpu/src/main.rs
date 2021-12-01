@@ -8,9 +8,6 @@ use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-mod camera;
-mod instance;
-mod model;
 mod texture;
 
 mod scene;
@@ -18,6 +15,8 @@ mod state;
 use state::State;
 
 mod scenes;
+
+mod lens_state;
 
 fn get_lens(lens_ui: &Vec<(f32, f32, f32, f32, bool)>) -> Vec<polynomial_optics::Element> {
     let mut elements: Vec<Element> = vec![];
@@ -49,7 +48,7 @@ fn get_lens(lens_ui: &Vec<(f32, f32, f32, f32, bool)>) -> Vec<polynomial_optics:
         } else {
             elements.push(Element {
                 radius: element.0 as f64,
-                properties: Properties::Aperture(element.1 as u32),
+                properties: Properties::Aperture((element.2 * 10.) as u32),
                 position: dst as f64,
             });
         }
@@ -74,16 +73,6 @@ fn main() {
     // state saves all the scenes and manages them
     let mut state = pollster::block_on(State::new(&event_loop, wgpu::Backends::all()));
 
-    let mut optics_params = Parms {
-        ray_exponent: 2.7,
-        dots_exponent: 7.,
-        draw: 1,
-        pos: [0.0, 0.0, -7.0],
-        dir: [0.0, 0.1, 1.0],
-        opacity: 0.1,
-        sensor_dist: 10.,
-    };
-
     // create scenes and push into state
     let poly_optics = Rc::new(Mutex::new(pollster::block_on(scenes::PolyOptics::new(
         &state.device,
@@ -99,12 +88,11 @@ fn main() {
     state.scenes.push(poly_res.clone());
 
     // r1, d1, r2, distance to next lens, is_glass
-    let mut lens_ui: Vec<(f32, f32, f32, f32, bool)> =
-        vec![(3., 0., 3., 3., true), (3., 3., 3., 3., true)];
+    let mut lens_ui: lens_state::LensState = Default::default();
     // init lens
     {
         let mut poly = poly_optics.lock().unwrap();
-        poly.lens.elements = get_lens(&lens_ui);
+        poly.lens.elements = lens_ui.get_lens();
         poly.update_buffers(&state.queue, &state.device, true);
     }
 
@@ -158,13 +146,13 @@ fn main() {
 
     let mut last_cursor = None;
 
-    let mut window_render_size: [f32; 2] = [640.0, 480.0];
+    let mut poly_res_size: [f32; 2] = [640.0, 480.0];
 
     let res_window_texture_id = {
         let texture_config = TextureConfig {
             size: wgpu::Extent3d {
-                width: window_render_size[0] as u32,
-                height: window_render_size[1] as u32,
+                width: poly_res_size[0] as u32,
+                height: poly_res_size[1] as u32,
                 ..Default::default()
             },
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -268,118 +256,50 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
+                let (update_lens, update_sensor, update_size, mut update_ray_num) =
+                    lens_ui.build_ui(&ui);
+
+                update_ray_num |= first_frame;
+
                 let mut poly = poly_optics.lock().unwrap();
                 let mut poly_res = poly_res.lock().unwrap();
-                let mut update_poly = first_frame;
-                let mut update_rays = first_frame;
-                imgui::Window::new("Params")
-                    .size([400.0, 250.0], Condition::FirstUseEver)
-                    .position([600.0, 100.0], Condition::FirstUseEver)
-                    .build(&ui, || {
-                        ui.text(format!("Framerate: {:?}", fps));
-                        update_rays |= Slider::new("rays_exponent", 0., 6.5)
-                            .build(&ui, &mut optics_params.ray_exponent);
-                        ui.text(format!(
-                            "rays: {}",
-                            10.0_f64.powf(optics_params.ray_exponent) as u32
-                        ));
 
-                        update_rays |= Slider::new("dots_exponent", 0., 10.)
-                            .build(&ui, &mut optics_params.dots_exponent);
-                        ui.text(format!(
-                            "dots: {}",
-                            10.0_f64.powf(optics_params.dots_exponent) as u32
-                        ));
+                poly.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
+                // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                poly_res.pos_params[0..3].copy_from_slice(&lens_ui.pos[0..3]);
+                poly_res.pos_params[4..7].copy_from_slice(&lens_ui.dir[0..3]);
 
-                        if Slider::new("opacity", 0., 1.).build(&ui, &mut optics_params.opacity) {
-                            poly.sim_params[0] = optics_params.opacity.powf(3.);
-                            poly_res.sim_params[0] = optics_params.opacity.powf(3.);
-                            poly.write_buffer(&state.queue);
-                            poly_res.write_buffer(&state.queue);
-                        }
-
-                        update_rays |=
-                            ui.radio_button("render nothing", &mut optics_params.draw, 0)
-                                || ui.radio_button("render both", &mut optics_params.draw, 3)
-                                || ui.radio_button("render normal", &mut optics_params.draw, 2)
-                                || ui.radio_button("render ghosts", &mut optics_params.draw, 1);
-                        update_poly |= update_rays;
-                        poly.draw_mode = optics_params.draw;
-                        // ui.radio_button("num_rays", &mut optics_params.1, true);
-                        update_poly |= Drag::new("ray origin")
-                            .speed(0.01)
-                            .range(-10., 10.)
-                            .build_array(&ui, &mut optics_params.pos);
-
-                        update_poly |= Drag::new("ray direction")
-                            .speed(0.01)
-                            .range(-1., 1.)
-                            .build_array(&ui, &mut optics_params.dir);
-                    });
-
-                poly.num_rays = 10.0_f64.powf(optics_params.ray_exponent) as u32;
-                // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(optics_params.dots_exponent) as u32;
-                poly_res.num_dots = 10.0_f64.powf(optics_params.dots_exponent) as u32;
-                poly_res.pos_params[0..3].copy_from_slice(&optics_params.pos[0..3]);
-                poly_res.pos_params[4..7].copy_from_slice(&optics_params.dir[0..3]);
-
-                poly.pos_params[0..3].copy_from_slice(&optics_params.pos[0..3]);
-                poly.pos_params[4..7].copy_from_slice(&optics_params.dir[0..3]);
+                poly.pos_params[0..3].copy_from_slice(&lens_ui.pos[0..3]);
+                poly.pos_params[4..7].copy_from_slice(&lens_ui.dir[0..3]);
 
                 poly.write_buffer(&state.queue);
 
-                poly.update_rays(&state.device, &state.queue, update_rays);
-                poly_res.update_rays(&poly, &state.device, &state.queue, update_rays);
+                poly.update_rays(&state.device, &state.queue, update_ray_num);
+                poly_res.update_rays(&poly, &state.device, &state.queue, update_ray_num);
 
-                let mut update_lens = update_rays;
-                let mut update_size = false;
-                imgui::Window::new("Lens")
-                    .size([400.0, 250.0], Condition::FirstUseEver)
-                    .position([100.0, 100.0], Condition::FirstUseEver)
-                    .build(&ui, || {
-                        let num_ghosts =
-                            (poly.lens.elements.len() * poly.lens.elements.len()) as u32;
-                        update_lens |= Slider::new("which ghost", 0, num_ghosts)
-                            .build(&ui, &mut poly.which_ghost);
-                        for (i, element) in lens_ui.iter_mut().enumerate() {
-                            ui.text(format!("Lens: {:?}", i + 1));
-                            update_lens |= Slider::new(
-                                format!("d##{}", i),
-                                0.,
-                                element.0.abs() + element.2.abs(),
-                            )
-                            .build(&ui, &mut element.1);
-                            update_lens |= Slider::new(format!("r1##{}", i), -3., 3.)
-                                .build(&ui, &mut element.0);
-                            update_lens |= Slider::new(format!("r2##{}", i), -3., 3.)
-                                .build(&ui, &mut element.2);
-                            update_lens |= Slider::new(format!("d_next##{}", i), -3., 6.)
-                                .build(&ui, &mut element.3);
+                if update_sensor {
+                    poly_res.pos_params[8] = lens_ui.sensor_dist;
+                    poly_res.write_buffer(&state.queue);
 
-                            update_size |= ui.checkbox(format!("button##{}", i), &mut element.4);
-                            update_lens |= update_size;
-                            ui.separator();
-                        }
-                        if Slider::new("sensor distance", 0., 20.)
-                            .build(&ui, &mut optics_params.sensor_dist)
-                        {
-                            poly_res.pos_params[8] = optics_params.sensor_dist;
-                            poly_res.write_buffer(&state.queue);
+                    poly.pos_params[8] = lens_ui.sensor_dist;
+                    poly.write_buffer(&state.queue);
+                }
 
-                            poly.pos_params[8] = optics_params.sensor_dist;
-                            poly.write_buffer(&state.queue);
-                        }
-                    });
+                {
+                    poly.sim_params[0] = lens_ui.opacity.powf(3.);
+                    poly_res.sim_params[0] = lens_ui.opacity.powf(3.);
+                    poly.write_buffer(&state.queue);
+                    poly_res.write_buffer(&state.queue);
+                }
+                poly.draw_mode = lens_ui.draw;
 
                 if update_lens {
-                    poly.lens.elements = get_lens(&lens_ui);
-                    poly.update_buffers(&state.queue, &state.device, update_size);
+                    poly.lens.elements = lens_ui.get_lens();
+                    poly.update_buffers(&state.queue, &state.device, update_ray_num);
                     // we don't need poly for the rest of this function
                     drop(poly);
-                    poly_res.update_buffers(&state.queue, &state.device, true)
-                } else if update_poly {
-                    drop(poly);
-                    poly_res.update_buffers(&state.queue, &state.device, update_size)
+                    poly_res.update_buffers(&state.queue, &state.device, update_ray_num)
                 }
 
                 // Render PolyRes
@@ -396,14 +316,14 @@ fn main() {
                         });
 
                     if let Some(size) = new_window_size {
-                        // Resize render target, which is optional
-                        if size != window_render_size && size[0] >= 1.0 && size[1] >= 1.0 {
-                            window_render_size = size;
+                        // Resize render target if size changed
+                        if size != poly_res_size && size[0] >= 1.0 && size[1] >= 1.0 {
+                            poly_res_size = size;
                             let scale = &ui.io().display_framebuffer_scale;
                             let texture_config = TextureConfig {
                                 size: Extent3d {
-                                    width: (window_render_size[0] * scale[0]) as u32,
-                                    height: (window_render_size[1] * scale[1]) as u32,
+                                    width: (poly_res_size[0] * scale[0]) as u32,
+                                    height: (poly_res_size[1] * scale[1]) as u32,
                                     ..Default::default()
                                 },
                                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT

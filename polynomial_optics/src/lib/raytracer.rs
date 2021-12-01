@@ -318,7 +318,7 @@ impl Lens {
                     }
                     elements.push(element.radius as f32);
                 }
-                Properties::Aperture(aperture) => elements.push(element.position as f32), //TODO: render Aperture
+                Properties::Aperture(aperture) => (), //TODO: render Aperture
             }
         }
         elements
