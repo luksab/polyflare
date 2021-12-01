@@ -1,13 +1,11 @@
-use std::{fs::read_to_string, iter, mem, rc::Rc, sync::Mutex, time::Instant};
+use std::{fs::read_to_string, iter, mem, time::Instant};
 
 use wgpu::{
-    util::DeviceExt, BindGroup, Buffer, ComputePipeline, Queue, RenderPipeline,
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Queue, RenderPipeline,
     SurfaceConfiguration, TextureFormat, TextureView,
 };
 
-use crate::{scene::Scene, texture::Texture};
-
-use super::{poly_optics, PolyOptics};
+use crate::{lens_state::LensState, scene::Scene, texture::Texture};
 
 pub struct PolyRes {
     boid_render_pipeline: wgpu::RenderPipeline,
@@ -16,7 +14,6 @@ pub struct PolyRes {
     conversion_bind_group: wgpu::BindGroup,
     compute_pipeline: ComputePipeline,
     compute_bind_group: BindGroup,
-    pos_bind_group: BindGroup,
     dots_buffer: wgpu::Buffer,
 
     // particle_bind_groups: Vec<wgpu::BindGroup>,
@@ -34,8 +31,6 @@ pub struct PolyRes {
     /// };
     /// ```
     pub sim_params: [f32; 7],
-    pos_params_buffer: wgpu::Buffer,
-    pub pos_params: [f32; 12],
     pub num_dots: u32,
 
     convert_meta: std::fs::Metadata,
@@ -43,8 +38,6 @@ pub struct PolyRes {
     compute_meta: std::fs::Metadata,
     format: TextureFormat,
     conf_format: TextureFormat,
-
-    poly: Rc<Mutex<PolyOptics>>,
 }
 
 impl PolyRes {
@@ -303,12 +296,10 @@ impl PolyRes {
         device: &wgpu::Device,
         sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
-        lens_data: &Vec<f32>,
-        lens_buffer: &Buffer,
-        pos_params: &[f32; 12],
-        pos_params_buffer: &Buffer,
+        lens_bind_group_layout: &BindGroupLayout,
+        pos_bind_group_layout: &BindGroupLayout,
         num_dots: u32,
-    ) -> (ComputePipeline, BindGroup, BindGroup, Buffer) {
+    ) -> (ComputePipeline, BindGroup, Buffer) {
         let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
@@ -344,41 +335,17 @@ impl PolyRes {
                         },
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                (lens_data.len() * mem::size_of::<f32>()) as _,
-                            ),
-                        },
-                        count: None,
-                    },
                 ],
-                label: None,
-            });
-        let pos_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            (pos_params.len() * mem::size_of::<u32>()) as _,
-                        ),
-                    },
-                    count: None,
-                }],
                 label: None,
             });
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("compute"),
-                bind_group_layouts: &[&compute_bind_group_layout, &pos_bind_group_layout],
+                bind_group_layouts: &[
+                    &compute_bind_group_layout,
+                    &pos_bind_group_layout,
+                    lens_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
 
@@ -416,35 +383,17 @@ impl PolyRes {
                     binding: 1,
                     resource: rays_buffer.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: lens_buffer.as_entire_binding(),
-                },
             ],
             label: None,
         });
 
-        let pos_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &pos_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: pos_params_buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
-
-        (
-            compute_pipeline,
-            compute_bind_group,
-            pos_bind_group,
-            rays_buffer,
-        )
+        (compute_pipeline, compute_bind_group, rays_buffer)
     }
 
     pub async fn new(
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
-        poly: Rc<Mutex<PolyOptics>>,
+        lens_state: &LensState,
     ) -> Self {
         let format = wgpu::TextureFormat::Rgba16Float;
         let high_color_tex =
@@ -470,25 +419,14 @@ impl PolyRes {
         );
 
         let num_dots = 2;
-        let poly_unlocked = poly.lock().unwrap();
-        let pos_params = poly_unlocked.pos_params;
-        let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Simulation Parameter Buffer"),
-            contents: bytemuck::cast_slice(&pos_params),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-        let (compute_pipeline, compute_bind_group, pos_bind_group, dots_buffer) =
-            Self::raytrace_shader(
-                device,
-                &sim_params,
-                &sim_param_buffer,
-                &poly_unlocked.lens_rt_data,
-                &poly_unlocked.lens_rt_buffer,
-                &pos_params,
-                &pos_params_buffer,
-                num_dots,
-            );
-        drop(poly_unlocked);
+        let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
+            device,
+            &sim_params,
+            &sim_param_buffer,
+            &lens_state.lens_bind_group_layout,
+            &lens_state.pos_bind_group_layout,
+            num_dots,
+        );
 
         let convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").unwrap();
         let draw_meta = std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl").unwrap();
@@ -504,8 +442,6 @@ impl PolyRes {
             high_color_tex,
             conversion_render_pipeline,
             conversion_bind_group,
-            pos_bind_group,
-            pos_params_buffer,
             convert_meta,
             draw_meta,
             compute_meta,
@@ -514,9 +450,6 @@ impl PolyRes {
             num_dots,
             compute_pipeline,
             compute_bind_group,
-
-            poly,
-            pos_params,
         }
     }
 
@@ -526,37 +459,27 @@ impl PolyRes {
             0,
             bytemuck::cast_slice(&self.sim_params),
         );
-
-        queue.write_buffer(
-            &self.pos_params_buffer,
-            0,
-            bytemuck::cast_slice(&self.pos_params),
-        );
     }
 
-    pub fn update_rays(
+    pub fn update_dots(
         &mut self,
-        optics: &poly_optics::PolyOptics,
         device: &wgpu::Device,
         queue: &Queue,
         update_size: bool,
+        lens_state: &LensState,
     ) {
         if update_size {
             println!("update: {}", self.num_dots);
-            let (compute_pipeline, compute_bind_group, pos_bind_group, dots_buffer) =
-                Self::raytrace_shader(
-                    device,
-                    &self.sim_params,
-                    &self.sim_param_buffer,
-                    &optics.lens_rt_data,
-                    &optics.lens_rt_buffer,
-                    &self.pos_params,
-                    &self.pos_params_buffer,
-                    self.num_dots,
-                );
+            let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &lens_state.lens_bind_group_layout,
+                &lens_state.pos_bind_group_layout,
+                self.num_dots,
+            );
             self.compute_pipeline = compute_pipeline;
             self.compute_bind_group = compute_bind_group;
-            self.pos_bind_group = pos_bind_group;
             self.dots_buffer = dots_buffer;
         }
 
@@ -570,7 +493,8 @@ impl PolyRes {
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &self.compute_bind_group, &[]);
-            cpass.set_bind_group(1, &self.pos_bind_group, &[]);
+            cpass.set_bind_group(1, &lens_state.pos_bind_group, &[]);
+            cpass.set_bind_group(2, &lens_state.lens_bind_group, &[]);
             cpass.dispatch(work_group_count, 1, 1);
         }
 
@@ -619,40 +543,32 @@ impl PolyRes {
         }
     }
 
-    pub fn update_buffers(&mut self, queue: &Queue, device: &wgpu::Device, update_size: bool) {
-        let poly = self.poly.lock().unwrap();
-        self.sim_params[5] = poly.draw_mode as f32;
-        self.sim_params[6] = poly.which_ghost as f32;
+    pub fn update_buffers(
+        &mut self,
+        queue: &Queue,
+        device: &wgpu::Device,
+        update_size: bool,
+        lens_state: &LensState,
+    ) {
         queue.write_buffer(
             &self.sim_param_buffer,
             0,
             bytemuck::cast_slice(&self.sim_params),
         );
 
-        queue.write_buffer(
-            &self.pos_params_buffer,
-            0,
-            bytemuck::cast_slice(&self.pos_params),
-        );
-
         if update_size {
-            let (compute_pipeline, compute_bind_group, pos_bind_group, dots_buffer) =
-                Self::raytrace_shader(
-                    device,
-                    &self.sim_params,
-                    &self.sim_param_buffer,
-                    &poly.lens_rt_data,
-                    &poly.lens_rt_buffer,
-                    &self.pos_params,
-                    &self.pos_params_buffer,
-                    self.num_dots,
-                );
+            let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
+                device,
+                &self.sim_params,
+                &self.sim_param_buffer,
+                &lens_state.lens_bind_group_layout,
+                &lens_state.pos_bind_group_layout,
+                self.num_dots,
+            );
             self.compute_pipeline = compute_pipeline;
             self.compute_bind_group = compute_bind_group;
-            self.pos_bind_group = pos_bind_group;
             self.dots_buffer = dots_buffer;
         }
-        drop(poly);
 
         let conversion_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -716,11 +632,12 @@ impl PolyRes {
 impl Scene for PolyRes {
     fn resize(
         &mut self,
-        _new_size: winit::dpi::PhysicalSize<u32>,
+        new_size: winit::dpi::PhysicalSize<u32>,
         _scale_factor: f64,
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
         queue: &Queue,
+        _lens_state: &LensState,
     ) {
         // self.sim_params[1] = new_size.width as f32 * scale_factor as f32;
         // self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
@@ -728,17 +645,31 @@ impl Scene for PolyRes {
         // self.sim_params[4] = new_size.height as f32;
 
         let format = wgpu::TextureFormat::Rgba16Float;
-        self.high_color_tex =
-            Texture::create_color_texture(device, config, format, "high_color_tex");
+        let mut config = config.clone();
+        config.width = new_size.width;
+        config.height = new_size.height;
 
-        self.update_buffers(queue, device, false);
+        self.high_color_tex =
+            Texture::create_color_texture(device, &config, format, "high_color_tex");
+
+        queue.write_buffer(
+            &self.sim_param_buffer,
+            0,
+            bytemuck::cast_slice(&self.sim_params),
+        );
     }
 
     fn input(&mut self, _event: &winit::event::WindowEvent) -> bool {
         true
     }
 
-    fn update(&mut self, _dt: std::time::Duration, device: &wgpu::Device, _queue: &Queue) {
+    fn update(
+        &mut self,
+        _dt: std::time::Duration,
+        device: &wgpu::Device,
+        _queue: &Queue,
+        lens_state: &LensState,
+    ) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
         //     self.cell_timer = SystemTime::now();
         //     self.update_cells(device, queue);
@@ -795,21 +726,16 @@ impl Scene for PolyRes {
             self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").unwrap();
             print!("reloading compute shader! ");
             let now = Instant::now();
-            let poly_unlocked = self.poly.lock().unwrap();
-            let (pipeline, bind_group, pos_bind_group, dots_buffer) = Self::raytrace_shader(
+            let (pipeline, bind_group, dots_buffer) = Self::raytrace_shader(
                 device,
                 &self.sim_params,
                 &self.sim_param_buffer,
-                &poly_unlocked.lens_rt_data,
-                &poly_unlocked.lens_rt_buffer,
-                &self.pos_params,
-                &self.pos_params_buffer,
+                &lens_state.lens_bind_group_layout,
+                &lens_state.pos_bind_group_layout,
                 self.num_dots,
             );
-            drop(poly_unlocked);
             self.compute_pipeline = pipeline;
             self.compute_bind_group = bind_group;
-            self.pos_bind_group = pos_bind_group;
             self.dots_buffer = dots_buffer;
             println!("took {:?}.", now.elapsed());
         }
@@ -821,6 +747,7 @@ impl Scene for PolyRes {
         _depth_view: Option<&TextureView>,
         device: &wgpu::Device,
         queue: &Queue,
+        _lens_state: &LensState,
     ) -> Result<(), wgpu::SurfaceError> {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),

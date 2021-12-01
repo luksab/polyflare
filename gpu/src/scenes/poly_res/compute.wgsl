@@ -49,9 +49,10 @@ struct Elements {
 
 [[group(0), binding(0)]] var<uniform> params : SimParams;
 [[group(0), binding(1)]] var<storage, read_write> rays : Rays;
-[[group(0), binding(2)]] var<storage, read> elements : Elements;
 
 [[group(1), binding(0)]] var<uniform> posParams : PosParams;
+
+[[group(2), binding(0)]] var<storage, read> elements : Elements;
 
 /// calculate the fresnel term for an intersection
 fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {

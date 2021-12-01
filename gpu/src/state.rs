@@ -1,12 +1,7 @@
-use std::rc::Rc;
-use std::sync::Mutex;
-
-use wgpu::{Backends, TextureView};
-use winit::event::WindowEvent;
+use wgpu::Backends;
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
-use crate::scene::Scene;
 /// # The main struct of this framework
 /// mainly defers actual work to scenes
 pub struct State {
@@ -20,9 +15,6 @@ pub struct State {
     pub queue: wgpu::Queue,
     /// `SurfaceConfiguration` of the main window
     pub config: wgpu::SurfaceConfiguration,
-
-    /// the scenes saved in the state struct
-    pub scenes: Vec<Rc<Mutex<dyn Scene>>>,
 }
 
 impl State {
@@ -95,8 +87,6 @@ impl State {
 
         surface.configure(&device, &config);
 
-        let scenes: Vec<Rc<Mutex<dyn Scene>>> = Vec::new();
-
         let scale_factor = window.scale_factor();
         Self {
             window,
@@ -108,7 +98,6 @@ impl State {
 
             size,
             scale_factor,
-            scenes,
         }
     }
 
@@ -122,52 +111,6 @@ impl State {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-            for scene in &mut self.scenes {
-                scene.lock().unwrap().resize(
-                    self.size,
-                    *scale_factor.unwrap_or(&self.scale_factor),
-                    &self.device,
-                    &self.config,
-                    &self.queue,
-                )
-            }
         }
-    }
-
-    /// let all scenes handle a WindowEvent
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        // go through all scenes and let them handle input
-        for scene in &mut self.scenes {
-            scene.lock().unwrap().input(event);
-        }
-        // nothing to do as of yet
-        match event {
-            _ => false,
-        }
-    }
-
-    /// update all scenes - call this once a frame
-    pub fn update(&mut self, dt: std::time::Duration) {
-        // go through all scenes and call their update
-        for scene in &mut self.scenes {
-            scene.lock().unwrap().update(dt, &self.device, &self.queue);
-        }
-    }
-
-    /// render the scene at index `index`
-    /// 
-    /// `depth_view`: for 3d - 2d scenes don't need a depth Texture
-    pub fn render(
-        &mut self,
-        view: &TextureView,
-        depth_view: Option<&wgpu::TextureView>,
-        index: usize,
-    ) -> Result<(), wgpu::SurfaceError> {
-        self.scenes
-            .get_mut(index)
-            .expect("scene not found!")
-            .lock()
-            .unwrap()
-            .render(view, depth_view, &self.device, &self.queue)
     }
 }

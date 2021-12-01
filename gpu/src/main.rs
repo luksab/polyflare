@@ -1,9 +1,8 @@
+use crate::scene::Scene;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
-use polynomial_optics::{Element, Glass, Properties};
-use std::rc::Rc;
-use std::sync::Mutex;
-use std::time::{Instant, SystemTime};
+use lens_state::LensState;
+use std::time::Instant;
 use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -18,88 +17,26 @@ mod scenes;
 
 mod lens_state;
 
-fn get_lens(lens_ui: &Vec<(f32, f32, f32, f32, bool)>) -> Vec<polynomial_optics::Element> {
-    let mut elements: Vec<Element> = vec![];
-    let mut dst: f32 = -5.;
-    for element in lens_ui {
-        dst += element.1;
-        if element.4 {
-            elements.push(Element {
-                radius: element.0 as f64,
-                properties: Properties::Glass(Glass {
-                    ior: 1.5,
-                    coating: (),
-                    entry: true,
-                    spherical: true,
-                }),
-                position: dst as f64,
-            });
-            dst += element.3;
-            elements.push(Element {
-                radius: element.2 as f64,
-                properties: Properties::Glass(Glass {
-                    ior: 1.5,
-                    coating: (),
-                    entry: false,
-                    spherical: true,
-                }),
-                position: dst as f64,
-            });
-        } else {
-            elements.push(Element {
-                radius: element.0 as f64,
-                properties: Properties::Aperture((element.2 * 10.) as u32),
-                position: dst as f64,
-            });
-        }
-    }
-    elements
-}
-/// Parameter for the GUI
-struct Parms {
-    ray_exponent: f64,
-    dots_exponent: f64,
-    draw: u32,
-    pos: [f32; 3],
-    dir: [f32; 3],
-    opacity: f32,
-    sensor_dist: f32,
-}
-
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
 
     // state saves all the scenes and manages them
     let mut state = pollster::block_on(State::new(&event_loop, wgpu::Backends::all()));
+    let mut lens_ui: LensState = LensState::default(&state.device);
 
     // create scenes and push into state
-    let poly_optics = Rc::new(Mutex::new(pollster::block_on(scenes::PolyOptics::new(
+    let mut poly_optics = pollster::block_on(scenes::PolyOptics::new(
         &state.device,
         &state.config,
-    ))));
-    state.scenes.push(poly_optics.clone());
+        &lens_ui,
+    ));
 
-    let poly_res = Rc::new(Mutex::new(pollster::block_on(scenes::PolyRes::new(
-        &state.device,
-        &state.config,
-        poly_optics.clone(),
-    ))));
-    state.scenes.push(poly_res.clone());
-
-    // r1, d1, r2, distance to next lens, is_glass
-    let mut lens_ui: lens_state::LensState = Default::default();
-    // init lens
-    {
-        let mut poly = poly_optics.lock().unwrap();
-        poly.lens.elements = lens_ui.get_lens();
-        poly.update_buffers(&state.queue, &state.device, true);
-    }
+    let mut poly_res =
+        pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
+    poly_optics.update_buffers(&state.queue, &state.device, true, &lens_ui);
 
     let mut last_render_time = std::time::Instant::now();
-    let mut last_sec = SystemTime::now();
-    let mut frames_since_last_sec = 0;
-    let mut fps = 0;
 
     // Set up dear imgui
     let mut imgui = imgui::Context::create();
@@ -115,6 +52,22 @@ fn main() {
     // Set font for imgui
     {
         let hidpi_factor = state.window.scale_factor();
+        poly_optics.resize(
+            state.size,
+            hidpi_factor,
+            &state.device,
+            &state.config,
+            &state.queue,
+            &lens_ui,
+        );
+        // poly_res.resize(
+        //     state.size,
+        //     hidpi_factor,
+        //     &state.device,
+        //     &state.config,
+        //     &state.queue,
+        //     &lens_ui,
+        // );
         println!("scaling factor: {}", hidpi_factor);
 
         let font_size = (13.0 * hidpi_factor) as f32;
@@ -163,15 +116,7 @@ fn main() {
         renderer.textures.insert(texture)
     };
 
-    let mut first_frame = true;
-
     event_loop.run(move |event, _, control_flow| {
-        if last_sec.elapsed().unwrap().as_secs() > 1 {
-            last_sec = SystemTime::now();
-            fps = frames_since_last_sec;
-            frames_since_last_sec = 0;
-        }
-
         *control_flow = ControlFlow::Poll;
         match event {
             Event::MainEventsCleared => state.window.request_redraw(),
@@ -179,7 +124,7 @@ fn main() {
                 ref event,
                 window_id,
             } if window_id == state.window.id() => {
-                state.input(event);
+                // handle input here if needed
                 match event {
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
@@ -193,6 +138,14 @@ fn main() {
                     } => *control_flow = ControlFlow::Exit,
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size, None);
+                        poly_optics.resize(
+                            state.size,
+                            state.scale_factor,
+                            &state.device,
+                            &state.config,
+                            &state.queue,
+                            &lens_ui,
+                        );
                     }
                     WindowEvent::ScaleFactorChanged {
                         new_inner_size,
@@ -200,6 +153,22 @@ fn main() {
                         ..
                     } => {
                         state.resize(**new_inner_size, Some(scale_factor));
+                        poly_optics.resize(
+                            state.size,
+                            *scale_factor,
+                            &state.device,
+                            &state.config,
+                            &state.queue,
+                            &lens_ui,
+                        );
+                        poly_res.resize(
+                            state.size,
+                            *scale_factor,
+                            &state.device,
+                            &state.config,
+                            &state.queue,
+                            &lens_ui,
+                        );
                     }
                     _ => {}
                 }
@@ -230,7 +199,8 @@ fn main() {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                state.update(dt);
+                poly_optics.update(dt, &state.device, &state.queue, &lens_ui);
+                poly_res.update(dt, &state.device, &state.queue, &lens_ui);
                 let depth_texture = texture::Texture::create_depth_texture(
                     &state.device,
                     &wgpu::SurfaceConfiguration {
@@ -243,11 +213,15 @@ fn main() {
                     "depth_texture",
                 );
 
-                // Render demo3d
-                match state.render(&view, Some(&depth_texture.view), 0) {
-                    Ok(_) => {
-                        frames_since_last_sec += 1;
-                    }
+                // Render debug view
+                match poly_optics.render(
+                    &view,
+                    Some(&depth_texture.view),
+                    &state.device,
+                    &state.queue,
+                    &lens_ui,
+                ) {
+                    Ok(_) => {}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size, None),
                     // The system is out of memory, we should probably quit
@@ -256,51 +230,39 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
-                let (update_lens, update_sensor, update_size, mut update_ray_num) =
-                    lens_ui.build_ui(&ui);
+                let (update_lens, _update_size, update_ray_num, update_dot_num) =
+                    lens_ui.build_ui(&ui, &state.device, &state.queue);
 
-                update_ray_num |= first_frame;
-
-                let mut poly = poly_optics.lock().unwrap();
-                let mut poly_res = poly_res.lock().unwrap();
-
-                poly.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
+                // Dot/ray num
+                poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
                 poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
-                poly_res.pos_params[0..3].copy_from_slice(&lens_ui.pos[0..3]);
-                poly_res.pos_params[4..7].copy_from_slice(&lens_ui.dir[0..3]);
 
-                poly.pos_params[0..3].copy_from_slice(&lens_ui.pos[0..3]);
-                poly.pos_params[4..7].copy_from_slice(&lens_ui.dir[0..3]);
-
-                poly.write_buffer(&state.queue);
-
-                poly.update_rays(&state.device, &state.queue, update_ray_num);
-                poly_res.update_rays(&poly, &state.device, &state.queue, update_ray_num);
-
-                if update_sensor {
-                    poly_res.pos_params[8] = lens_ui.sensor_dist;
-                    poly_res.write_buffer(&state.queue);
-
-                    poly.pos_params[8] = lens_ui.sensor_dist;
-                    poly.write_buffer(&state.queue);
-                }
-
-                {
-                    poly.sim_params[0] = lens_ui.opacity.powf(3.);
-                    poly_res.sim_params[0] = lens_ui.opacity.powf(3.);
-                    poly.write_buffer(&state.queue);
-                    poly_res.write_buffer(&state.queue);
-                }
-                poly.draw_mode = lens_ui.draw;
+                poly_optics.draw_mode = lens_ui.draw;
 
                 if update_lens {
-                    poly.lens.elements = lens_ui.get_lens();
-                    poly.update_buffers(&state.queue, &state.device, update_ray_num);
-                    // we don't need poly for the rest of this function
-                    drop(poly);
-                    poly_res.update_buffers(&state.queue, &state.device, update_ray_num)
+                    poly_res.sim_params[5] = poly_optics.draw_mode as f32;
+                    poly_optics.sim_params[5] = poly_optics.draw_mode as f32;
+                    poly_res.sim_params[6] = poly_optics.which_ghost as f32;
+                    poly_optics.sim_params[6] = poly_optics.which_ghost as f32;
+
+                    poly_optics.sim_params[0] = lens_ui.opacity.powf(3.);
+                    poly_res.sim_params[0] = lens_ui.opacity.powf(3.);
+                    poly_optics.write_buffer(&state.queue);
+                    poly_res.write_buffer(&state.queue);
+                    // poly_optics.lens.elements = lens_ui.get_lens();
+                    // poly_optics.update_buffers(&state.queue, &state.device, update_ray_num);
+                    // poly_res.update_buffers(
+                    //     &state.queue,
+                    //     &state.device,
+                    //     update_dot_num,
+                    //     &poly_optics.lens_rt_data,
+                    //     &poly_optics.lens_rt_buffer,
+                    // )
                 }
+
+                poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
+                poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
 
                 // Render PolyRes
                 {
@@ -341,13 +303,14 @@ fn main() {
                             poly_res.sim_params[4] = size[1] * state.scale_factor as f32;
                             poly_res.write_buffer(&state.queue);
                         }
-                        drop(poly_res);
 
                         // Only render contents if the window is not collapsed
-                        match state.render(
+                        match poly_res.render(
                             &renderer.textures.get(res_window_texture_id).unwrap().view(),
                             None,
-                            1,
+                            &state.device,
+                            &state.queue,
+                            &lens_ui,
                         ) {
                             Ok(_) => {}
                             // Reconfigure the surface if lost
@@ -394,7 +357,6 @@ fn main() {
                 state.queue.submit(Some(encoder.finish()));
 
                 frame.present();
-                first_frame = false;
             }
             _ => {}
         }
