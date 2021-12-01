@@ -1,6 +1,5 @@
 use std::{fs::read_to_string, iter, mem, time::Instant};
 
-use cgmath::{InnerSpace, Vector3};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Queue, RenderPipeline,
     SurfaceConfiguration, TextureFormat, TextureView,

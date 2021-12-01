@@ -104,7 +104,7 @@ impl State {
     /// call this when the main window is resized.
     ///
     /// internally calls resize on all scenes
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: Option<&f64>) {
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, _scale_factor: Option<&f64>) {
         // check that the size is real
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;

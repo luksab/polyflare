@@ -297,6 +297,15 @@ fn main() {
                                 Texture::new(&state.device, &renderer, texture_config),
                             );
 
+                            poly_res.resize(
+                                size.into(),
+                                state.scale_factor,
+                                &state.device,
+                                &state.config,
+                                &state.queue,
+                                &lens_ui,
+                            );
+
                             poly_res.sim_params[1] = size[0];
                             poly_res.sim_params[2] = size[1];
                             poly_res.sim_params[3] = size[0] * state.scale_factor as f32;

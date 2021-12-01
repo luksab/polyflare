@@ -52,6 +52,7 @@ pub struct LensState {
     pub lens_bind_group_layout: wgpu::BindGroupLayout,
 
     last_frame_time: Instant,
+    fps: f64,
 
     first_frame: bool,
 }
@@ -210,6 +211,7 @@ impl LensState {
             which_ghost: 0,
             lens,
             last_frame_time: Instant::now(),
+            fps: 0.,
             actual_lens,
             lens_rt_buffer,
             lens_buffer,
@@ -327,14 +329,15 @@ impl LensState {
 
         let mut update_rays = self.first_frame;
         let mut update_dots = self.first_frame;
+
+        let sample = 1. / (Instant::now() - self.last_frame_time).as_secs_f64();
+        let alpha = 0.98;
+        self.fps = alpha * self.fps + (1.0 - alpha) * sample;
         imgui::Window::new("Params")
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([600.0, 100.0], Condition::FirstUseEver)
             .build(&ui, || {
-                ui.text(format!(
-                    "Framerate: {:?}",
-                    1. / (Instant::now() - self.last_frame_time).as_secs_f64()
-                ));
+                ui.text(format!("Framerate: {:.0}", self.fps));
                 update_rays |=
                     Slider::new("rays_exponent", 0., 6.5).build(&ui, &mut self.ray_exponent);
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));

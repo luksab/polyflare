@@ -542,33 +542,31 @@ impl PolyRes {
             queue.submit(iter::once(encoder.finish()));
         }
     }
+}
 
-    pub fn update_buffers(
+impl Scene for PolyRes {
+    fn resize(
         &mut self,
-        queue: &Queue,
+        new_size: winit::dpi::PhysicalSize<u32>,
+        scale_factor: f64,
         device: &wgpu::Device,
-        update_size: bool,
-        lens_state: &LensState,
+        config: &SurfaceConfiguration,
+        queue: &Queue,
+        _lens_state: &LensState,
     ) {
-        queue.write_buffer(
-            &self.sim_param_buffer,
-            0,
-            bytemuck::cast_slice(&self.sim_params),
-        );
+        self.sim_params[1] = new_size.width as f32 * scale_factor as f32;
+        self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
+        self.sim_params[3] = new_size.width as f32;
+        self.sim_params[4] = new_size.height as f32;
 
-        if update_size {
-            let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
-                device,
-                &self.sim_params,
-                &self.sim_param_buffer,
-                &lens_state.lens_bind_group_layout,
-                &lens_state.pos_bind_group_layout,
-                self.num_dots,
-            );
-            self.compute_pipeline = compute_pipeline;
-            self.compute_bind_group = compute_bind_group;
-            self.dots_buffer = dots_buffer;
-        }
+        let format = wgpu::TextureFormat::Rgba16Float;
+        let mut config = config.clone();
+        let scale_fact = 1.;
+        config.width = (new_size.width as f64 * scale_factor * scale_fact) as u32;
+        config.height = (new_size.height as f64 * scale_factor * scale_fact) as u32;
+
+        self.high_color_tex =
+            Texture::create_color_texture(device, &config, format, "high_color_tex");
 
         let conversion_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -607,7 +605,6 @@ impl PolyRes {
                 ],
                 label: Some("texture_bind_group_layout"),
             });
-
         self.conversion_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &conversion_bind_group_layout,
             entries: &[
@@ -626,31 +623,6 @@ impl PolyRes {
             ],
             label: Some("texture_bind_group"),
         });
-    }
-}
-
-impl Scene for PolyRes {
-    fn resize(
-        &mut self,
-        new_size: winit::dpi::PhysicalSize<u32>,
-        _scale_factor: f64,
-        device: &wgpu::Device,
-        config: &SurfaceConfiguration,
-        queue: &Queue,
-        _lens_state: &LensState,
-    ) {
-        // self.sim_params[1] = new_size.width as f32 * scale_factor as f32;
-        // self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
-        // self.sim_params[3] = new_size.width as f32;
-        // self.sim_params[4] = new_size.height as f32;
-
-        let format = wgpu::TextureFormat::Rgba16Float;
-        let mut config = config.clone();
-        config.width = new_size.width;
-        config.height = new_size.height;
-
-        self.high_color_tex =
-            Texture::create_color_texture(device, &config, format, "high_color_tex");
 
         queue.write_buffer(
             &self.sim_param_buffer,
