@@ -29,8 +29,6 @@ pub struct LensState {
     pub ray_exponent: f64,
     pub dots_exponent: f64,
     pub draw: u32,
-    pub pos: [f32; 3],
-    pub dir: [f32; 3],
     pub opacity: f32,
     pub sensor_dist: f32,
     pub which_ghost: u32,
@@ -148,11 +146,11 @@ impl LensState {
         let center_pos = Vector3 {
             x: 0.0,
             y: 0.0,
-            z: -5.,
+            z: -6.,
         };
         let direction = Vector3 {
             x: 0.0,
-            y: 0.1,
+            y: 0.0,
             z: 1.0,
         }
         .normalize();
@@ -201,11 +199,9 @@ impl LensState {
         });
 
         Self {
-            ray_exponent: 2.7,
+            ray_exponent: 5.,
             dots_exponent: 7.,
             draw: 1,
-            pos: [0.0, 0.0, -7.0],
-            dir: [0.0, 0.0, 1.0],
             opacity: 0.75,
             sensor_dist: 3.,
             which_ghost: 0,
@@ -360,12 +356,12 @@ impl LensState {
                 update_lens |= Drag::new("ray origin")
                     .speed(0.01)
                     .range(-10., 10.)
-                    .build_array(&ui, &mut self.pos);
+                    .build_array(&ui, &mut self.pos_params[0..3]);
 
                 update_lens |= Drag::new("ray direction")
                     .speed(0.01)
                     .range(-1., 1.)
-                    .build_array(&ui, &mut self.dir);
+                    .build_array(&ui, &mut self.pos_params[4..7]);
             });
 
         if update_lens {
@@ -404,8 +400,6 @@ impl LensState {
                 label: None,
             });
 
-            self.pos_params[0..3].copy_from_slice(&self.pos[0..3]);
-            self.pos_params[4..7].copy_from_slice(&self.dir[0..3]);
             self.pos_params[8] = self.sensor_dist;
             queue.write_buffer(
                 &self.pos_params_buffer,

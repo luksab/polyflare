@@ -22,7 +22,7 @@ impl State {
     ///
     /// add those by calling `state.scenes.push(scene)`
     ///
-    /// backend is one of  `VULKAN, GL, METAL, DX12, DX12, BROWSER_WEBGPU, PRIMARY`
+    /// backend is one of  `VULKAN, GL, METAL, DX11, DX12, BROWSER_WEBGPU, PRIMARY`
     pub async fn new(event_loop: &EventLoop<()>, backend: Backends) -> Self {
         // get the title at compile time from env
         let title = env!("CARGO_PKG_NAME");
