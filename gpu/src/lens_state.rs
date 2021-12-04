@@ -345,7 +345,7 @@ impl LensState {
                     10.0_f64.powf(self.dots_exponent) as u32
                 ));
 
-                update_lens |= Slider::new("opacity", 0., 1.).build(&ui, &mut self.opacity);
+                update_lens |= Slider::new("opacity", 0., 4.).build(&ui, &mut self.opacity);
 
                 update_lens |= ui.radio_button("render nothing", &mut self.draw, 0)
                     || ui.radio_button("render both", &mut self.draw, 3)
