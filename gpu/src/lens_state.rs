@@ -165,8 +165,8 @@ impl LensState {
             1.,
             7.,
             0.5, // Padding
-            0., // Padding
-            0., // Padding
+            0.,  // Padding
+            0.,  // Padding
         ];
         let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
@@ -268,6 +268,50 @@ impl LensState {
         Self::get_lens_arr(&self.lens)
     }
 
+    pub fn update(&mut self, device: &Device, queue: &Queue) {
+        self.actual_lens = Lens::new(self.get_lens());
+
+        let lens_rt_data = self.actual_lens.get_rt_elements_buffer();
+        self.lens_rt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Lens tracing Buffer"),
+            contents: bytemuck::cast_slice(&lens_rt_data),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
+        let lens_data = self.actual_lens.get_elements_buffer();
+        self.lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Lens drawing Buffer"),
+            contents: bytemuck::cast_slice(&lens_data),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
+        self.lens_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.lens_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.lens_rt_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.lens_buffer.as_entire_binding(),
+                },
+            ],
+            label: None,
+        });
+
+        self.pos_params[8] = self.sensor_dist;
+        queue.write_buffer(
+            &self.pos_params_buffer,
+            0,
+            bytemuck::cast_slice(&self.pos_params),
+        );
+    }
+
     /// create an imgui window from Self and return
     ///
     /// (update_lens, update_lens_size, update_ray_num, update_dot_num)
@@ -367,47 +411,7 @@ impl LensState {
             });
 
         if update_lens {
-            self.actual_lens = Lens::new(self.get_lens());
-
-            let lens_rt_data = self.actual_lens.get_rt_elements_buffer();
-            self.lens_rt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Lens tracing Buffer"),
-                contents: bytemuck::cast_slice(&lens_rt_data),
-                usage: wgpu::BufferUsages::UNIFORM
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::STORAGE,
-            });
-
-            let lens_data = self.actual_lens.get_elements_buffer();
-            self.lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Lens drawing Buffer"),
-                contents: bytemuck::cast_slice(&lens_data),
-                usage: wgpu::BufferUsages::UNIFORM
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::STORAGE,
-            });
-
-            self.lens_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.lens_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.lens_rt_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.lens_buffer.as_entire_binding(),
-                    },
-                ],
-                label: None,
-            });
-
-            self.pos_params[8] = self.sensor_dist;
-            queue.write_buffer(
-                &self.pos_params_buffer,
-                0,
-                bytemuck::cast_slice(&self.pos_params),
-            );
+            self.update(device, queue);
         }
 
         self.last_frame_time = Instant::now();
