@@ -29,6 +29,13 @@ impl Ray {
         let intersect = self.o + self.d * num_z;
         (intersect.x, intersect.y)
     }
+
+    fn mov_plane(&mut self, plane: f64) {
+        let diff = plane - self.o.z;
+        let num_z = diff / self.d.z;
+
+        self.o += self.d * num_z;
+    }
 }
 
 /// ## Properties of a particular glass
@@ -253,6 +260,26 @@ impl Ray {
         }
     }
 
+    // let tpi: f32 = 6.283185307179586;
+    fn clip_poly(&mut self, pos: f64, num_edge: u32, size: f64) {
+        self.mov_plane(pos);
+
+        let mut clipped = false;
+        for i in 0..num_edge {
+            let part = i as f64 * std::f64::consts::TAU / (num_edge as f64);
+            let dir = Vector2 {
+                x: part.cos(),
+                y: part.sin(),
+            };
+
+            let dist = dir.dot(self.o.xy());
+            clipped = clipped || (dist > size);
+        }
+        if clipped {
+            self.d *= 0.;
+        }
+    }
+
     /// propagate a ray through an element
     ///
     pub fn propagate(&mut self, element: &Element) {
@@ -265,7 +292,9 @@ impl Ray {
                 glass.entry,
                 !glass.entry,
             ),
-            Properties::Aperture(properties) => todo!(),
+            Properties::Aperture(properties) => {
+                self.clip_poly(element.position, properties, element.radius)
+            }
         };
     }
 
@@ -281,7 +310,9 @@ impl Ray {
                 glass.entry,
                 !glass.entry,
             ),
-            Properties::Aperture(properties) => todo!(),
+            Properties::Aperture(properties) => {
+                self.clip_poly(element.position, properties, element.radius)
+            }
         };
     }
 }

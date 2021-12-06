@@ -17,7 +17,7 @@ path = "src/lib/lib.rs"
 [dependencies]
 tiny-skia = "0.6.1"
 num = "0.4.0"
-cgmath = "0.18"
+cgmath = { version = "0.18", features = ["swizzle"] }
 mathru = "0.10"
 
 [dev-dependencies]
