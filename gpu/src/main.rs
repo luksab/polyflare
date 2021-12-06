@@ -2,7 +2,7 @@ use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use lens_state::LensState;
 use std::time::Instant;
-use wgpu::Extent3d;
+use wgpu::{Extent3d, TextureDescriptor};
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
@@ -14,6 +14,7 @@ use state::State;
 mod scenes;
 
 mod lens_state;
+mod save_png;
 
 fn main() {
     let event_loop = EventLoop::new();
@@ -194,12 +195,7 @@ fn main() {
                 poly_res.update(&state.device, &lens_ui);
 
                 // Render debug view
-                match poly_optics.render(
-                    &view,
-                    &state.device,
-                    &state.queue,
-                    &lens_ui,
-                ) {
+                match poly_optics.render(&view, &state.device, &state.queue, &lens_ui) {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size, None),
@@ -209,9 +205,59 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
-                let (update_lens, _update_size, update_ray_num, update_dot_num) =
+                let (update_lens, _update_size, update_ray_num, update_dot_num, render) =
                     lens_ui.build_ui(&ui, &state.device, &state.queue);
 
+                if render {
+                    let size = [512, 512];
+                    let extend = wgpu::Extent3d {
+                        width: size[0],
+                        height: size[1],
+                        depth_or_array_layers: 1,
+                    };
+                    let desc = wgpu::TextureDescriptor {
+                        label: Some("hi-res"),
+                        size: extend,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_SRC,
+                    };
+                    let tex = state.device.create_texture(&desc);
+
+                    poly_res.resize(
+                        winit::dpi::PhysicalSize {
+                            width: size[0],
+                            height: size[0],
+                        },
+                        1.0,
+                        &state.device,
+                        &state.config,
+                        &state.queue,
+                    );
+
+                    poly_res
+                        .render_hires(
+                            &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                            &state.device,
+                            &state.queue,
+                            16_000_000,
+                            &mut lens_ui,
+                        )
+                        .unwrap();
+
+                    poly_res.resize(
+                        state.size,
+                        state.scale_factor,
+                        &state.device,
+                        &state.config,
+                        &state.queue,
+                    );
+                    save_png::save_png(&tex, size, &state.device, &state.queue);
+                }
                 // Dot/ray num
                 poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;

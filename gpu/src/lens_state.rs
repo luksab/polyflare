@@ -314,13 +314,13 @@ impl LensState {
 
     /// create an imgui window from Self and return
     ///
-    /// (update_lens, update_lens_size, update_ray_num, update_dot_num)
+    /// (update_lens, update_lens_size, update_ray_num, update_dot_num, render)
     pub fn build_ui(
         &mut self,
         ui: &Ui,
         device: &Device,
         queue: &Queue,
-    ) -> (bool, bool, bool, bool) {
+    ) -> (bool, bool, bool, bool, bool) {
         let mut update_lens = self.first_frame;
         let mut update_sensor = self.first_frame;
         imgui::Window::new("Lens")
@@ -369,6 +369,7 @@ impl LensState {
 
         let mut update_rays = self.first_frame;
         let mut update_dots = self.first_frame;
+        let mut render = false;
 
         let sample = 1. / (Instant::now() - self.last_frame_time).as_secs_f64();
         let alpha = 0.98;
@@ -408,6 +409,8 @@ impl LensState {
                     .build_array(&ui, &mut self.pos_params[4..7]);
 
                 update_lens |= Slider::new("ray width", 0., 1.).build(&ui, &mut self.pos_params[9]);
+
+                render = ui.button("hi-res render");
             });
 
         if update_lens {
@@ -417,6 +420,6 @@ impl LensState {
         self.last_frame_time = Instant::now();
 
         self.first_frame = false;
-        (update_lens, false, update_rays, update_dots)
+        (update_lens, false, update_rays, update_dots, render)
     }
 }

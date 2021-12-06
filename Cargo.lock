@@ -697,6 +697,7 @@ dependencies = [
  "imgui",
  "imgui-wgpu",
  "imgui-winit-support",
+ "png 0.17.2",
  "pollster",
  "polynomial_optics",
  "rayon",

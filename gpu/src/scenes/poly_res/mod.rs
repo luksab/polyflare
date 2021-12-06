@@ -498,7 +498,7 @@ impl PolyRes {
             cpass.dispatch(work_group_count, 1, 1);
         }
 
-        if cfg!(debug_assertions) {
+        if cfg!(debug_assertions) & false {
             let output_buffer_size = (self.num_dots * 32) as wgpu::BufferAddress;
             let output_buffer_desc = wgpu::BufferDescriptor {
                 size: output_buffer_size,
@@ -630,11 +630,7 @@ impl PolyRes {
         );
     }
 
-    pub fn update(
-        &mut self,
-        device: &wgpu::Device,
-        lens_state: &LensState,
-    ) {
+    pub fn update(&mut self, device: &wgpu::Device, lens_state: &LensState) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
         //     self.cell_timer = SystemTime::now();
         //     self.update_cells(device, queue);
@@ -808,6 +804,153 @@ impl PolyRes {
             queue.submit(iter::once(encoder.finish()));
         }
 
+        Ok(())
+    }
+
+    pub fn render_hires(
+        &mut self,
+        view: &TextureView,
+        device: &wgpu::Device,
+        queue: &Queue,
+        num_rays: u32,
+        lens_state: &mut LensState,
+    ) -> Result<(), wgpu::SurfaceError> {
+        let num_per_iter = 1_000_000;
+
+        let iters = ((num_rays / num_per_iter) as f32).sqrt() as u32;
+        println!("iters: {}", iters);
+        let width = lens_state.pos_params[9] / iters as f32;
+        let old_width = lens_state.pos_params[9];
+        lens_state.pos_params[9] = width;
+        let num_dots = self.num_dots;
+        self.num_dots = num_per_iter;
+        lens_state.update(device, queue);
+
+        let old_x = lens_state.pos_params[4];
+        let old_y = lens_state.pos_params[5];
+
+        let mut resize = true;
+        for i in 0..iters {
+            for j in 0..iters {
+                // TODO: fix size
+                lens_state.pos_params[4] = i as f32 * width - (width * iters as f32 / 2.); //x center
+                lens_state.pos_params[5] = j as f32 * width - (width * iters as f32 / 2.); //y center
+                println!("center: {},{}", lens_state.pos_params[4], lens_state.pos_params[5]);
+                lens_state.update(device, queue);
+                self.update_dots(device, queue, resize, lens_state);
+                resize = false;
+
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
+
+                // create render pass descriptor and its color attachments
+                let color_attachments = [wgpu::RenderPassColorAttachment {
+                    view: &self.high_color_tex.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // clear if on first render
+                        load: if resize {
+                            wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.0,
+                            })
+                        } else {
+                            wgpu::LoadOp::Load
+                        },
+                        store: true,
+                    },
+                }];
+
+                let render_pass_descriptor = wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &color_attachments,
+                    depth_stencil_attachment: None,
+                };
+
+                // println!("{},{},{}", rays[3], rays[4], rays[5]);
+
+                //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
+                {
+                    // render pass
+                    let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
+                    rpass.set_pipeline(&self.boid_render_pipeline);
+                    rpass.set_bind_group(0, &self.render_bind_group, &[]);
+                    // the three instance-local vertices
+                    rpass.set_vertex_buffer(0, self.dots_buffer.slice(..));
+                    //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+
+                    rpass.draw(0..self.num_dots, 0..1);
+                }
+
+                queue.submit(iter::once(encoder.finish()));
+            }
+        }
+
+        // conversion pass
+        {
+            // let vertex_buffer_data = [
+            //     -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
+            // ];
+            let vertex_buffer_data = [
+                -1.0f32, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
+            ];
+            let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::bytes_of(&vertex_buffer_data),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+            // create render pass descriptor and its color attachments
+            let color_attachments = [wgpu::RenderPassColorAttachment {
+                view: view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.0,
+                    }),
+                    store: true,
+                },
+            }];
+            let render_pass_descriptor = wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &color_attachments,
+                depth_stencil_attachment: None,
+            };
+
+            // println!("{},{},{}", rays[3], rays[4], rays[5]);
+
+            //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
+            {
+                // render pass
+                let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
+                rpass.set_pipeline(&self.conversion_render_pipeline);
+                rpass.set_bind_group(0, &self.conversion_bind_group, &[]);
+                // the three instance-local vertices
+                rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
+                //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+
+                rpass.draw(0..vertex_buffer_data.len() as u32 / 2, 0..1);
+            }
+
+            queue.submit(iter::once(encoder.finish()));
+        }
+
+        self.num_dots = num_dots;
+        lens_state.pos_params[9] = old_width;
+
+        lens_state.pos_params[4] = old_x;
+        lens_state.pos_params[5] = old_y;
+        lens_state.update(device, queue);
+        self.update_dots(device, queue, true, lens_state);
         Ok(())
     }
 }
