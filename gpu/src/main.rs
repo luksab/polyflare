@@ -16,7 +16,6 @@ mod scenes;
 mod lens_state;
 
 fn main() {
-    env_logger::init();
     let event_loop = EventLoop::new();
 
     // state saves all the scenes and manages them
