@@ -1,4 +1,3 @@
-use crate::scene::Scene;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use lens_state::LensState;
@@ -9,7 +8,6 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 mod texture;
 
-mod scene;
 mod state;
 use state::State;
 
@@ -35,8 +33,6 @@ fn main() {
     let mut poly_res =
         pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
     poly_optics.update_buffers(&state.queue, &state.device, true, &lens_ui);
-
-    let mut last_render_time = std::time::Instant::now();
 
     // Set up dear imgui
     let mut imgui = imgui::Context::create();
@@ -167,7 +163,6 @@ fn main() {
                             &state.device,
                             &state.config,
                             &state.queue,
-                            &lens_ui,
                         );
                     }
                     _ => {}
@@ -196,27 +191,12 @@ fn main() {
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
                 // Render normally at background
-                let now = std::time::Instant::now();
-                let dt = now - last_render_time;
-                last_render_time = now;
-                poly_optics.update(dt, &state.device, &state.queue, &lens_ui);
-                poly_res.update(dt, &state.device, &state.queue, &lens_ui);
-                let depth_texture = texture::Texture::create_depth_texture(
-                    &state.device,
-                    &wgpu::SurfaceConfiguration {
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                        format: state.surface.get_preferred_format(&state.adapter).unwrap(),
-                        width: state.size.width,
-                        height: state.size.height,
-                        present_mode: wgpu::PresentMode::Fifo,
-                    },
-                    "depth_texture",
-                );
+                poly_optics.update(&state.device, &lens_ui);
+                poly_res.update(&state.device, &lens_ui);
 
                 // Render debug view
                 match poly_optics.render(
                     &view,
-                    Some(&depth_texture.view),
                     &state.device,
                     &state.queue,
                     &lens_ui,
@@ -303,7 +283,6 @@ fn main() {
                                 &state.device,
                                 &state.config,
                                 &state.queue,
-                                &lens_ui,
                             );
 
                             poly_res.sim_params[1] = size[0];
@@ -316,10 +295,8 @@ fn main() {
                         // Only render contents if the window is not collapsed
                         match poly_res.render(
                             &renderer.textures.get(res_window_texture_id).unwrap().view(),
-                            None,
                             &state.device,
                             &state.queue,
-                            &lens_ui,
                         ) {
                             Ok(_) => {}
                             // Reconfigure the surface if lost

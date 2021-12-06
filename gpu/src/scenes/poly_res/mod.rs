@@ -5,7 +5,7 @@ use wgpu::{
     SurfaceConfiguration, TextureFormat, TextureView,
 };
 
-use crate::{lens_state::LensState, scene::Scene, texture::Texture};
+use crate::{lens_state::LensState, texture::Texture};
 
 pub struct PolyRes {
     boid_render_pipeline: wgpu::RenderPipeline,
@@ -544,15 +544,14 @@ impl PolyRes {
     }
 }
 
-impl Scene for PolyRes {
-    fn resize(
+impl PolyRes {
+    pub fn resize(
         &mut self,
         new_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
         queue: &Queue,
-        _lens_state: &LensState,
     ) {
         self.sim_params[1] = new_size.width as f32 * scale_factor as f32;
         self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
@@ -631,15 +630,9 @@ impl Scene for PolyRes {
         );
     }
 
-    fn input(&mut self, _event: &winit::event::WindowEvent) -> bool {
-        true
-    }
-
-    fn update(
+    pub fn update(
         &mut self,
-        _dt: std::time::Duration,
         device: &wgpu::Device,
-        _queue: &Queue,
         lens_state: &LensState,
     ) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
@@ -713,13 +706,11 @@ impl Scene for PolyRes {
         }
     }
 
-    fn render(
+    pub fn render(
         &mut self,
         view: &TextureView,
-        _depth_view: Option<&TextureView>,
         device: &wgpu::Device,
         queue: &Queue,
-        _lens_state: &LensState,
     ) -> Result<(), wgpu::SurfaceError> {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),

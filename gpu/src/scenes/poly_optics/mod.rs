@@ -5,7 +5,7 @@ use wgpu::{
     SurfaceConfiguration, TextureFormat, TextureView,
 };
 
-use crate::{lens_state::LensState, scene::Scene, texture::Texture};
+use crate::{lens_state::LensState, texture::Texture};
 
 /// 2d View of the lens and rays passing through it
 pub struct PolyOptics {
@@ -728,8 +728,8 @@ impl PolyOptics {
     }
 }
 
-impl Scene for PolyOptics {
-    fn resize(
+impl PolyOptics {
+    pub fn resize(
         &mut self,
         new_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
@@ -750,15 +750,9 @@ impl Scene for PolyOptics {
         self.update_buffers(queue, device, false, lens_state);
     }
 
-    fn input(&mut self, _event: &winit::event::WindowEvent) -> bool {
-        true
-    }
-
-    fn update(
+    pub fn update(
         &mut self,
-        _dt: std::time::Duration,
         device: &wgpu::Device,
-        _queue: &Queue,
         lens_state: &LensState,
     ) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
@@ -836,10 +830,9 @@ impl Scene for PolyOptics {
         }
     }
 
-    fn render(
+    pub fn render(
         &mut self,
         view: &TextureView,
-        _depth_view: Option<&TextureView>,
         device: &wgpu::Device,
         queue: &Queue,
         lens_state: &LensState,
