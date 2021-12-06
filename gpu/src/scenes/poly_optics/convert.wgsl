@@ -41,6 +41,7 @@ struct PosParams {
   init: Ray;
   // position of the sensor in the optical plane
   sensor: f32;
+  width: f32;
 };
 
 [[group(0), binding(2)]] var<uniform> params : SimParams;

@@ -164,7 +164,7 @@ impl LensState {
             direction.z as f32,
             1.,
             7.,
-            0., // Padding
+            0.5, // Padding
             0., // Padding
             0., // Padding
         ];
@@ -362,6 +362,8 @@ impl LensState {
                     .speed(0.01)
                     .range(-1., 1.)
                     .build_array(&ui, &mut self.pos_params[4..7]);
+
+                update_lens |= Slider::new("ray width", 0., 1.).build(&ui, &mut self.pos_params[9]);
             });
 
         if update_lens {

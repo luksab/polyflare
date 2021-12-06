@@ -27,6 +27,7 @@ struct SimParams {
 struct PosParams {
   init: Ray;
   sensor: f32;
+  width: f32;
 };
 
 [[block]]
@@ -306,7 +307,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
   let num_rays = total;
   let ray_num = index;
-  let width = 2.;
+  let width = posParams.width;;
 
   let center_pos = posParams.init.o;
 

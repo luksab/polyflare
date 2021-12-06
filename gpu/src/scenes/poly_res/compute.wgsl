@@ -34,6 +34,7 @@ struct PosParams {
   init: Ray;
   // position of the sensor in the optical plane
   sensor: f32;
+  width: f32;
 };
 
 [[block]]
@@ -330,7 +331,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let ray_num = index;
 
   // how much to move the rays by to sample
-  let width = 1.0;
+  let width = posParams.width;
 
   // we need the sqrt to scale the movement in each direction by
   let sqrt_num = u32(sqrt(f32(num_rays)));
@@ -353,6 +354,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 // modify both directions according to our index
                 dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
                 dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+                dir = normalize(dir);
                 // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
                 var ray = Ray(posParams.init.o, dir, 1.0);
 
@@ -402,6 +404,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // modify both directions according to our index
     dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
     dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+    dir = normalize(dir);
     var ray = Ray(posParams.init.o, dir, 1.0);
     // iterate through all Elements and propagate the Ray through
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
