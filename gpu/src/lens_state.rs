@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use cgmath::{InnerSpace, Vector3};
+use imgui::sys::igSameLine;
 use imgui::{Condition, Drag, Slider, Ui};
 use polynomial_optics::{Element, Glass, Lens, Properties};
 use wgpu::util::DeviceExt;
@@ -28,6 +29,7 @@ pub enum ElementState {
 pub struct LensState {
     pub ray_exponent: f64,
     pub dots_exponent: f64,
+    pub hi_dots_exponent: f64,
     pub draw: u32,
     pub opacity: f32,
     pub sensor_dist: f32,
@@ -201,6 +203,7 @@ impl LensState {
         Self {
             ray_exponent: 5.,
             dots_exponent: 7.,
+            hi_dots_exponent: 10.,
             draw: 1,
             opacity: 0.75,
             sensor_dist: 3.,
@@ -411,6 +414,8 @@ impl LensState {
                 update_lens |= Slider::new("ray width", 0., 1.).build(&ui, &mut self.pos_params[9]);
 
                 render = ui.button("hi-res render");
+                ui.same_line();
+                Slider::new("num_hi_rays", 0., 12.).build(&ui, &mut self.hi_dots_exponent);
             });
 
         if update_lens {

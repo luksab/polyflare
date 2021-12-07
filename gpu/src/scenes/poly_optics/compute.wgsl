@@ -292,7 +292,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
         for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
             ghost_num = ghost_num + u32(1);
-            if (ghost_num == which_ghost || which_ghost == u32(0)) {
+            if ((ghost_num == which_ghost || which_ghost == u32(0)) && elements.el[i].entry < 1.5 && elements.el[j].entry < 1.5) {
                 num_segments = num_segments + (j - i) * u32(2) + u32(2) + arrayLength(&elements.el) * u32(2) + u32(2);
             }
         }
@@ -320,7 +320,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
         for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
             ghost_num = ghost_num + u32(1);
-            if (ghost_num == which_ghost || which_ghost == u32(0)) {
+            if ((ghost_num == which_ghost || which_ghost == u32(0)) && elements.el[i].entry < 1.5 && elements.el[j].entry < 1.5) {
                 // make new ray
                 // pos.x = pos.x + (ray_num_x / f32(num_rays) * width - width / 2.);
                 // pos.y = pos.y + (ray_num_y / f32(num_rays) * width - width / 2.);

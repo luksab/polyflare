@@ -812,33 +812,39 @@ impl PolyRes {
         view: &TextureView,
         device: &wgpu::Device,
         queue: &Queue,
-        num_rays: u32,
+        num_rays: u64,
         lens_state: &mut LensState,
     ) -> Result<(), wgpu::SurfaceError> {
-        let num_per_iter = 1_000_000;
+        let num_per_iter = 10_000_000;
 
         let iters = ((num_rays / num_per_iter) as f32).sqrt() as u32;
-        println!("iters: {}", iters);
         let width = lens_state.pos_params[9] / iters as f32;
+        println!("iters: {}, width: {}", iters, width);
         let old_width = lens_state.pos_params[9];
         lens_state.pos_params[9] = width;
         let num_dots = self.num_dots;
-        self.num_dots = num_per_iter;
+        self.num_dots = num_per_iter as u32;
+
+        println!("opacity_mul: {}", (num_dots as f64 / num_rays as f64) as f32);
+        let opacity = self.sim_params[0];
+        self.sim_params[0] *= 2. * (num_dots as f64 / num_rays as f64) as f32;
+        self.write_buffer(queue);
+
         lens_state.update(device, queue);
 
         let old_x = lens_state.pos_params[4];
         let old_y = lens_state.pos_params[5];
 
-        let mut resize = true;
+        let mut first_pass = true;
         for i in 0..iters {
             for j in 0..iters {
-                // TODO: fix size
-                lens_state.pos_params[4] = i as f32 * width - (width * iters as f32 / 2.); //x center
-                lens_state.pos_params[5] = j as f32 * width - (width * iters as f32 / 2.); //y center
-                println!("center: {},{}", lens_state.pos_params[4], lens_state.pos_params[5]);
+                lens_state.pos_params[4] = (i as f32 + 0.5) * width - (width * iters as f32 / 2.); //x center
+                lens_state.pos_params[5] = (j as f32 + 0.5) * width - (width * iters as f32 / 2.); //y center
+                                                                                                   // println!("center: {},{}", lens_state.pos_params[4], lens_state.pos_params[5]);
                 lens_state.update(device, queue);
-                self.update_dots(device, queue, resize, lens_state);
-                resize = false;
+                self.update_dots(device, queue, first_pass, lens_state);
+                // pollster::block_on(queue.on_submitted_work_done());
+                std::thread::sleep(core::time::Duration::from_millis(20));
 
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
@@ -850,7 +856,7 @@ impl PolyRes {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         // clear if on first render
-                        load: if resize {
+                        load: if first_pass {
                             wgpu::LoadOp::Clear(wgpu::Color {
                                 r: 0.0,
                                 g: 0.0,
@@ -886,6 +892,9 @@ impl PolyRes {
                 }
 
                 queue.submit(iter::once(encoder.finish()));
+                // std::thread::sleep(core::time::Duration::from_millis(100));
+                // pollster::block_on(queue.on_submitted_work_done());
+                first_pass = false;
             }
         }
 
@@ -949,6 +958,8 @@ impl PolyRes {
 
         lens_state.pos_params[4] = old_x;
         lens_state.pos_params[5] = old_y;
+
+        self.sim_params[0] = opacity;
         lens_state.update(device, queue);
         self.update_dots(device, queue, true, lens_state);
         Ok(())

@@ -209,7 +209,7 @@ fn main() {
                     lens_ui.build_ui(&ui, &state.device, &state.queue);
 
                 if render {
-                    let size = [512, 512];
+                    let size = [2048, 2048];
                     let extend = wgpu::Extent3d {
                         width: size[0],
                         height: size[1],
@@ -244,7 +244,7 @@ fn main() {
                             &tex.create_view(&wgpu::TextureViewDescriptor::default()),
                             &state.device,
                             &state.queue,
-                            16_000_000,
+                            10.0_f64.powf(lens_ui.hi_dots_exponent) as u64,
                             &mut lens_ui,
                         )
                         .unwrap();
@@ -268,8 +268,9 @@ fn main() {
                 if update_lens {
                     poly_res.sim_params[5] = poly_optics.draw_mode as f32;
                     poly_optics.sim_params[5] = poly_optics.draw_mode as f32;
-                    poly_res.sim_params[6] = poly_optics.which_ghost as f32;
-                    poly_optics.sim_params[6] = poly_optics.which_ghost as f32;
+                    poly_res.sim_params[6] = lens_ui.which_ghost as f32;
+                    poly_optics.sim_params[6] = lens_ui.which_ghost as f32;
+                    println!("which_ghost: {}", lens_ui.which_ghost as f32);
 
                     poly_optics.sim_params[0] = lens_ui.opacity.powf(3.);
                     poly_res.sim_params[0] = lens_ui.opacity.powf(3.);
