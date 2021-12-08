@@ -19,6 +19,8 @@ tiny-skia = "0.6.1"
 num = "0.4.0"
 cgmath = { version = "0.18", features = ["swizzle"] }
 mathru = "0.10"
+serde = "1.0"
+ron = "0.7"
 
 [dev-dependencies]
 approx = "0.5.0"

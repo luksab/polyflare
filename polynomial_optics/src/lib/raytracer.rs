@@ -1,3 +1,7 @@
+use std::{fs::OpenOptions, io::Write, path::Path};
+
+use serde::{Deserialize, Serialize};
+
 use cgmath::{num_traits::Pow, prelude::*, Vector2, Vector3};
 use tiny_skia::{Color, Pixmap};
 
@@ -40,7 +44,7 @@ impl Ray {
 
 /// ## Properties of a particular glass
 /// saves ior and coating
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Glass {
     /// ior vs air
     pub ior: f64,
@@ -53,16 +57,15 @@ pub struct Glass {
 /// # One element in a lens system
 /// ```
 /// # use polynomial_optics::raytracer::*;
-/// let glass = polynomial_optics::Glass {
-///     ior: 1.5,
-///     coating: (),
-/// };
-/// let element = Element{
+/// let element = Element {
 ///    radius: 3.,
-///    glass,
-///    position: 2.,
-///    entry: true,
-///    spherical: true,     
+///    properties: Properties::Glass(Glass {
+///        ior: 1.5,
+///        coating: (),
+///        entry: true,
+///        spherical: true,
+///    }),
+///    position: 0.,
 /// };
 /// let mut ray = Ray::default();
 ///
@@ -73,7 +76,7 @@ pub struct Glass {
 /// println!("propagated ray: {:?}", ray2);
 ///
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Element {
     /// One optical interface
     pub radius: f64,
@@ -81,7 +84,7 @@ pub struct Element {
     pub properties: Properties,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Properties {
     Glass(Glass),
     Aperture(u32),
@@ -317,9 +320,45 @@ impl Ray {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Lens {
     pub elements: Vec<Element>,
+}
+
+impl Lens {
+    /// Saves the lens to the path provided.
+    /// ```
+    /// # use polynomial_optics::raytracer::*;
+    /// let lens = Lens::new(vec![
+    ///    Element {
+    ///    radius: 1.,
+    ///    properties: Properties::Glass(Glass {
+    ///        ior: 1.5,
+    ///        coating: (),
+    ///        entry: true,
+    ///        spherical: true,
+    ///    }),
+    ///    position: 0.,
+    /// }]);
+    /// lens.save(std::path::Path::new("./test.lens"));
+    /// ```
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let mut file = OpenOptions::new().write(true).create(true).open(path)?;
+        file.write_all(ron::ser::to_string(self).unwrap().as_bytes())?;
+        // handle errors
+        file.sync_all()?;
+        Ok(())
+    }
+
+    /// Reads the lens from the path provided.
+    /// ```
+    /// # use polynomial_optics::raytracer::*;
+    /// println!("{:?}", Lens::read(std::path::Path::new("./test.lens")));
+    /// ```
+    pub fn read(path: &Path) -> std::io::Result<Lens> {
+        Ok(ron::de::from_str(std::fs::read_to_string(path)?.as_str())
+            .expect("file was misformatted"))
+    }
 }
 
 impl Lens {
