@@ -344,7 +344,12 @@ impl Lens {
     /// ```
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut file = OpenOptions::new().write(true).create(true).open(path)?;
-        file.write_all(ron::ser::to_string(self).unwrap().as_bytes())?;
+        let pretty_config = ron::ser::PrettyConfig::new();
+        file.write_all(
+            ron::ser::to_string_pretty(self, pretty_config)
+                .unwrap()
+                .as_bytes(),
+        )?;
         // handle errors
         file.sync_all()?;
         Ok(())
