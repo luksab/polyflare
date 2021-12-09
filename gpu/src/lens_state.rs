@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use cgmath::{InnerSpace, Vector3};
-use imgui::sys::igSameLine;
 use imgui::{Condition, Drag, Slider, Ui};
 use polynomial_optics::{Element, Glass, Lens, Properties};
 use wgpu::util::DeviceExt;
@@ -330,21 +329,22 @@ impl LensState {
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([100.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
-                let num_ghosts = (self.lens.len() * self.lens.len()) as u32;
-                update_lens |=
-                    Slider::new("which ghost", 0, num_ghosts).build(&ui, &mut self.which_ghost);
                 for (i, element) in self.lens.iter_mut().enumerate() {
                     match element {
                         ElementState::Lens(lens) => {
                             ui.text(format!("Lens: {:?}", i + 1));
+                            ui.push_item_width(ui.window_size()[0]/2. - 45.);
                             update_lens |=
-                                Slider::new(format!("d##{}", i), 0., 5.).build(&ui, &mut lens.d1);
+                                Slider::new(format!("d1##{}", i), 0., 5.).build(&ui, &mut lens.d1);
+                            ui.same_line();
                             update_lens |=
-                                Slider::new(format!("r1##{}", i), -3., 3.).build(&ui, &mut lens.r1);
-                            update_lens |=
-                                Slider::new(format!("r2##{}", i), -3., 3.).build(&ui, &mut lens.r2);
-                            update_lens |= Slider::new(format!("d_next##{}", i), -3., 6.)
+                                Slider::new(format!("r1##{}", i), -6., 3.).build(&ui, &mut lens.r1);
+                            update_lens |= Slider::new(format!("d2##{}", i), -3., 6.)
                                 .build(&ui, &mut lens.d2);
+                            ui.same_line();
+                            update_lens |=
+                                Slider::new(format!("r2##{}", i), -6., 3.).build(&ui, &mut lens.r2);
+                            ui.push_item_width(0.);
 
                             // update_size |= ui.checkbox(format!("button##{}", i), &mut element.4);
                             // update_lens |= update_size;
@@ -381,6 +381,9 @@ impl LensState {
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([600.0, 100.0], Condition::FirstUseEver)
             .build(&ui, || {
+                let num_ghosts = (self.lens.len() * self.lens.len()) as u32;
+                update_lens |=
+                    Slider::new("which ghost", 0, num_ghosts).build(&ui, &mut self.which_ghost);
                 ui.text(format!("Framerate: {:.0}", self.fps));
                 update_rays |=
                     Slider::new("rays_exponent", 0., 6.5).build(&ui, &mut self.ray_exponent);
