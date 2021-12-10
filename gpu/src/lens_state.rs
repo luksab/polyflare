@@ -1,6 +1,9 @@
+use std::fs::{self, DirBuilder};
+use std::path::Path;
 use std::time::Instant;
 
 use cgmath::{InnerSpace, Vector3};
+use directories::ProjectDirs;
 use imgui::{Condition, Drag, Slider, Ui};
 use polynomial_optics::{Element, Glass, Lens, Properties};
 use wgpu::util::DeviceExt;
@@ -31,12 +34,13 @@ pub struct LensState {
     pub hi_dots_exponent: f64,
     pub draw: u32,
     pub opacity: f32,
-    pub sensor_dist: f32,
     pub which_ghost: u32,
 
     lens: Vec<ElementState>,
     /// The actual Lens being rendered
     pub actual_lens: Lens,
+    selected_lens: usize,
+    current_filename: String,
 
     /// positions of the rays and the sensor
     pub pos_params_buffer: wgpu::Buffer,
@@ -79,7 +83,8 @@ impl LensState {
                 ior: 1.5,
             }),
         ];
-        let actual_lens = Lens::new(Self::get_lens_arr(&lens));
+        let sensor_dist = 3.;
+        let actual_lens = Lens::new(Self::get_lens_arr(&lens), sensor_dist);
 
         let lens_rt_data = actual_lens.get_rt_elements_buffer();
         let lens_rt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -205,12 +210,13 @@ impl LensState {
             hi_dots_exponent: 10.,
             draw: 1,
             opacity: 0.75,
-            sensor_dist: 3.,
             which_ghost: 0,
             lens,
             last_frame_time: Instant::now(),
             fps: 0.,
             actual_lens,
+            selected_lens: 0,
+            current_filename: String::new(),
             lens_rt_buffer,
             lens_buffer,
             pos_params_buffer,
@@ -270,8 +276,46 @@ impl LensState {
         Self::get_lens_arr(&self.lens)
     }
 
+    fn get_lens_state(lens: &Lens) -> Vec<ElementState> {
+        let mut elements = vec![];
+        let mut last_pos = -5.;
+        let mut expect_entry = true;
+        let mut enty = (0., 0.);
+
+        for element in &lens.elements {
+            match element.properties {
+                Properties::Glass(glass) => {
+                    if expect_entry && glass.entry {
+                        enty = (element.position as f32 - last_pos, element.radius as f32);
+                        expect_entry = false;
+                    } else if !expect_entry && !glass.entry {
+                        elements.push(ElementState::Lens(GlassElement {
+                            d1: enty.0,
+                            r1: enty.1,
+                            d2: element.position as f32 - last_pos,
+                            r2: element.radius as f32,
+                            ior: glass.ior,
+                        }));
+                        expect_entry = true;
+                    } else {
+                        panic!("expected entry != actual entry");
+                    }
+                }
+                Properties::Aperture(num_blades) => {
+                    elements.push(ElementState::Aperture(Aperture {
+                        d: element.position as f32 - last_pos,
+                        r: element.radius as f32,
+                        num_blades,
+                    }))
+                }
+            };
+            last_pos = element.position as f32;
+        }
+        elements
+    }
+
     pub fn update(&mut self, device: &Device, queue: &Queue) {
-        self.actual_lens = Lens::new(self.get_lens());
+        self.actual_lens = Lens::new(self.get_lens(), self.actual_lens.sensor_dist);
 
         let lens_rt_data = self.actual_lens.get_rt_elements_buffer();
         self.lens_rt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -306,12 +350,57 @@ impl LensState {
             label: None,
         });
 
-        self.pos_params[8] = self.sensor_dist;
+        self.pos_params[8] = self.actual_lens.sensor_dist;
         queue.write_buffer(
             &self.pos_params_buffer,
             0,
             bytemuck::cast_slice(&self.pos_params),
         );
+    }
+
+    /// read the available lens descriptions from ~/.config/polyflare/lenses/
+    /// ```
+    /// println!("{:?}", get_lenses());
+    /// ```
+    pub fn get_lenses() -> Vec<(String, Lens)> {
+        let mut lenses = vec![];
+
+        let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
+        let dir = proj_dirs.config_dir().join(Path::new("lenses"));
+        if dir.is_dir() {
+            for entry in fs::read_dir(dir).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+
+                if !path.is_dir() {
+                    match Lens::read(&path) {
+                        Ok(lens) => lenses.push((
+                            path.file_name().unwrap().to_owned().into_string().unwrap(),
+                            lens,
+                        )),
+                    Err(str) => 
+                        println!("Could not parse {:?}:\n\t {}", path, str),
+                    }
+                }
+            }
+        } else {
+            println!("creating lens directory {:?}", dir);
+            DirBuilder::new().recursive(true).create(dir).unwrap();
+        }
+
+        lenses
+    }
+
+    /// save the lens descriptions to ~/.config/polyflare/lenses/{name}
+    pub fn save_lens(name: &str, lens: &Lens) {
+        let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
+        let dir = proj_dirs.config_dir().join(Path::new("lenses"));
+        if !dir.is_dir() {
+            println!("creating lens directory {:?}", &dir);
+            DirBuilder::new().recursive(true).create(&dir).unwrap();
+        }
+
+        lens.save(&dir.join(Path::new(&name))).unwrap();
     }
 
     /// create an imgui window from Self and return
@@ -329,18 +418,32 @@ impl LensState {
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([100.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
+                let mut lenses = Self::get_lenses();
+                lenses.sort_by_key(|(name, _lens)| name.to_owned());
+
+                if ui.combo(
+                    "select lens",
+                    &mut self.selected_lens,
+                    lenses.as_slice(),
+                    |(label, _lens)| std::borrow::Cow::Borrowed(label),
+                ) {
+                    self.actual_lens = lenses[self.selected_lens].1.clone();
+                    self.lens = Self::get_lens_state(&mut self.actual_lens);
+                    self.current_filename = lenses[self.selected_lens].0.clone();
+                }
+
                 for (i, element) in self.lens.iter_mut().enumerate() {
                     match element {
                         ElementState::Lens(lens) => {
                             ui.text(format!("Lens: {:?}", i + 1));
-                            ui.push_item_width(ui.window_size()[0]/2. - 45.);
+                            ui.push_item_width(ui.window_size()[0] / 2. - 45.);
                             update_lens |=
                                 Slider::new(format!("d1##{}", i), 0., 5.).build(&ui, &mut lens.d1);
                             ui.same_line();
                             update_lens |=
                                 Slider::new(format!("r1##{}", i), -6., 3.).build(&ui, &mut lens.r1);
-                            update_lens |= Slider::new(format!("d2##{}", i), -3., 6.)
-                                .build(&ui, &mut lens.d2);
+                            update_lens |=
+                                Slider::new(format!("d2##{}", i), -3., 6.).build(&ui, &mut lens.d2);
                             ui.same_line();
                             update_lens |=
                                 Slider::new(format!("r2##{}", i), -6., 3.).build(&ui, &mut lens.r2);
@@ -365,8 +468,19 @@ impl LensState {
                         }
                     }
                 }
+                if ui.button("save lens") {
+                    Self::save_lens(lenses[self.selected_lens].0.as_str(), &self.actual_lens);
+                }
+                ui.same_line();
+                if ui.button("save as") {
+                    Self::save_lens(self.current_filename.as_str(), &self.actual_lens);
+                }
+                ui.same_line();
+                ui.input_text("filename", &mut self.current_filename)
+                    .build();
+
                 update_sensor |=
-                    Slider::new("sensor distance", 0., 20.).build(&ui, &mut self.sensor_dist);
+                    Slider::new("sensor distance", 0., 20.).build(&ui, &mut self.actual_lens.sensor_dist);
                 update_lens |= update_sensor
             });
 

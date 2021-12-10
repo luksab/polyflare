@@ -76,7 +76,7 @@ pub struct Glass {
 /// println!("propagated ray: {:?}", ray2);
 ///
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Element {
     /// One optical interface
     pub radius: f64,
@@ -84,7 +84,7 @@ pub struct Element {
     pub properties: Properties,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Properties {
     Glass(Glass),
     Aperture(u32),
@@ -320,9 +320,10 @@ impl Ray {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Lens {
     pub elements: Vec<Element>,
+    pub sensor_dist: f32,
 }
 
 impl Lens {
@@ -360,15 +361,23 @@ impl Lens {
     /// # use polynomial_optics::raytracer::*;
     /// println!("{:?}", Lens::read(std::path::Path::new("./test.lens")));
     /// ```
-    pub fn read(path: &Path) -> std::io::Result<Lens> {
-        Ok(ron::de::from_str(std::fs::read_to_string(path)?.as_str())
-            .expect("file was misformatted"))
+    pub fn read(path: &Path) -> Result<Lens, String> {
+        if let Ok(str) = std::fs::read_to_string(path) {
+            return match ron::de::from_str(str.as_str()){
+                Ok(lens) => Ok(lens),
+                Err(err) => Err(String::from(format!("{}", err))),
+            }
+        }
+        return Err(String::from("problem reading file"));
     }
 }
 
 impl Lens {
-    pub fn new(elements: Vec<Element>) -> Self {
-        Self { elements }
+    pub fn new(elements: Vec<Element>, sensor_dist: f32) -> Self {
+        Self {
+            elements,
+            sensor_dist,
+        }
     }
 
     /// get elements in form:

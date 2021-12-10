@@ -2,7 +2,7 @@ use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use lens_state::LensState;
 use std::time::Instant;
-use wgpu::{Extent3d, TextureDescriptor};
+use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
