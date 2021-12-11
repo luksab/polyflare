@@ -10,6 +10,8 @@ use tiny_skia::{Color, Pixmap};
 pub struct Ray {
     /// origin of the Ray, 0 in the optical axis
     pub o: cgmath::Vector3<f64>,
+    /// wavelength in µm
+    pub wavelength: f64,
     /// direction of the Ray, 0 if in the path of the optical axis, is a unit vector
     pub d: cgmath::Vector3<f64>,
     pub strength: f64,
@@ -21,6 +23,7 @@ impl Default for Ray {
             o: Vector3::new(0., 0., 0.),
             d: Vector3::new(0., 0., 1.),
             strength: 1.,
+            wavelength: 0.5,
         }
     }
 }
@@ -40,6 +43,112 @@ impl Ray {
 
         self.o += self.d * num_z;
     }
+
+    pub fn get_rgb(&self) -> (u8, u8, u8) {
+        Self::wave_length_to_rgb(self.wavelength)
+    }
+
+    /**
+     * Taken from Earl F. Glynn's web page:
+     * <a href="http://www.efg2.com/Lab/ScienceAndEngineering/Spectra.htm">Spectra Lab Report</a>
+     */
+    fn wave_length_to_rgb(wavelength: f64) -> (u8, u8, u8) {
+        // convert from µm to nm
+        let wavelength = wavelength * 1000.;
+        let gamma = 0.80;
+        let intensity_max = 255.;
+        let factor;
+        let red;
+        let green;
+        let blue;
+
+        if (wavelength >= 380.) && (wavelength < 440.) {
+            red = -(wavelength - 440.) / (440. - 380.);
+            green = 0.0;
+            blue = 1.0;
+        } else if (wavelength >= 440.) && (wavelength < 490.) {
+            red = 0.0;
+            green = (wavelength - 440.) / (490. - 440.);
+            blue = 1.0;
+        } else if (wavelength >= 490.) && (wavelength < 510.) {
+            red = 0.0;
+            green = 1.0;
+            blue = -(wavelength - 510.) / (510. - 490.);
+        } else if (wavelength >= 510.) && (wavelength < 580.) {
+            red = (wavelength - 510.) / (580. - 510.);
+            green = 1.0;
+            blue = 0.0;
+        } else if (wavelength >= 580.) && (wavelength < 645.) {
+            red = 1.0;
+            green = -(wavelength - 645.) / (645. - 580.);
+            blue = 0.0;
+        } else if (wavelength >= 645.) && (wavelength < 781.) {
+            red = 1.0;
+            green = 0.0;
+            blue = 0.0;
+        } else {
+            red = 0.0;
+            green = 0.0;
+            blue = 0.0;
+        }
+
+        // Let the intensity fall off near the vision limits
+
+        if (wavelength >= 380.) && (wavelength < 420.) {
+            factor = 0.3 + 0.7 * (wavelength - 380.) / (420. - 380.);
+        } else if (wavelength >= 420.) && (wavelength < 701.) {
+            factor = 1.0;
+        } else if (wavelength >= 701.) && (wavelength < 781.) {
+            factor = 0.3 + 0.7 * (780. - wavelength) / (780. - 700.);
+        } else {
+            factor = 0.0;
+        }
+
+        // Don't want 0^x = 1 for x <> 0
+        (
+            if red == 0.0 {
+                0
+            } else {
+                num::Float::round(intensity_max * (red * factor).pow(gamma)) as u8
+            },
+            if green == 0.0 {
+                0
+            } else {
+                num::Float::round(intensity_max * (green * factor).pow(gamma)) as u8
+            },
+            if blue == 0.0 {
+                0
+            } else {
+                num::Float::round(intensity_max * (blue * factor).pow(gamma)) as u8
+            },
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Sellmeier {
+    pub b: [f64; 3],
+    pub c: [f64; 3],
+}
+
+impl Sellmeier {
+    pub fn ior(&self, wavelength: f64) -> f64 {
+        let wavelength_sq = wavelength * wavelength;
+        let mut n_sq = 1.;
+        for i in 0..3 {
+            n_sq += (self.b[i] * wavelength_sq) / (wavelength_sq - self.c[i]);
+        }
+        n_sq.sqrt()
+    }
+}
+
+impl Sellmeier {
+    pub fn BK7() -> Self {
+        Self {
+            b: [1.03961212, 0.231792344, 1.01046945],
+            c: [6.00069867e-3, 2.00179144e-2, 1.03560653e2],
+        }
+    }
 }
 
 /// ## Properties of a particular glass
@@ -47,7 +156,7 @@ impl Ray {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Glass {
     /// ior vs air
-    pub ior: f64,
+    pub sellmeier: Sellmeier,
     /// coating - modifies wavelength
     pub coating: (),
     pub entry: bool,
@@ -91,10 +200,11 @@ pub enum Properties {
 }
 
 impl Ray {
-    pub fn new(o: Vector3<f64>, d: Vector3<f64>) -> Ray {
+    pub fn new(o: Vector3<f64>, d: Vector3<f64>, wavelength: f64) -> Ray {
         Ray {
             o,
             d,
+            wavelength,
             ..Default::default()
         }
     }
@@ -227,18 +337,22 @@ impl Ray {
                 d_in.angle(normal).0,
                 self.d.angle(-normal).0,
                 if entry == (self.d.z > 0.) {
-                    glass.ior
+                    glass.sellmeier.ior(self.wavelength)
                 } else {
                     1.0
                 },
                 if entry == (self.d.z > 0.) {
                     1.0
                 } else {
-                    glass.ior
+                    glass.sellmeier.ior(self.wavelength)
                 },
             );
         } else {
-            let eta = if entry { 1.0 / glass.ior } else { glass.ior };
+            let eta = if entry {
+                1.0 / glass.sellmeier.ior(self.wavelength)
+            } else {
+                glass.sellmeier.ior(self.wavelength)
+            };
 
             // from https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/refract.xhtml
             let k = 1.0 - eta * eta * (1.0 - normal.dot(self.d) * normal.dot(self.d));
@@ -257,8 +371,16 @@ impl Ray {
                 - Ray::fresnel_r(
                     d_in.angle(-normal).0,
                     self.d.angle(-normal).0,
-                    if entry { 1.0 } else { glass.ior },
-                    if entry { glass.ior } else { 1.0 },
+                    if entry {
+                        1.0
+                    } else {
+                        glass.sellmeier.ior(self.wavelength)
+                    },
+                    if entry {
+                        glass.sellmeier.ior(self.wavelength)
+                    } else {
+                        1.0
+                    },
                 );
         }
     }
@@ -363,10 +485,10 @@ impl Lens {
     /// ```
     pub fn read(path: &Path) -> Result<Lens, String> {
         if let Ok(str) = std::fs::read_to_string(path) {
-            return match ron::de::from_str(str.as_str()){
+            return match ron::de::from_str(str.as_str()) {
                 Ok(lens) => Ok(lens),
                 Err(err) => Err(String::from(format!("{}", err))),
-            }
+            };
         }
         return Err(String::from("problem reading file"));
     }
@@ -432,7 +554,12 @@ impl Lens {
             match element.properties {
                 Properties::Glass(glass) => {
                     elements.push(element.radius as f32);
-                    elements.push(glass.ior as f32);
+                    elements.push(glass.sellmeier.b[0] as f32);
+                    elements.push(glass.sellmeier.b[1] as f32);
+                    elements.push(glass.sellmeier.b[2] as f32);
+                    elements.push(glass.sellmeier.c[0] as f32);
+                    elements.push(glass.sellmeier.c[1] as f32);
+                    elements.push(glass.sellmeier.c[2] as f32);
                     elements.push(element.position as f32);
                     elements.push(glass.entry as i32 as f32);
                     elements.push(glass.spherical as i32 as f32);
@@ -440,6 +567,13 @@ impl Lens {
                 Properties::Aperture(aperture) => {
                     elements.push(element.radius as f32);
                     elements.push(aperture as f32);
+                    // placeholder
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    // placeholder end
                     elements.push(element.position as f32);
                     elements.push(2. as f32);
                     elements.push(2. as f32);
@@ -454,11 +588,12 @@ impl Lens {
     pub fn draw_rays(pixmap: &mut Pixmap, ray1: &Ray, ray2: &Ray) {
         let mut paint = tiny_skia::Paint::default();
         //paint.set_color(self.color);
+        let color = ray1.get_rgb();
         paint.set_color(Color::from_rgba8(
-            127,
-            127,
-            255,
-            (255.0 * ray1.strength.sqrt()) as u8,
+            color.0,
+            color.1,
+            color.2,
+            (255.0 * ray1.strength.sqrt() * 0.5) as u8,
         ));
         paint.anti_alias = true;
 
@@ -496,84 +631,97 @@ impl Lens {
         );
     }
 
-    pub fn draw(&self, pixmap: &mut Pixmap) {
-        let num_rays = 500;
-        let width = 2.0;
-        for ray_num in 0..num_rays {
-            // for i in 0..self.elements.len() {
-            //     for j in i..self.elements.len() {
-            for i in 0..=0 {
-                for j in 1..=1 {
-                    let mut ray = Ray::new(
-                        Vector3 {
-                            x: 0.0,
-                            y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
-                            z: -5.,
-                        },
-                        Vector3 {
-                            x: 0.0,
-                            y: 0.2,
-                            z: 1.0,
-                        }
-                        .normalize(),
-                    );
-                    let mut one = ray;
-                    for (ele, element) in self.elements.iter().enumerate() {
-                        // if we iterated through all elements up to
-                        // the first reflection point
+    fn str_from_wavelen(wavelen: f64) -> f64 {
+        // -((wavelen - 0.45) * 4.) * ((wavelen - 0.45) * 4.) + 1.
+        std::f64::consts::E
+            .pow(-((wavelen - 0.55) * 8.) * (wavelen - 0.55) * 8. - 15.* (wavelen - 0.55)) / 2.5
+    }
 
-                        if ele == j {
-                            // reflect at the first element,
-                            // which is further down the optical path
-                            ray.reflect(element);
-                            Lens::draw_rays(pixmap, &one, &ray);
-                            one = ray;
-                            // propagate backwards through system
-                            // until the second reflection
-                            for k in (i + 1..j).rev() {
-                                ray.propagate(&self.elements[k]);
+    pub fn draw(&self, pixmap: &mut Pixmap) {
+        let num_rays = 300;
+        let width = 2.0;
+        let wave_num = 20;
+        for wavelen in 0..wave_num {
+            let wavelength = 0.38 + wavelen as f64 * ((0.78 - 0.38) / wave_num as f64);
+            let strength = Self::str_from_wavelen(wavelength);
+            for ray_num in 0..num_rays {
+                // for i in 0..self.elements.len() {
+                //     for j in i..self.elements.len() {
+                for i in 0..=0 {
+                    for j in 1..=1 {
+                        let mut ray = Ray {
+                            o: Vector3 {
+                                x: 0.0,
+                                y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
+                                z: -5.,
+                            },
+                            d: Vector3 {
+                                x: 0.0,
+                                y: 0.2,
+                                z: 1.0,
+                            }
+                            .normalize(),
+                            wavelength,
+                            strength,
+                        };
+                        let mut one = ray;
+                        for (ele, element) in self.elements.iter().enumerate() {
+                            // if we iterated through all elements up to
+                            // the first reflection point
+
+                            if ele == j {
+                                // reflect at the first element,
+                                // which is further down the optical path
+                                ray.reflect(element);
+                                Lens::draw_rays(pixmap, &one, &ray);
+                                one = ray;
+                                // propagate backwards through system
+                                // until the second reflection
+                                for k in (i + 1..j).rev() {
+                                    ray.propagate(&self.elements[k]);
+                                    Lens::draw_rays(pixmap, &one, &ray);
+                                    one = ray;
+                                }
+                                ray.reflect(&self.elements[i]);
+                                Lens::draw_rays(pixmap, &one, &ray);
+                                one = ray;
+                                for k in i + 1..j {
+                                    ray.propagate(&self.elements[k]);
+                                    Lens::draw_rays(pixmap, &one, &ray);
+                                    one = ray;
+                                }
+                                // println!("strength: {}", ray.strength);
+                            } else {
+                                ray.propagate(element);
                                 Lens::draw_rays(pixmap, &one, &ray);
                                 one = ray;
                             }
-                            ray.reflect(&self.elements[i]);
-                            Lens::draw_rays(pixmap, &one, &ray);
-                            one = ray;
-                            for k in i + 1..j {
-                                ray.propagate(&self.elements[k]);
-                                Lens::draw_rays(pixmap, &one, &ray);
-                                one = ray;
-                            }
-                            println!("strength: {}", ray.strength);
-                        } else {
-                            ray.propagate(element);
-                            Lens::draw_rays(pixmap, &one, &ray);
-                            one = ray;
                         }
+                        ray.o += ray.d * 100.;
+                        Lens::draw_rays(pixmap, &one, &ray);
                     }
-                    ray.o += ray.d * 100.;
-                    Lens::draw_rays(pixmap, &one, &ray);
                 }
+                // let mut ray = Ray::new(
+                //     Vector3 {
+                //         x: 0.0,
+                //         y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
+                //         z: -5.,
+                //     },
+                //     Vector3 {
+                //         x: 0.0,
+                //         y: 0.0,
+                //         z: 1.0,
+                //     },
+                // );
+                // let mut one = ray;
+                // for element in &self.elements {
+                //     ray.propagate(element);
+                //     Lens::draw_rays(pixmap, &one, &ray);
+                //     one = ray;
+                // }
+                // ray.propagate(&Element::Space(100.));
+                // Lens::draw_rays(pixmap, &one, &ray);
             }
-            // let mut ray = Ray::new(
-            //     Vector3 {
-            //         x: 0.0,
-            //         y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
-            //         z: -5.,
-            //     },
-            //     Vector3 {
-            //         x: 0.0,
-            //         y: 0.0,
-            //         z: 1.0,
-            //     },
-            // );
-            // let mut one = ray;
-            // for element in &self.elements {
-            //     ray.propagate(element);
-            //     Lens::draw_rays(pixmap, &one, &ray);
-            //     one = ray;
-            // }
-            // ray.propagate(&Element::Space(100.));
-            // Lens::draw_rays(pixmap, &one, &ray);
         }
     }
 
@@ -599,7 +747,7 @@ impl Lens {
                             // make new ray
                             let mut pos = center_pos;
                             pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                            let mut ray = Ray::new(pos, direction);
+                            let mut ray = Ray::new(pos, direction, todo!());
                             rays.push(ray.o.z);
                             rays.push(ray.o.y);
                             rays.push(ray.strength);
@@ -678,7 +826,7 @@ impl Lens {
             if draw_mode & 2 > 0 {
                 let mut pos = center_pos;
                 pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                let mut ray = Ray::new(pos, direction);
+                let mut ray = Ray::new(pos, direction, todo!());
                 rays.push(ray.o.z);
                 rays.push(ray.o.y);
                 rays.push(ray.strength);
@@ -727,7 +875,7 @@ impl Lens {
                                 let mut pos = center_pos;
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(pos, direction);
+                                let mut ray = Ray::new(pos, direction, todo!());
                                 ray_collection.push(ray);
 
                                 for (ele, element) in self.elements.iter().enumerate() {
@@ -774,7 +922,7 @@ impl Lens {
                     let mut pos = center_pos;
                     pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                     pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                    let mut ray = Ray::new(pos, direction);
+                    let mut ray = Ray::new(pos, direction, todo!());
                     let mut ray_collection = vec![];
                     ray_collection.push(ray);
                     for element in &self.elements {
@@ -826,7 +974,7 @@ impl Lens {
                                 let mut pos = center_pos;
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(pos, direction);
+                                let mut ray = Ray::new(pos, direction, todo!());
 
                                 for (ele, element) in self.elements.iter().enumerate() {
                                     // if we iterated through all elements up to
@@ -866,7 +1014,7 @@ impl Lens {
                     let mut pos = center_pos;
                     pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                     pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                    let mut ray = Ray::new(pos, direction);
+                    let mut ray = Ray::new(pos, direction, todo!());
                     for element in &self.elements {
                         ray.propagate(element);
                     }

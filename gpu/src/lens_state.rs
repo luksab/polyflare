@@ -5,7 +5,7 @@ use std::time::Instant;
 use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
 use imgui::{Condition, Drag, Slider, Ui};
-use polynomial_optics::{Element, Glass, Lens, Properties};
+use polynomial_optics::{Element, Glass, Lens, Properties, Sellmeier};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
@@ -14,7 +14,7 @@ pub struct GlassElement {
     r1: f32,
     d2: f32,
     r2: f32,
-    ior: f64,
+    sellmeier: Sellmeier,
 }
 
 pub struct Aperture {
@@ -68,7 +68,7 @@ impl LensState {
                 r1: 3.,
                 d2: 1.5,
                 r2: 3.,
-                ior: 1.5,
+                sellmeier: Sellmeier::BK7(),
             }),
             ElementState::Aperture(Aperture {
                 d: 1.5,
@@ -80,7 +80,7 @@ impl LensState {
                 r1: 3.,
                 d2: 1.5,
                 r2: 3.,
-                ior: 1.5,
+                sellmeier: Sellmeier::BK7(),
             }),
         ];
         let sensor_dist = 3.;
@@ -241,7 +241,7 @@ impl LensState {
                     elements.push(Element {
                         radius: lens.r1 as f64,
                         properties: Properties::Glass(Glass {
-                            ior: lens.ior,
+                            sellmeier: Sellmeier::BK7(),
                             coating: (),
                             entry: true,
                             spherical: true,
@@ -252,7 +252,7 @@ impl LensState {
                     elements.push(Element {
                         radius: lens.r2 as f64,
                         properties: Properties::Glass(Glass {
-                            ior: lens.ior,
+                            sellmeier: Sellmeier::BK7(),
                             coating: (),
                             entry: false,
                             spherical: true,
@@ -294,7 +294,7 @@ impl LensState {
                             r1: enty.1,
                             d2: element.position as f32 - last_pos,
                             r2: element.radius as f32,
-                            ior: glass.ior,
+                            sellmeier: Sellmeier::BK7(),
                         }));
                         expect_entry = true;
                     } else {

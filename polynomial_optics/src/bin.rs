@@ -59,7 +59,7 @@ fn main() {
     let lens_entry = Element {
         radius,
         properties: Properties::Glass(Glass {
-            ior: 1.5,
+            sellmeier: Sellmeier::BK7(),
             coating: (),
             entry: true,
             spherical: true,
@@ -70,7 +70,7 @@ fn main() {
     let lens_exit = Element {
         radius,
         properties: Properties::Glass(Glass {
-            ior: 1.5,
+            sellmeier: Sellmeier::BK7(),
             coating: (),
             entry: false,
             spherical: true,
@@ -92,9 +92,14 @@ fn main() {
     line.width = 0.1;
 
     println!("lens: {:?}", lens_entry);
+    // let wave_num = 10;
+    // for wavelen in 0..wave_num {
+    //     let wavelength = 0.38 + wavelen as f64 * ((0.78 - 0.38) / wave_num as f64);
+    //     println!("l: {}, ior: {}", wavelength, Sellmeier::BK7().ior(wavelength));
+    // }
     //println!("ray: {:?}", ray);
 
-    let lens = Lens::new(vec![lens_entry, lens_exit]);
+    let lens = Lens::new(vec![lens_entry, lens_exit], 3.);
     lens.draw(&mut pixmap);
 
     pixmap.save_png("image.png").unwrap();
