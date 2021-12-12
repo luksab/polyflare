@@ -241,7 +241,7 @@ impl LensState {
                     elements.push(Element {
                         radius: lens.r1 as f64,
                         properties: Properties::Glass(Glass {
-                            sellmeier: Sellmeier::BK7(),
+                            sellmeier: lens.sellmeier,
                             coating: (),
                             entry: true,
                             spherical: true,
@@ -252,7 +252,7 @@ impl LensState {
                     elements.push(Element {
                         radius: lens.r2 as f64,
                         properties: Properties::Glass(Glass {
-                            sellmeier: Sellmeier::BK7(),
+                            sellmeier: lens.sellmeier,
                             coating: (),
                             entry: false,
                             spherical: true,
@@ -294,7 +294,7 @@ impl LensState {
                             r1: enty.1,
                             d2: element.position as f32 - last_pos,
                             r2: element.radius as f32,
-                            sellmeier: Sellmeier::BK7(),
+                            sellmeier: glass.sellmeier,
                         }));
                         expect_entry = true;
                     } else {
