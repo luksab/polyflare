@@ -534,17 +534,15 @@ impl Lens {
     /// ```
     /// struct Element {
     ///   radius: f32;
-    ///   glass: Glass;
+    ///   glass: Sellmeier;
     ///   position: f32;
     ///   entry: bool;
     ///   spherical: bool;
     /// };
-    /// struct Glass {
-    /// ior vs air
-    ///   ior: f32;
-    ///   /// coating - modifies wavelength
-    ///   // coating: ();
-    /// };
+    /// pub struct Sellmeier {
+    ///     pub b: [f64; 3],
+    ///     pub c: [f64; 3],
+    /// }
     /// ```
     /// only works if elements are entry and exit alternatively
     pub fn get_rt_elements_buffer(&self) -> Vec<f32> {

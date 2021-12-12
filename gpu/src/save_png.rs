@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter, iter, path::Path};
+use std::{fs::File, io::BufWriter, iter, path::Path, mem};
 
 use wgpu::{Device, Queue, Texture};
 
@@ -40,7 +40,11 @@ pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue) {
     device.poll(wgpu::Maintain::Wait);
 
     if let Ok(()) = pollster::block_on(buffer_future) {
-        let data = buffer_slice.get_mapped_range();
+        let mut data = buffer_slice.get_mapped_range().to_vec();
+        // BGR TO RGB
+        for chunk in data.chunks_mut(4) {
+            chunk.swap(0, 2);
+        }
 
         let path = Path::new(r"./screenshot.png");
         let file = File::create(path).unwrap();

@@ -37,7 +37,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 
     let pos = (vec2<f32>(in.clip_position.x / params.width, in.clip_position.y / params.height) + vec2<f32>(0.55,0.5)) / screenAspect;
     let sample = textureSample(t_diffuse, s_diffuse, pos);
-    var bg = vec4<f32>(0.15,0.15,0.25,1.0);
+    var bg = vec4<f32>(0.0,0.0,0.0,1.0);
 
     let color = bg * (1.0 - sample.a) + sample;
     return color;

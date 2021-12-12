@@ -118,16 +118,22 @@ impl PolyOptics {
                             shader_location: 0,
                             format: wgpu::VertexFormat::Float32x3,
                         },
+                        // r.wavelength
+                        wgpu::VertexAttribute {
+                            offset: 3 * 4,
+                            shader_location: 1,
+                            format: wgpu::VertexFormat::Float32,
+                        },
                         // r.d
                         wgpu::VertexAttribute {
                             offset: 4 * 4,
-                            shader_location: 1,
+                            shader_location: 2,
                             format: wgpu::VertexFormat::Float32x3,
                         },
                         // r.strength
                         wgpu::VertexAttribute {
                             offset: 7 * 4,
-                            shader_location: 2,
+                            shader_location: 3,
                             format: wgpu::VertexFormat::Float32,
                         },
                     ],
@@ -141,12 +147,12 @@ impl PolyOptics {
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            dst_factor: wgpu::BlendFactor::One,
                             operation: wgpu::BlendOperation::Add,
                         },
                         alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            src_factor: wgpu::BlendFactor::Zero,
+                            dst_factor: wgpu::BlendFactor::One,
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),

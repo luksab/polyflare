@@ -7,4 +7,4 @@ Polynomial_optics also contains the CPU code for raytracing though the lens syst
 All the GPU code is in the [gpu crate](https://github.com/luksab/polyflare/tree/master/gpu).
 
 ## Example output
-![example](./images/screenshot_correct.png)
+![example](./images/chromatic.png)

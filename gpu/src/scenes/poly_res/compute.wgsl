@@ -1,6 +1,7 @@
 /// one Ray with origin, direction, and strength
 struct Ray {
   o: vec3<f32>;
+  wavelength: f32;
   d: vec3<f32>;
   strength: f32;
 };
@@ -9,7 +10,12 @@ struct Ray {
 /// - one optical interface between glass and air
 struct Element {
   radius: f32;
-  glass: f32;
+  b1: f32;
+  b2: f32;
+  b3: f32;
+  c1: f32;
+  c2: f32;
+  c3: f32;
   position: f32;// num_blades if aperture
   entry: f32;// 0: false, 1: true, 2: aperture
   spherical: f32;// 0: false, 1: true
@@ -45,7 +51,7 @@ struct Rays {
 [[block]]
 /// all the Elements of the Lens under test
 struct Elements {
-  el : [[stride(20)]] array<Element>;
+  el : [[stride(40)]] array<Element>;
 };
 
 [[group(0), binding(0)]] var<uniform> params : SimParams;
@@ -54,6 +60,28 @@ struct Elements {
 [[group(1), binding(0)]] var<uniform> posParams : PosParams;
 
 [[group(2), binding(0)]] var<storage, read> elements : Elements;
+
+fn plank(wavelen: f32, temp: f32) -> f32 {
+    let h = 6.62607015e-34; // J/Hz
+    let b = 1.380649e-23; // J/K
+    let c = 299792458.; // m/s
+    let e = 2.718281828459045;
+    return (2. * h * pow(c, 2.))
+        / (pow(wavelen, 5.))
+        / (pow(e, (h * c) / (wavelen * b * temp)) - 1.);
+}
+
+fn str_from_wavelen(wavelen: f32) -> f32 {
+    return plank(wavelen / 1000., 5000.) / 25.;
+}
+
+fn ior(self: Element, wavelength: f32) -> f32 {
+    let wavelength_sq = wavelength * wavelength;
+    let n_sq = 1. + (self.b1 * wavelength_sq) / (wavelength_sq - self.c1)
+                      + (self.b2 * wavelength_sq) / (wavelength_sq - self.c2)
+                      + (self.b3 * wavelength_sq) / (wavelength_sq - self.c3);
+    return sqrt(n_sq);
+}
 
 /// calculate the fresnel term for an intersection
 fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
@@ -67,7 +95,7 @@ fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
 fn propagate_element(
     self: Ray,
     radius: f32,
-    glass: f32,
+    ior: f32,
     position: f32,
     reflect: bool,
     entry: bool,
@@ -172,7 +200,7 @@ fn propagate_element(
 
         var a: f32;
         if (entry == (ray.d.z > 0.)) {
-            a = glass;
+            a = ior;
         } else {
             a = 1.0;
         };
@@ -180,7 +208,7 @@ fn propagate_element(
         if (entry == (ray.d.z > 0.)) {
             b = 1.0;
         } else {
-            b = glass;
+            b = ior;
         }
 
         ray.strength = ray.strength * fresnel_r(
@@ -191,7 +219,7 @@ fn propagate_element(
         );
     } else {
         var eta: f32;
-        if (entry) { eta = 1.0 / glass; } else { eta = glass; };
+        if (entry) { eta = 1.0 / ior; } else { eta = ior; };
 
         // from https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/refract.xhtml
         let k = 1.0 - eta * eta * (1.0 - dot(normal, ray.d) * dot(normal, ray.d));
@@ -208,7 +236,7 @@ fn propagate_element(
 
         var a: f32;
         if (entry == (ray.d.z > 0.)) {
-            a = glass;
+            a = ior;
         } else {
             a = 1.0;
         };
@@ -216,7 +244,7 @@ fn propagate_element(
         if (entry == (ray.d.z > 0.)) {
             b = 1.0;
         } else {
-            b = glass;
+            b = ior;
         }
         ray.strength = ray.strength * (1.0
             - fresnel_r(
@@ -260,14 +288,14 @@ fn propagate(self: Ray, element: Element) -> Ray {
     if (element.entry > 1.) {
         var ray = self;
         // ray.strength = self.strength * f32(u32(clip_ray_poly(self, u32(element.position), element.radius)));
-        let pass = !clip_ray_poly(self, element.position, u32(element.glass), element.radius);
+        let pass = !clip_ray_poly(self, element.position, u32(element.b1), element.radius);
         ray.strength = self.strength * f32(u32(pass));
         return ray;
     } else {
         return propagate_element(
             self,
             element.radius,
-            element.glass,
+            ior(element, self.wavelength),
             element.position,
             false,
             element.entry > 0.,
@@ -282,7 +310,7 @@ fn reflect_ray(self: Ray, element: Element) -> Ray {
     return propagate_element(
         self,
         element.radius,
-        element.glass,
+        ior(element, self.wavelength),
         element.position,
         true,
         element.entry > 0.,
@@ -356,7 +384,12 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
                 dir = normalize(dir);
                 // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-                var ray = Ray(posParams.init.o, dir, 1.0);
+                let wave_num = u32(10);
+                let wavelen = f32(ray_num % wave_num);
+                let start_wavelen = 0.38;
+                let end_wavelen = 0.78;
+                let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
+                var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength));
 
                 for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
                     let element = elements.el[ele];
@@ -390,7 +423,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                     rays.rays[ray_num * num_segments + counter] = ray;
                     counter = counter + u32(1);
                 } else {
-                    rays.rays[ray_num * num_segments + counter] = Ray(vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), 0.0);
+                    rays.rays[ray_num * num_segments + counter] = Ray(vec3<f32>(0.0, 0.0, 0.0), 0.5, vec3<f32>(0.0, 0.0, 0.0), 0.0);
                     counter = counter + u32(1);
                 }
             }
@@ -405,7 +438,12 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
     dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
     dir = normalize(dir);
-    var ray = Ray(posParams.init.o, dir, 1.0);
+    let wave_num = u32(10);
+    let wavelen = f32(ray_num % wave_num);
+    let start_wavelen = 0.38;
+    let end_wavelen = 0.78;
+    let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
+    var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength));
     // iterate through all Elements and propagate the Ray through
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];
