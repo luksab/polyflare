@@ -631,97 +631,115 @@ impl Lens {
         );
     }
 
+    /// Planks law in SI units
+    /// ```
+    /// # use polynomial_optics::raytracer::*;
+    /// println!("{}", Lens::boltzmann(450./1_000_000., 3000.));
+    /// panic!();
+    /// ```
+    fn plank(wavelen: f64, temp: f64) -> f64 {
+        let h = 6.62607015e-34; // J/Hz
+        let b = 1.380649e-23; // J/K
+        let c = 299792458.; // m/s
+        (2. * h * c.pow(2))
+            / (wavelen.pow(5))
+            / (std::f64::consts::E.pow((h * c) / (wavelen * b * temp)) - 1.)
+    }
+
     fn str_from_wavelen(wavelen: f64) -> f64 {
         // -((wavelen - 0.45) * 4.) * ((wavelen - 0.45) * 4.) + 1.
-        std::f64::consts::E
-            .pow(-((wavelen - 0.55) * 8.) * (wavelen - 0.55) * 8. - 15.* (wavelen - 0.55)) / 2.5
+        // std::f64::consts::E
+        //     .pow(-((wavelen - 0.55) * 8.) * (wavelen - 0.55) * 8. - 15. * (wavelen - 0.55))
+        //     / 2.5
+        Self::plank(wavelen / 1_000., 5_000.) / 250.
     }
 
     pub fn draw(&self, pixmap: &mut Pixmap) {
-        let num_rays = 300;
+        let num_rays = 5000;
         let width = 2.0;
         let wave_num = 20;
-        for wavelen in 0..wave_num {
-            let wavelength = 0.38 + wavelen as f64 * ((0.78 - 0.38) / wave_num as f64);
-            let strength = Self::str_from_wavelen(wavelength);
-            for ray_num in 0..num_rays {
-                // for i in 0..self.elements.len() {
-                //     for j in i..self.elements.len() {
-                for i in 0..=0 {
-                    for j in 1..=1 {
-                        let mut ray = Ray {
-                            o: Vector3 {
-                                x: 0.0,
-                                y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
-                                z: -5.,
-                            },
-                            d: Vector3 {
-                                x: 0.0,
-                                y: 0.2,
-                                z: 1.0,
-                            }
-                            .normalize(),
-                            wavelength,
-                            strength,
-                        };
-                        let mut one = ray;
-                        for (ele, element) in self.elements.iter().enumerate() {
-                            // if we iterated through all elements up to
-                            // the first reflection point
-
-                            if ele == j {
-                                // reflect at the first element,
-                                // which is further down the optical path
-                                ray.reflect(element);
-                                Lens::draw_rays(pixmap, &one, &ray);
-                                one = ray;
-                                // propagate backwards through system
-                                // until the second reflection
-                                for k in (i + 1..j).rev() {
-                                    ray.propagate(&self.elements[k]);
-                                    Lens::draw_rays(pixmap, &one, &ray);
-                                    one = ray;
-                                }
-                                ray.reflect(&self.elements[i]);
-                                Lens::draw_rays(pixmap, &one, &ray);
-                                one = ray;
-                                for k in i + 1..j {
-                                    ray.propagate(&self.elements[k]);
-                                    Lens::draw_rays(pixmap, &one, &ray);
-                                    one = ray;
-                                }
-                                // println!("strength: {}", ray.strength);
-                            } else {
-                                ray.propagate(element);
-                                Lens::draw_rays(pixmap, &one, &ray);
-                                one = ray;
-                            }
+        for ray_num in 0..num_rays {
+            let wavelen = ray_num % wave_num;
+            let start_wavelen = 0.38;
+            let end_wavelen = 0.78;
+            let wavelength = start_wavelen + wavelen as f64 * ((end_wavelen - start_wavelen) / wave_num as f64);
+            let strength = Self::str_from_wavelen(wavelength) / 10.;
+            // for i in 0..self.elements.len() {
+            //     for j in i..self.elements.len() {
+            for i in 0..=0 {
+                for j in 1..=1 {
+                    let mut ray = Ray {
+                        o: Vector3 {
+                            x: 0.0,
+                            y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
+                            z: -5.,
+                        },
+                        d: Vector3 {
+                            x: 0.0,
+                            y: 0.2,
+                            z: 1.0,
                         }
-                        ray.o += ray.d * 100.;
-                        Lens::draw_rays(pixmap, &one, &ray);
+                        .normalize(),
+                        wavelength,
+                        strength,
+                    };
+                    let mut one = ray;
+                    for (ele, element) in self.elements.iter().enumerate() {
+                        // if we iterated through all elements up to
+                        // the first reflection point
+
+                        if ele == j {
+                            // reflect at the first element,
+                            // which is further down the optical path
+                            ray.reflect(element);
+                            Lens::draw_rays(pixmap, &one, &ray);
+                            one = ray;
+                            // propagate backwards through system
+                            // until the second reflection
+                            for k in (i + 1..j).rev() {
+                                ray.propagate(&self.elements[k]);
+                                Lens::draw_rays(pixmap, &one, &ray);
+                                one = ray;
+                            }
+                            ray.reflect(&self.elements[i]);
+                            Lens::draw_rays(pixmap, &one, &ray);
+                            one = ray;
+                            for k in i + 1..j {
+                                ray.propagate(&self.elements[k]);
+                                Lens::draw_rays(pixmap, &one, &ray);
+                                one = ray;
+                            }
+                            // println!("strength: {}", ray.strength);
+                        } else {
+                            ray.propagate(element);
+                            Lens::draw_rays(pixmap, &one, &ray);
+                            one = ray;
+                        }
                     }
+                    ray.o += ray.d * 100.;
+                    Lens::draw_rays(pixmap, &one, &ray);
                 }
-                // let mut ray = Ray::new(
-                //     Vector3 {
-                //         x: 0.0,
-                //         y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
-                //         z: -5.,
-                //     },
-                //     Vector3 {
-                //         x: 0.0,
-                //         y: 0.0,
-                //         z: 1.0,
-                //     },
-                // );
-                // let mut one = ray;
-                // for element in &self.elements {
-                //     ray.propagate(element);
-                //     Lens::draw_rays(pixmap, &one, &ray);
-                //     one = ray;
-                // }
-                // ray.propagate(&Element::Space(100.));
-                // Lens::draw_rays(pixmap, &one, &ray);
             }
+            // let mut ray = Ray::new(
+            //     Vector3 {
+            //         x: 0.0,
+            //         y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
+            //         z: -5.,
+            //     },
+            //     Vector3 {
+            //         x: 0.0,
+            //         y: 0.0,
+            //         z: 1.0,
+            //     },
+            // );
+            // let mut one = ray;
+            // for element in &self.elements {
+            //     ray.propagate(element);
+            //     Lens::draw_rays(pixmap, &one, &ray);
+            //     one = ray;
+            // }
+            // ray.propagate(&Element::Space(100.));
+            // Lens::draw_rays(pixmap, &one, &ray);
         }
     }
 
