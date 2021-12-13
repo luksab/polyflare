@@ -10,6 +10,8 @@ use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
 impl Sensor {
+    /// Leica M8
+    /// from https://www.image-engineering.de/content/library/diploma_thesis/christian_mauer_spectral_response.pdf
     pub fn leica_m8() -> Self {
         let arr = vec![
             (380., 0.02, 0.01, 0.03),
@@ -360,16 +362,20 @@ impl Sensor {
 // 850 0.00 0.00 0.00
 // 906 0.00 0.00 0.00
 
+/// How much a single wavelength influences r, g and b of the Sensor
 pub struct SensorDatapoint {
     pub rgb: Vector3<f32>,
     pub wavelength: f32,
 }
 
+/// A representation of a sensor - given by measurements of a particular wavelength
+/// Measurements taken from https://www.image-engineering.de/content/library/diploma_thesis/christian_mauer_spectral_response.pdf
 pub struct Sensor {
     pub measuremens: Vec<SensorDatapoint>,
 }
 
 impl Sensor {
+    /// get the contained data in r,g,b,wavelength format
     pub fn get_data(&self) -> Vec<f32> {
         let mut result = vec![];
         for measurement in &self.measuremens {
