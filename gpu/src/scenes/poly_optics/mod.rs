@@ -68,6 +68,7 @@ impl PolyOptics {
         sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         format: TextureFormat,
+        pos_bind_group_layout: &BindGroupLayout,
     ) -> (RenderPipeline, BindGroup) {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyOptics"),
@@ -98,7 +99,7 @@ impl PolyOptics {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render"),
-                bind_group_layouts: &[&render_bind_group_layout],
+                bind_group_layouts: &[&render_bind_group_layout, &pos_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -260,7 +261,11 @@ impl PolyOptics {
         let conversion_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Conversion Pipeline Layout"),
-                bind_group_layouts: &[&conversion_bind_group_layout, &pos_bind_group_layout, lens_bind_group_layout],
+                bind_group_layouts: &[
+                    &conversion_bind_group_layout,
+                    &pos_bind_group_layout,
+                    lens_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
         let conversion_render_pipeline = {
@@ -459,8 +464,13 @@ impl PolyOptics {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let (boid_render_pipeline, render_bind_group) =
-            Self::shader_draw(device, &sim_params, &sim_param_buffer, format);
+        let (boid_render_pipeline, render_bind_group) = Self::shader_draw(
+            device,
+            &sim_params,
+            &sim_param_buffer,
+            format,
+            &lens_state.pos_bind_group_layout,
+        );
 
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
@@ -756,11 +766,7 @@ impl PolyOptics {
         self.update_buffers(queue, device, false, lens_state);
     }
 
-    pub fn update(
-        &mut self,
-        device: &wgpu::Device,
-        lens_state: &LensState,
-    ) {
+    pub fn update(&mut self, device: &wgpu::Device, lens_state: &LensState) {
         // if self.cell_timer.elapsed().unwrap().as_secs_f32() > 0.1 {
         //     self.cell_timer = SystemTime::now();
         //     self.update_cells(device, queue);
@@ -805,6 +811,7 @@ impl PolyOptics {
                 &self.sim_params,
                 &self.sim_param_buffer,
                 self.format,
+                &lens_state.pos_bind_group_layout,
             );
             self.render_pipeline = pipeline;
             self.render_bind_group = bind_group;
@@ -875,6 +882,7 @@ impl PolyOptics {
             let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
             rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.render_bind_group, &[]);
+            rpass.set_bind_group(1, &lens_state.pos_bind_group, &[]);
             // the three instance-local vertices
             rpass.set_vertex_buffer(0, self.rays_buffer.slice(..));
             //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));

@@ -343,6 +343,7 @@ fn main() {
                             &renderer.textures.get(res_window_texture_id).unwrap().view(),
                             &state.device,
                             &state.queue,
+                            &lens_ui,
                         ) {
                             Ok(_) => {}
                             // Reconfigure the surface if lost

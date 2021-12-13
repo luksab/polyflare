@@ -16,7 +16,6 @@ pub struct PolyRes {
     compute_bind_group: BindGroup,
     dots_buffer: wgpu::Buffer,
 
-    // particle_bind_groups: Vec<wgpu::BindGroup>,
     render_bind_group: wgpu::BindGroup,
     sim_param_buffer: wgpu::Buffer,
     /// ```
@@ -46,6 +45,8 @@ impl PolyRes {
         sim_params: &[f32; 7],
         sim_param_buffer: &Buffer,
         format: TextureFormat,
+        pos_bind_group_layout: &BindGroupLayout,
+        render_bind_group: &Buffer,
     ) -> (RenderPipeline, BindGroup) {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyOptics"),
@@ -76,7 +77,7 @@ impl PolyRes {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render"),
-                bind_group_layouts: &[&render_bind_group_layout],
+                bind_group_layouts: &[&render_bind_group_layout, &pos_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -413,8 +414,14 @@ impl PolyRes {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let (boid_render_pipeline, render_bind_group) =
-            Self::shader_draw(device, &sim_params, &sim_param_buffer, format);
+        let (boid_render_pipeline, render_bind_group)  = Self::shader_draw(
+            device,
+            &sim_params,
+            &sim_param_buffer,
+            format,
+            &lens_state.pos_bind_group_layout,
+            &lens_state.sensor_buffer,
+        );
 
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
@@ -678,6 +685,8 @@ impl PolyRes {
                 &self.sim_params,
                 &self.sim_param_buffer,
                 self.format,
+                &lens_state.pos_bind_group_layout,
+                &lens_state.sensor_buffer,
             );
             self.boid_render_pipeline = pipeline;
             self.render_bind_group = bind_group;
@@ -713,6 +722,7 @@ impl PolyRes {
         view: &TextureView,
         device: &wgpu::Device,
         queue: &Queue,
+        lens_state: &LensState,
     ) -> Result<(), wgpu::SurfaceError> {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
@@ -746,6 +756,7 @@ impl PolyRes {
             let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
             rpass.set_pipeline(&self.boid_render_pipeline);
             rpass.set_bind_group(0, &self.render_bind_group, &[]);
+            rpass.set_bind_group(1, &lens_state.pos_bind_group, &[]);
             // the three instance-local vertices
             rpass.set_vertex_buffer(0, self.dots_buffer.slice(..));
             //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
@@ -831,7 +842,10 @@ impl PolyRes {
         let num_dots = self.num_dots;
         self.num_dots = num_per_iter as u32;
 
-        println!("opacity_mul: {}", (num_dots as f64 / num_rays as f64) as f32);
+        println!(
+            "opacity_mul: {}",
+            (num_dots as f64 / num_rays as f64) as f32
+        );
         let opacity = self.sim_params[0];
         self.sim_params[0] *= 2. * (num_dots as f64 / num_rays as f64) as f32;
         self.write_buffer(queue);
@@ -890,6 +904,7 @@ impl PolyRes {
                     let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
                     rpass.set_pipeline(&self.boid_render_pipeline);
                     rpass.set_bind_group(0, &self.render_bind_group, &[]);
+                    rpass.set_bind_group(1, &lens_state.pos_bind_group, &[]);
                     // the three instance-local vertices
                     rpass.set_vertex_buffer(0, self.dots_buffer.slice(..));
                     //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));

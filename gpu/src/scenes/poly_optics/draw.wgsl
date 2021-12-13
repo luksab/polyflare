@@ -18,73 +18,23 @@ struct SimParams {
   height: f32;
 };
 
+struct SensorDatapoint {
+    rgb: vec3<f32>;
+    wavelength: f32;
+};
+
+[[block]]
+struct Sensor {
+    measuremens: [[stride(16)]] array<SensorDatapoint>;
+};
+
 [[group(0), binding(0)]] var<uniform> params : SimParams;
+[[group(1), binding(1)]] var<storage, read> sensor : Sensor;
 
-fn wave_length_to_rgb(wavelength: f32) -> vec3<f32> {
-    // convert from µm to nm
-    let wavelength = wavelength * 1000.;
-    let gamma = 0.80;
-    var factor: f32;
-    var red: f32;
-    var green: f32;
-    var blue: f32;
-
-    var done = false;
-
-    if ((wavelength >= 380.) && (wavelength < 440.)) {
-        red = -(wavelength - 440.) / (440. - 380.);
-        green = 0.0;
-        blue = 1.0;
-        done = true;
-    } if ((wavelength >= 440.) && (wavelength < 490.) && !done) {
-        red = 0.0;
-        green = (wavelength - 440.) / (490. - 440.);
-        blue = 1.0;
-        done = true;
-    } if ((wavelength >= 490.) && (wavelength < 510.) && !done) {
-        red = 0.0;
-        green = 1.0;
-        blue = -(wavelength - 510.) / (510. - 490.);
-        done = true;
-    } if ((wavelength >= 510.) && (wavelength < 580.) && !done) {
-        red = (wavelength - 510.) / (580. - 510.);
-        green = 1.0;
-        blue = 0.0;
-        done = true;
-    } if ((wavelength >= 580.) && (wavelength < 645.) && !done) {
-        red = 1.0;
-        green = -(wavelength - 645.) / (645. - 580.);
-        blue = 0.0;
-        done = true;
-    } if ((wavelength >= 645.) && (wavelength < 781.) && !done) {
-        red = 1.0;
-        green = 0.0;
-        blue = 0.0;
-        done = true;
-    } if (!done) {
-        red = 0.01;
-        green = 0.01;
-        blue = 0.01;
-        done = true;
-    }
-
-    // Let the intensity fall off near the vision limits
-    var done = false;
-    if ((wavelength >= 380.) && (wavelength < 420.)) {
-        factor = 0.3 + 0.7 * (wavelength - 380.) / (420. - 380.);
-    } if ((wavelength >= 420.) && (wavelength < 701.) && !done) {
-        factor = 1.0;
-    } if ((wavelength >= 701.) && (wavelength < 781.) && !done) {
-        factor = 0.3 + 0.7 * (780. - wavelength) / (780. - 700.);
-    } if (!done) {
-        factor = 0.01;
-    }
-
-    return vec3<f32>(
-        pow(red * factor, gamma),
-        pow(green * factor, gamma),
-        pow(blue * factor, gamma)
-    );
+fn lookup_rgb(wavelength: f32) -> vec3<f32> {
+    let lower_index = u32(clamp((wavelength - sensor.measuremens[0].wavelength / 1000.) * 100., 0., 34.));
+    let factor = (wavelength % 10.) / 10.;
+    return sensor.measuremens[lower_index].rgb * (1. - factor) + sensor.measuremens[lower_index + u32(1)].rgb * factor;
 }
 
 [[stage(vertex)]]
@@ -103,7 +53,8 @@ fn main(
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   let s = in.strength * params.opacity;
-  //wave_length_to_rgb(0.5)
-  return vec4<f32>(wave_length_to_rgb(in.wavelength), sqrt(in.strength) * params.opacity);
+  var rgb = lookup_rgb(in.wavelength);
+  rgb.g = rgb.g * 0.6;
+  return vec4<f32>(rgb, sqrt(in.strength) * params.opacity);
   // return vec4<f32>(1.0, 1.0, 1.0, 0.0);
 }

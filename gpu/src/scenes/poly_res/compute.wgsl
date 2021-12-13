@@ -66,13 +66,15 @@ fn plank(wavelen: f32, temp: f32) -> f32 {
     let b = 1.380649e-23; // J/K
     let c = 299792458.; // m/s
     let e = 2.718281828459045;
-    return (2. * h * pow(c, 2.))
+    let hc = 1.9864458571489286e-25;
+    let hcc2 = 1.1910429723971884e-16;
+    return hcc2
         / (pow(wavelen, 5.))
-        / (pow(e, (h * c) / (wavelen * b * temp)) - 1.);
+        / (pow(e, (hc) / (wavelen * b * temp)) - 1.) / 1.e12;
 }
 
 fn str_from_wavelen(wavelen: f32) -> f32 {
-    return plank(wavelen / 1000., 5000.) / 25.;
+    return plank(wavelen / 1000000., 3000.) * 1000.;
 }
 
 fn ior(self: Element, wavelength: f32) -> f32 {
@@ -349,7 +351,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     }
   }
   // the total number of possible shader executions
-  let total = arrayLength(&rays.rays) / num_segments + u32(1);
+  let total = arrayLength(&rays.rays) / num_segments;
   let index = global_invocation_id.x;
   if (index >= total) { // if we don't fit in the buffer - return early
     return;
@@ -365,6 +367,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let sqrt_num = u32(sqrt(f32(num_rays)));
   let ray_num_x = f32(ray_num / sqrt_num);
   let ray_num_y = f32(ray_num % sqrt_num);
+
+  let wave_num = u32(10);
 
   // how many dots have we added to the buffer
   var counter = u32(0);
@@ -384,7 +388,6 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
                 dir = normalize(dir);
                 // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-                let wave_num = u32(10);
                 let wavelen = f32(ray_num % wave_num);
                 let start_wavelen = 0.38;
                 let end_wavelen = 0.78;
@@ -423,7 +426,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                     rays.rays[ray_num * num_segments + counter] = ray;
                     counter = counter + u32(1);
                 } else {
-                    rays.rays[ray_num * num_segments + counter] = Ray(vec3<f32>(0.0, 0.0, 0.0), 0.5, vec3<f32>(0.0, 0.0, 0.0), 0.0);
+                    rays.rays[ray_num * num_segments + counter] = Ray(vec3<f32>(100., 100., 100.), 0.5, vec3<f32>(0.0, 0.0, 0.0), 0.0);
                     counter = counter + u32(1);
                 }
             }
@@ -438,7 +441,6 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
     dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
     dir = normalize(dir);
-    let wave_num = u32(10);
     let wavelen = f32(ray_num % wave_num);
     let start_wavelen = 0.38;
     let end_wavelen = 0.78;

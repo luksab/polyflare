@@ -9,6 +9,379 @@ use polynomial_optics::{Element, Glass, Lens, Properties, Sellmeier};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
+impl Sensor {
+    pub fn leica_m8() -> Self {
+        let arr = vec![
+            (380., 0.02, 0.01, 0.03),
+            (390., 0.03, 0.02, 0.10),
+            (400., 0.03, 0.04, 0.27),
+            (410., 0.03, 0.04, 0.39),
+            (420., 0.03, 0.05, 0.44),
+            (430., 0.03, 0.06, 0.51),
+            (440., 0.03, 0.09, 0.62),
+            (450., 0.04, 0.12, 0.70),
+            (460., 0.05, 0.18, 0.77),
+            (470., 0.07, 0.30, 0.84),
+            (480., 0.08, 0.40, 0.86),
+            (490., 0.08, 0.44, 0.84),
+            (500., 0.10, 0.60, 0.74),
+            (510., 0.11, 0.75, 0.62),
+            (520., 0.12, 0.93, 0.46),
+            (530., 0.12, 1.03, 0.30),
+            (540., 0.13, 1.02, 0.20),
+            (550., 0.14, 1.00, 0.14),
+            (560., 0.13, 0.92, 0.09),
+            (570., 0.13, 0.82, 0.07),
+            (580., 0.19, 0.67, 0.06),
+            (590., 0.38, 0.51, 0.06),
+            (600., 0.61, 0.30, 0.05),
+            (610., 0.62, 0.20, 0.04),
+            (620., 0.55, 0.12, 0.04),
+            (630., 0.46, 0.08, 0.03),
+            (640., 0.38, 0.06, 0.03),
+            (650., 0.28, 0.04, 0.02),
+            (660., 0.22, 0.03, 0.02),
+            (670., 0.16, 0.03, 0.02),
+            (680., 0.13, 0.03, 0.02),
+            (690., 0.09, 0.03, 0.01),
+            (700., 0.07, 0.03, 0.01),
+            (710., 0.06, 0.02, 0.01),
+            (720., 0.04, 0.02, 0.01),
+            (750., 0.02, 0.01, 0.00),
+            (800., 0.01, 0.01, 0.00),
+            (850., 0.00, 0.00, 0.00),
+            (905., 0.00, 0.00, 0.00),
+        ];
+        Self {
+            measuremens: arr
+                .iter()
+                .map(|(wl, r, g, b)| SensorDatapoint {
+                    rgb: Vector3 {
+                        x: *r,
+                        y: *g,
+                        z: *b,
+                    },
+                    wavelength: *wl as f32,
+                })
+                .collect(),
+        }
+    }
+}
+
+// Nikon D700
+// wav   R    G    B
+// 380 0.00 0.01 0.01
+// 390 0.00 0.00 0.00
+// 400 0.00 0.00 0.00
+// 410 0.00 0.00 0.03
+// 420 0.05 0.02 0.38
+// 430 0.07 0.04 0.70
+// 440 0.05 0.06 0.87
+// 450 0.04 0.09 1.04
+// 460 0.03 0.13 1.02
+// 470 0.04 0.26 1.01
+// 480 0.04 0.39 0.90
+// 490 0.04 0.43 0.78
+// 500 0.04 0.60 0.56
+// 510 0.04 0.81 0.32
+// 520 0.07 0.98 0.17
+// 530 0.08 1.07 0.07
+// 540 0.05 1.06 0.04
+// 550 0.03 1.00 0.02
+// 560 0.03 0.87 0.01
+// 570 0.09 0.68 0.01
+// 580 0.48 0.48 0.00
+// 590 0.76 0.33 0.00
+// 600 0.74 0.15 0.00
+// 610 0.64 0.07 0.00
+// 620 0.54 0.03 0.00
+// 630 0.44 0.02 0.00
+// 640 0.35 0.01 0.00
+// 650 0.25 0.01 0.00
+// 660 0.20 0.01 0.00
+// 670 0.11 0.00 0.00
+// 680 0.04 0.00 0.00
+// 690 0.01 0.00 0.00
+// 700 0.00 0.00 0.00
+// 710 0.00 0.00 0.00
+// 720 0.00 0.00 0.00
+// 750 0.00 0.00 0.00
+// 800 0.00 0.00 0.00
+// 850 0.00 0.00 0.00
+// 905 0.00 0.00 0.00
+
+// Canon EOS 40D
+// wav   R    G    B
+// 380 0.01 0.01 0.01
+// 390 0.00 0.00 0.01
+// 400 0.00 0.00 0.01
+// 410 0.00 0.01 0.09
+// 420 0.00 0.03 0.42
+// 430 0.00 0.05 0.65
+// 440 0.00 0.08 0.87
+// 450 0.00 0.09 0.96
+// 460 0.00 0.13 1.01
+// 470 0.01 0.29 0.97
+// 480 0.01 0.54 0.90
+// 490 0.01 0.70 0.81
+// 500 0.02 0.94 0.61
+// 510 0.04 1.01 0.43
+// 520 0.08 1.08 0.25
+// 530 0.14 1.06 0.14
+// 540 0.15 1.01 0.10
+// 550 0.14 1.00 0.07
+// 560 0.17 0.87 0.05
+// 570 0.30 0.75 0.04
+// 580 0.45 0.58 0.03
+// 590 0.53 0.42 0.02
+// 600 0.56 0.24 0.01
+// 610 0.53 0.15 0.01
+// 620 0.46 0.08 0.01
+// 630 0.38 0.05 0.01
+// 640 0.33 0.03 0.01
+// 650 0.23 0.02 0.01
+// 660 0.19 0.02 0.01
+// 670 0.15 0.02 0.01
+// 680 0.10 0.01 0.00
+// 690 0.03 0.01 0.00
+// 700 0.00 0.00 0.00
+// 710 0.00 0.00 0.00
+// 720 0.00 0.00 0.00
+// 750 0.00 0.00 0.00
+// 800 0.00 0.00 0.00
+// 850 0.00 0.00 0.00
+// 905 0.00 0.00 0.00
+
+// Fuji S5 Pro
+// wav   R    G    B
+// 380 0.01 0.01 0.01
+// 390 0.00 0.01 0.03
+// 400 0.01 0.01 0.25
+// 410 0.01 0.01 0.44
+// 420 0.01 0.01 0.62
+// 430 0.00 0.00 0.74
+// 440 0.00 0.01 0.86
+// 450 0.00 0.01 0.99
+// 460 0.00 0.01 1.02
+// 470 0.00 0.05 1.01
+// 480 0.01 0.37 0.95
+// 490 0.01 0.68 0.84
+// 500 0.01 0.98 0.63
+// 510 0.01 1.07 0.47
+// 520 0.02 1.09 0.29
+// 530 0.03 1.10 0.14
+// 540 0.02 1.08 0.09
+// 550 0.01 1.00 0.05
+// 560 0.01 0.88 0.02
+// 570 0.05 0.75 0.01
+// 580 0.31 0.58 0.01
+// 590 0.83 0.39 0.01
+// 600 0.90 0.23 0.01
+// 610 0.86 0.09 0.01
+// 620 0.79 0.05 0.01
+// 630 0.72 0.02 0.01
+// 640 0.70 0.02 0.01
+// 650 0.60 0.01 0.01
+// 660 0.54 0.01 0.02
+// 670 0.41 0.01 0.02
+// 680 0.20 0.01 0.01
+// 690 0.05 0.01 0.00
+// 700 0.02 0.00 0.00
+// 710 0.01 0.00 0.00
+// 720 0.00 0.00 0.00
+// 750 0.00 0.00 0.00
+// 800 0.00 0.00 0.00
+// 850 0.00 0.00 0.00
+// 900 0.00 0.00 0.00
+
+// Panasonic DMC-LX3
+// wav   R    G    B
+// 380 0.00 0.00 0.00
+// 390 0.00 0.00 0.00
+// 400 0.00 0.00 0.00
+// 410 0.00 0.00 0.02
+// 420 0.01 0.05 0.18
+// 430 0.03 0.14 0.54
+// 440 0.04 0.28 0.95
+// 450 0.03 0.34 1.03
+// 460 0.03 0.41 1.01
+// 470 0.03 0.55 0.98
+// 480 0.03 0.62 0.87
+// 490 0.03 0.65 0.79
+// 500 0.04 0.83 0.59
+// 510 0.05 1.01 0.46
+// 520 0.08 1.10 0.31
+// 530 0.09 1.13 0.21
+// 540 0.06 1.05 0.15
+// 550 0.04 1.00 0.10
+// 560 0.04 0.88 0.06
+// 570 0.04 0.73 0.04
+// 580 0.23 0.58 0.03
+// 590 0.65 0.44 0.03
+// 600 0.74 0.28 0.02
+// 610 0.70 0.20 0.02
+// 620 0.63 0.14 0.02
+// 630 0.56 0.10 0.02
+// 640 0.51 0.08 0.02
+// 650 0.42 0.06 0.03
+// 660 0.30 0.05 0.02
+// 670 0.15 0.03 0.02
+// 680 0.06 0.02 0.01
+// 690 0.01 0.00 0.00
+// 700 0.00 0.00 0.00
+// 710 0.00 0.00 0.00
+// 720 0.00 0.00 0.00
+// 750 0.00 0.00 0.00
+// 800 0.00 0.00 0.00
+// 850 0.00 0.00 0.00
+// 905 0.00 0.00 0.00
+
+// Arriflex D-21
+// wav   R    G    B
+// 380 0.00 0.00 0.00
+// 390 0.02 0.02 0.03
+// 400 0.05 0.02 0.07
+// 410 0.15 0.04 0.32
+// 420 0.14 0.05 0.48
+// 430 0.12 0.06 0.68
+// 440 0.06 0.08 0.85
+// 450 0.05 0.13 0.99
+// 460 0.06 0.18 1.11
+// 470 0.07 0.27 1.01
+// 480 0.08 0.34 0.93
+// 490 0.09 0.37 0.79
+// 500 0.11 0.47 0.54
+// 510 0.21 0.79 0.44
+// 520 0.30 1.02 0.34
+// 530 0.40 1.10 0.28
+// 540 0.44 1.15 0.26
+// 550 0.38 1.00 0.22
+// 560 0.44 0.85 0.19
+// 570 0.63 0.55 0.13
+// 580 0.92 0.36 0.10
+// 590 1.07 0.23 0.08
+// 600 1.02 0.13 0.06
+// 610 0.80 0.09 0.05
+// 620 0.74 0.08 0.04
+// 630 0.53 0.05 0.03
+// 640 0.38 0.05 0.03
+// 650 0.23 0.03 0.02
+// 660 0.16 0.03 0.02
+// 670 0.11 0.03 0.02
+// 680 0.05 0.01 0.01
+// 690 0.03 0.01 0.01
+// 700 0.01 0.00 0.01
+// 710 0.01 0.00 0.01
+// 720 0.01 0.00 0.01
+// 750 0.00 0.00 0.00
+// 800 0.00 0.00 0.00
+// 850 0.01 0.01 0.01
+// 905 0.00 0.00 0.00
+
+// Canon EOS 450D no IR filter
+// wav   R    G    B
+// 380 0.04 0.02 0.04
+// 390 0.04 0.02 0.11
+// 400 0.03 0.03 0.24
+// 410 0.02 0.03 0.34
+// 420 0.01 0.04 0.46
+// 430 0.00 0.04 0.50
+// 440 0.00 0.06 0.64
+// 450 0.00 0.08 0.71
+// 460 0.01 0.13 0.77
+// 470 0.01 0.26 0.75
+// 480 0.02 0.51 0.73
+// 490 0.02 0.64 0.67
+// 500 0.04 0.81 0.50
+// 510 0.06 0.92 0.39
+// 520 0.07 1.02 0.26
+// 530 0.09 1.01 0.16
+// 540 0.12 1.03 0.13
+// 550 0.17 1.00 0.10
+// 560 0.23 0.92 0.07
+// 570 0.37 0.84 0.06
+// 580 0.59 0.78 0.06
+// 590 0.78 0.58 0.05
+// 600 0.77 0.39 0.03
+// 610 0.80 0.21 0.02
+// 620 0.87 0.15 0.02
+// 630 0.82 0.10 0.02
+// 640 0.77 0.08 0.02
+// 650 0.83 0.08 0.03
+// 660 0.77 0.07 0.04
+// 670 0.69 0.09 0.04
+// 680 0.65 0.11 0.04
+// 690 0.60 0.15 0.05
+// 700 0.62 0.19 0.05
+// 710 0.63 0.21 0.05
+// 720 0.58 0.19 0.04
+// 750 0.53 0.22 0.03
+// 800 0.38 0.30 0.20
+// 850 0.23 0.23 0.23
+// 905 0.12 0.13 0.12
+
+// Hasselblad H3D
+// wav   R    G    B
+// 380 0.06 0.02 0.03
+// 390 0.10 0.03 0.13
+// 400 0.11 0.04 0.25
+// 410 0.11 0.05 0.36
+// 420 0.12 0.06 0.44
+// 430 0.13 0.08 0.55
+// 440 0.14 0.11 0.67
+// 450 0.16 0.16 0.75
+// 460 0.18 0.19 0.79
+// 470 0.24 0.28 0.76
+// 480 0.28 0.35 0.81
+// 490 0.29 0.39 0.75
+// 500 0.33 0.49 0.72
+// 510 0.40 0.66 0.65
+// 520 0.46 0.80 0.55
+// 530 0.53 1.03 0.44
+// 540 0.62 1.07 0.34
+// 550 0.60 1.00 0.24
+// 560 0.55 0.90 0.16
+// 570 0.55 0.74 0.13
+// 580 0.65 0.66 0.12
+// 590 1.11 0.44 0.09
+// 600 1.55 0.27 0.08
+// 610 1.34 0.16 0.06
+// 620 1.05 0.10 0.04
+// 630 0.93 0.07 0.04
+// 640 0.63 0.05 0.03
+// 650 0.29 0.02 0.02
+// 660 0.20 0.02 0.01
+// 670 0.16 0.01 0.01
+// 680 0.09 0.01 0.01
+// 690 0.04 0.01 0.00
+// 700 0.02 0.00 0.00
+// 750 0.00 0.00 0.00
+// 800 0.00 0.00 0.00
+// 850 0.00 0.00 0.00
+// 906 0.00 0.00 0.00
+
+pub struct SensorDatapoint {
+    pub rgb: Vector3<f32>,
+    pub wavelength: f32,
+}
+
+pub struct Sensor {
+    pub measuremens: Vec<SensorDatapoint>,
+}
+
+impl Sensor {
+    pub fn get_data(&self) -> Vec<f32> {
+        let mut result = vec![];
+        for measurement in &self.measuremens {
+            result.push(measurement.rgb.x);
+            result.push(measurement.rgb.y);
+            result.push(measurement.rgb.z);
+            result.push(measurement.wavelength);
+        }
+        result
+    }
+}
+
 pub struct GlassElement {
     d1: f32,
     r1: f32,
@@ -42,6 +415,8 @@ pub struct LensState {
     selected_lens: usize,
     current_filename: String,
 
+    sensor: Sensor,
+    pub sensor_buffer: Buffer,
     /// positions of the rays and the sensor
     pub pos_params_buffer: wgpu::Buffer,
     pub pos_bind_group: wgpu::BindGroup,
@@ -99,6 +474,17 @@ impl LensState {
         let lens_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Lens drawing Buffer"),
             contents: bytemuck::cast_slice(&lens_data),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
+        let sensor = Sensor::leica_m8();
+        let sensor_data = sensor.get_data();
+
+        let sensor_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sensor info Buffer"),
+            contents: bytemuck::cast_slice(&sensor_data),
             usage: wgpu::BufferUsages::UNIFORM
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::STORAGE,
@@ -181,26 +567,46 @@ impl LensState {
         });
         let pos_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            (pos_params.len() * std::mem::size_of::<f32>()) as _,
-                        ),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (pos_params.len() * std::mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (sensor_data.len() * std::mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
+                ],
                 label: None,
             });
         let pos_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &pos_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: pos_params_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: pos_params_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: sensor_buffer.as_entire_binding(),
+                },
+            ],
             label: None,
         });
 
@@ -217,6 +623,8 @@ impl LensState {
             actual_lens,
             selected_lens: 0,
             current_filename: String::new(),
+            sensor,
+            sensor_buffer,
             lens_rt_buffer,
             lens_buffer,
             pos_params_buffer,
@@ -378,8 +786,7 @@ impl LensState {
                             path.file_name().unwrap().to_owned().into_string().unwrap(),
                             lens,
                         )),
-                    Err(str) => 
-                        println!("Could not parse {:?}:\n\t {}", path, str),
+                        Err(str) => println!("Could not parse {:?}:\n\t {}", path, str),
                     }
                 }
             }
@@ -479,8 +886,8 @@ impl LensState {
                 ui.input_text("filename", &mut self.current_filename)
                     .build();
 
-                update_sensor |=
-                    Slider::new("sensor distance", 0., 20.).build(&ui, &mut self.actual_lens.sensor_dist);
+                update_sensor |= Slider::new("sensor distance", 0., 20.)
+                    .build(&ui, &mut self.actual_lens.sensor_dist);
                 update_lens |= update_sensor
             });
 
@@ -504,7 +911,7 @@ impl LensState {
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));
 
                 update_dots |=
-                    Slider::new("dots_exponent", 0., 10.).build(&ui, &mut self.dots_exponent);
+                    Slider::new("dots_exponent", 0., 7.8).build(&ui, &mut self.dots_exponent);
                 ui.text(format!(
                     "dots: {}",
                     10.0_f64.powf(self.dots_exponent) as u32

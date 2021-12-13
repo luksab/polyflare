@@ -46,7 +46,7 @@ pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue) {
             chunk.swap(0, 2);
         }
 
-        let path = Path::new(r"./screenshot.png");
+        let path = Path::new(r"./screenshot2.png");
         let file = File::create(path).unwrap();
         let ref mut w = BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, size[0], size[1]);

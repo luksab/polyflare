@@ -58,13 +58,15 @@ fn plank(wavelen: f32, temp: f32) -> f32 {
     let b = 1.380649e-23; // J/K
     let c = 299792458.; // m/s
     let e = 2.718281828459045;
-    return (2. * h * pow(c, 2.))
+    let hc = 1.9864458571489286e-25;
+    let hcc2 = 1.1910429723971884e-16;
+    return hcc2
         / (pow(wavelen, 5.))
-        / (pow(e, (h * c) / (wavelen * b * temp)) - 1.);
+        / (pow(e, (hc) / (wavelen * b * temp)) - 1.) / 1.e12;
 }
 
 fn str_from_wavelen(wavelen: f32) -> f32 {
-    return plank(wavelen / 1000., 5000.) / 250.;
+    return plank(wavelen / 1000000., 3000.) * 1000.;
 }
 
 fn ior(self: Element, wavelength: f32) -> f32 {
