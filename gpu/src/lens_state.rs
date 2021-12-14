@@ -843,6 +843,7 @@ impl LensState {
                     self.actual_lens = lenses[self.selected_lens].1.clone();
                     self.lens = Self::get_lens_state(&mut self.actual_lens);
                     self.current_filename = lenses[self.selected_lens].0.clone();
+                    update_lens = true;
                 }
 
                 for (i, element) in self.lens.iter_mut().enumerate() {
