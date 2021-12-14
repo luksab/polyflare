@@ -910,7 +910,7 @@ impl LensState {
             .build(&ui, || {
                 let num_ghosts = (self.lens.len() * self.lens.len()) as u32;
                 update_lens |=
-                    Slider::new("which ghost", 0, num_ghosts).build(&ui, &mut self.which_ghost);
+                    Slider::new("which ghost", 0, num_ghosts + 1).build(&ui, &mut self.which_ghost);
                 ui.text(format!("Framerate: {:.0}", self.fps));
                 update_rays |=
                     Slider::new("rays_exponent", 0., 6.5).build(&ui, &mut self.ray_exponent);
