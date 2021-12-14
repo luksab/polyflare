@@ -33,8 +33,9 @@ struct Sensor {
 
 fn lookup_rgb(wavelength: f32) -> vec3<f32> {
     let lower_index = u32(clamp((wavelength - sensor.measuremens[0].wavelength / 1000.) * 100., 0., 34.));
-    let factor = (wavelength % 10.) / 10.;
-    return sensor.measuremens[lower_index].rgb * (1. - factor) + sensor.measuremens[lower_index + u32(1)].rgb * factor;
+    let factor = (wavelength % 0.1) * 10.;
+    return sensor.measuremens[lower_index].rgb * (1. - factor)
+     + sensor.measuremens[lower_index + u32(1)].rgb * (factor);
 }
 
 [[stage(vertex)]]
