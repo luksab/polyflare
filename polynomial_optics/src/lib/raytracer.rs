@@ -1,8 +1,4 @@
-use std::{
-    fs::{File, OpenOptions},
-    io::Write,
-    path::Path,
-};
+use std::{fs::OpenOptions, io::Write, path::Path};
 
 use serde::{Deserialize, Serialize};
 
@@ -501,7 +497,11 @@ impl Lens {
     /// lens.save(std::path::Path::new("./test.lens"));
     /// ```
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let mut file = OpenOptions::new().write(true).create(true).open(path)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(path)?;
         let pretty_config = ron::ser::PrettyConfig::new();
         file.write_all(
             ron::ser::to_string_pretty(self, pretty_config)
