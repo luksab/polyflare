@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter, iter, path::Path, mem};
+use std::{fs::File, io::BufWriter, iter, path::Path};
 
 use wgpu::{Device, Queue, Texture};
 

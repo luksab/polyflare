@@ -75,7 +75,7 @@ impl LensState {
                 r1: 3.,
                 d2: 1.5,
                 r2: 3.,
-                sellmeier: Sellmeier::BK7(),
+                sellmeier: Sellmeier::bk7(),
             }),
             ElementState::Aperture(Aperture {
                 d: 1.5,
@@ -87,7 +87,7 @@ impl LensState {
                 r1: 3.,
                 d2: 1.5,
                 r2: 3.,
-                sellmeier: Sellmeier::BK7(),
+                sellmeier: Sellmeier::bk7(),
             }),
         ];
         let sensor_dist = 3.;

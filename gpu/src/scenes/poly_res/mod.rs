@@ -46,7 +46,6 @@ impl PolyRes {
         sim_param_buffer: &Buffer,
         format: TextureFormat,
         pos_bind_group_layout: &BindGroupLayout,
-        render_bind_group: &Buffer,
     ) -> (RenderPipeline, BindGroup) {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyOptics"),
@@ -420,7 +419,6 @@ impl PolyRes {
             &sim_param_buffer,
             format,
             &lens_state.pos_bind_group_layout,
-            &lens_state.sensor_buffer,
         );
 
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
@@ -686,7 +684,6 @@ impl PolyRes {
                 &self.sim_param_buffer,
                 self.format,
                 &lens_state.pos_bind_group_layout,
-                &lens_state.sensor_buffer,
             );
             self.boid_render_pipeline = pipeline;
             self.render_bind_group = bind_group;

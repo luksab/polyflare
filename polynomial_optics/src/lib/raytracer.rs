@@ -143,7 +143,7 @@ impl Sellmeier {
 }
 
 impl Sellmeier {
-    pub fn BK7() -> Self {
+    pub fn bk7() -> Self {
         Self {
             b: [1.03961212, 0.231792344, 1.01046945],
             c: [6.00069867e-3, 2.00179144e-2, 1.03560653e2],
@@ -660,7 +660,8 @@ impl Lens {
             let wavelen = ray_num % wave_num;
             let start_wavelen = 0.38;
             let end_wavelen = 0.78;
-            let wavelength = start_wavelen + wavelen as f64 * ((end_wavelen - start_wavelen) / wave_num as f64);
+            let wavelength =
+                start_wavelen + wavelen as f64 * ((end_wavelen - start_wavelen) / wave_num as f64);
             let strength = Self::str_from_wavelen(wavelength) / 10.;
             // for i in 0..self.elements.len() {
             //     for j in i..self.elements.len() {
@@ -754,6 +755,12 @@ impl Lens {
         let width = 2.0;
         let mut old_strength;
         for ray_num in 0..num_rays {
+            let wave_num = 10;
+            let wavelen = (ray_num % wave_num) as f64;
+            let start_wavelen = 0.38;
+            let end_wavelen = 0.78;
+            let wavelength =
+                start_wavelen + wavelen * ((end_wavelen - start_wavelen) / (wave_num as f64));
             if draw_mode & 1 > 0 {
                 let mut ghost_num = 0;
                 for i in 0..self.elements.len() - 1 {
@@ -763,7 +770,7 @@ impl Lens {
                             // make new ray
                             let mut pos = center_pos;
                             pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                            let mut ray = Ray::new(pos, direction, todo!());
+                            let mut ray = Ray::new(pos, direction, wavelength);
                             rays.push(ray.o.z);
                             rays.push(ray.o.y);
                             rays.push(ray.strength);
@@ -842,7 +849,7 @@ impl Lens {
             if draw_mode & 2 > 0 {
                 let mut pos = center_pos;
                 pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                let mut ray = Ray::new(pos, direction, todo!());
+                let mut ray = Ray::new(pos, direction, wavelength);
                 rays.push(ray.o.z);
                 rays.push(ray.o.y);
                 rays.push(ray.strength);
@@ -880,6 +887,13 @@ impl Lens {
         let width = 2.0;
         for ray_num_x in 0..num_rays {
             for ray_num_y in 0..num_rays {
+                let wave_num = 10;
+                let ray_num = ray_num_x * num_rays + ray_num_y;
+                let wavelen = (ray_num % wave_num) as f64;
+                let start_wavelen = 0.38;
+                let end_wavelen = 0.78;
+                let wavelength =
+                    start_wavelen + wavelen * ((end_wavelen - start_wavelen) / (wave_num as f64));
                 if draw_mode & 1 > 0 {
                     let mut ghost_num = 0;
                     for i in 0..self.elements.len() - 1 {
@@ -891,7 +905,7 @@ impl Lens {
                                 let mut pos = center_pos;
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(pos, direction, todo!());
+                                let mut ray = Ray::new(pos, direction, wavelength);
                                 ray_collection.push(ray);
 
                                 for (ele, element) in self.elements.iter().enumerate() {
@@ -938,7 +952,7 @@ impl Lens {
                     let mut pos = center_pos;
                     pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                     pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                    let mut ray = Ray::new(pos, direction, todo!());
+                    let mut ray = Ray::new(pos, direction, wavelength);
                     let mut ray_collection = vec![];
                     ray_collection.push(ray);
                     for element in &self.elements {
@@ -980,6 +994,13 @@ impl Lens {
         let width = 2.0;
         for ray_num_x in 0..num_rays {
             for ray_num_y in 0..num_rays {
+                let wave_num = 10;
+                let ray_num = ray_num_x * num_rays + ray_num_y;
+                let wavelen = (ray_num % wave_num) as f64;
+                let start_wavelen = 0.38;
+                let end_wavelen = 0.78;
+                let wavelength =
+                    start_wavelen + wavelen * ((end_wavelen - start_wavelen) / (wave_num as f64));
                 if draw_mode & 1 > 0 {
                     let mut ghost_num = 0;
                     for i in 0..self.elements.len() - 1 {
@@ -990,7 +1011,7 @@ impl Lens {
                                 let mut pos = center_pos;
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(pos, direction, todo!());
+                                let mut ray = Ray::new(pos, direction, wavelength);
 
                                 for (ele, element) in self.elements.iter().enumerate() {
                                     // if we iterated through all elements up to
@@ -1030,7 +1051,7 @@ impl Lens {
                     let mut pos = center_pos;
                     pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                     pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                    let mut ray = Ray::new(pos, direction, todo!());
+                    let mut ray = Ray::new(pos, direction, wavelength);
                     for element in &self.elements {
                         ray.propagate(element);
                     }

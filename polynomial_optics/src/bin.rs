@@ -59,7 +59,7 @@ fn main() {
     let lens_entry = Element {
         radius,
         properties: Properties::Glass(Glass {
-            sellmeier: Sellmeier::BK7(),
+            sellmeier: Sellmeier::bk7(),
             coating: (),
             entry: true,
             spherical: true,
@@ -70,7 +70,7 @@ fn main() {
     let lens_exit = Element {
         radius,
         properties: Properties::Glass(Glass {
-            sellmeier: Sellmeier::BK7(),
+            sellmeier: Sellmeier::bk7(),
             coating: (),
             entry: false,
             spherical: true,

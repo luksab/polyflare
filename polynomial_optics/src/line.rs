@@ -11,6 +11,7 @@ pub struct Line {
     pub width: f32,
 }
 
+#[allow(dead_code)]
 impl Line {
     pub fn draw(&self, pixmap: &mut Pixmap) {
         let mut paint = Paint::default();
