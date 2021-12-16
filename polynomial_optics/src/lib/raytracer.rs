@@ -1,4 +1,8 @@
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -125,7 +129,7 @@ impl Ray {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Sellmeier {
     pub b: [f64; 3],
     pub c: [f64; 3],
@@ -148,6 +152,37 @@ impl Sellmeier {
             b: [1.03961212, 0.231792344, 1.01046945],
             c: [6.00069867e-3, 2.00179144e-2, 1.03560653e2],
         }
+    }
+
+    /// ```
+    /// use polynomial_optics::Sellmeier;
+    /// let now = std::time::Instant::now();
+    /// Sellmeier::get_all_glasses();
+    /// println!("{:?}", now.elapsed());
+    /// panic!();
+    /// ```
+    pub fn get_all_glasses() -> Vec<(String, Sellmeier)> {
+        let mut glasses = vec![];
+
+        let mut rdr =
+            csv::ReaderBuilder::new().from_reader(include_str!("../../LaCroix.csv").as_bytes());
+        for result in rdr.records() {
+            if let Ok(record) = result {
+                let b = [
+                    record[1].parse().unwrap(),
+                    record[2].parse().unwrap(),
+                    record[3].parse().unwrap(),
+                ];
+                let c = [
+                    record[4].parse().unwrap(),
+                    record[5].parse().unwrap(),
+                    record[6].parse().unwrap(),
+                ];
+                let glass = Sellmeier { b, c };
+                glasses.push((record[0].trim().to_string(), glass));
+            }
+        }
+        glasses
     }
 }
 

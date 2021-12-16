@@ -19,6 +19,7 @@ pub struct GlassElement {
     d2: f32,
     r2: f32,
     sellmeier: Sellmeier,
+    sellmeier_index: usize,
 }
 
 pub struct Aperture {
@@ -45,6 +46,8 @@ pub struct LensState {
     pub actual_lens: Lens,
     selected_lens: usize,
     current_filename: String,
+
+    all_glasses: Vec<(String, Sellmeier)>,
 
     sensor_index: usize,
     sensors: Vec<(String, Sensor)>,
@@ -76,6 +79,7 @@ impl LensState {
                 d2: 1.5,
                 r2: 3.,
                 sellmeier: Sellmeier::bk7(),
+                sellmeier_index: 0,
             }),
             ElementState::Aperture(Aperture {
                 d: 1.5,
@@ -88,6 +92,7 @@ impl LensState {
                 d2: 1.5,
                 r2: 3.,
                 sellmeier: Sellmeier::bk7(),
+                sellmeier_index: 0,
             }),
         ];
         let sensor_dist = 3.;
@@ -256,6 +261,7 @@ impl LensState {
             actual_lens,
             selected_lens: 0,
             current_filename: String::new(),
+            all_glasses: Sellmeier::get_all_glasses(),
             sensors,
             sensor_index,
             sensor_buffer,
@@ -318,25 +324,33 @@ impl LensState {
         Self::get_lens_arr(&self.lens)
     }
 
-    fn get_lens_state(lens: &Lens) -> Vec<ElementState> {
+    fn get_lens_state(&self) -> Vec<ElementState> {
         let mut elements = vec![];
         let mut last_pos = -5.;
         let mut expect_entry = true;
         let mut enty = (0., 0.);
 
-        for element in &lens.elements {
+        for element in &self.actual_lens.elements {
             match element.properties {
                 Properties::Glass(glass) => {
                     if expect_entry && glass.entry {
                         enty = (element.position as f32 - last_pos, element.radius as f32);
                         expect_entry = false;
                     } else if !expect_entry && !glass.entry {
+                        let mut sellmeier_index = 0;
+                        for (index, (_name, other_glass)) in self.all_glasses.iter().enumerate() {
+                            if glass.sellmeier == *other_glass {
+                                sellmeier_index = index;
+                            }
+                        }
+
                         elements.push(ElementState::Lens(GlassElement {
                             d1: enty.0,
                             r1: enty.1,
                             d2: element.position as f32 - last_pos,
                             r2: element.radius as f32,
                             sellmeier: glass.sellmeier,
+                            sellmeier_index,
                         }));
                         expect_entry = true;
                     } else {
@@ -469,7 +483,7 @@ impl LensState {
                     |(label, _lens)| std::borrow::Cow::Borrowed(label),
                 ) {
                     self.actual_lens = lenses[self.selected_lens].1.clone();
-                    self.lens = Self::get_lens_state(&mut self.actual_lens);
+                    self.lens = self.get_lens_state();
                     self.current_filename = lenses[self.selected_lens].0.clone();
                     update_lens = true;
                 }
@@ -491,6 +505,18 @@ impl LensState {
                     match element {
                         ElementState::Lens(lens) => {
                             ui.text(format!("Lens: {:?}", i + 1));
+
+                            ui.same_line();
+                            if ui.combo(
+                                format!("select glass##{}", i),
+                                &mut lens.sellmeier_index,
+                                self.all_glasses.as_slice(),
+                                |(label, _lens)| std::borrow::Cow::Borrowed(label),
+                            ) {
+                                lens.sellmeier = self.all_glasses[lens.sellmeier_index].1;
+                                update_lens = true;
+                            }
+
                             ui.push_item_width(ui.window_size()[0] / 2. - 45.);
                             update_lens |=
                                 Slider::new(format!("d1##{}", i), 0., 5.).build(&ui, &mut lens.d1);
@@ -523,16 +549,32 @@ impl LensState {
                         }
                     }
                 }
+
                 if ui.button("save lens") {
-                    Self::save_lens(lenses[self.selected_lens].0.as_str(), &self.actual_lens);
+                    if lenses.len() > 0 {
+                        Self::save_lens(lenses[self.selected_lens].0.as_str(), &self.actual_lens);
+                    } else {
+                        ui.open_popup("no name selected");
+                    }
                 }
+
                 ui.same_line();
                 if ui.button("save as") {
-                    Self::save_lens(self.current_filename.as_str(), &self.actual_lens);
+                    if self.current_filename.len() > 0 {
+                        Self::save_lens(self.current_filename.as_str(), &self.actual_lens);
+                    } else {
+                        ui.open_popup("no name selected");
+                    }
                 }
                 ui.same_line();
                 ui.input_text("filename", &mut self.current_filename)
                     .build();
+                ui.popup("no name selected", || {
+                    ui.text("No name selected");
+                    if ui.button("OK") {
+                        ui.close_current_popup();
+                    }
+                });
 
                 update_sensor |= Slider::new("sensor distance", 0., 20.)
                     .build(&ui, &mut self.actual_lens.sensor_dist);
