@@ -550,14 +550,6 @@ impl LensState {
                     }
                 }
 
-                if ui.button("save lens") {
-                    if lenses.len() > 0 {
-                        Self::save_lens(lenses[self.selected_lens].0.as_str(), &self.actual_lens);
-                    } else {
-                        ui.open_popup("no name selected");
-                    }
-                }
-
                 ui.same_line();
                 if ui.button("save as") {
                     if self.current_filename.len() > 0 {
