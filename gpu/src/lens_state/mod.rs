@@ -13,64 +13,103 @@ mod sensor;
 
 use sensor::*;
 
+/// The representation of a piece of glass in the GUI
 pub struct GlassElement {
+    /// distance in front of the GlassElement
     d1: f32,
+    /// radius of the front of the GlassElement
     r1: f32,
+    /// distance from the middle of the front to the middle of the back side of the GlassElement
     d2: f32,
+    /// radius of the back of the GlassElement
     r2: f32,
     sellmeier: Sellmeier,
+    /// index into `LensState.all_glasses`
     sellmeier_index: usize,
 }
 
+/// The representation of an aperture in the GUI
 pub struct Aperture {
+    /// distance in front of the Apterture
     d: f32,
+    /// radius of the Apterture
     r: f32,
+    /// number of blades of the Apterture
     num_blades: u32,
 }
 
+/// One Part of a Lens in the GUI
 pub enum ElementState {
     Lens(GlassElement),
     Aperture(Aperture),
 }
 
+/// The state of the application
 pub struct LensState {
+    /// number of rays = 2^ray_exponent
     pub ray_exponent: f64,
+    /// number of dots = 2^dots_exponent
     pub dots_exponent: f64,
+    /// number of dots for high-res render = 2^dots_exponent
     pub hi_dots_exponent: f64,
+    /// "render nothing": 0
+    /// 
+    /// "render both": 3
+    /// 
+    /// "render normal": 2
+    /// 
+    /// "render ghosts": 1
     pub draw: u32,
+    /// multiplier for alpha of rays/dots
     pub opacity: f32,
+    /// which ghost to draw: 0 being all, 1 being the fist...
     pub which_ghost: u32,
 
+    /// GUI representation of the lens
     lens: Vec<ElementState>,
     /// The actual Lens being rendered
     pub actual_lens: Lens,
+    /// index into all_lenses
     selected_lens: usize,
+    /// filename of the currently selected lens
     current_filename: String,
 
+    /// all types of glass
     all_glasses: Vec<(String, Sellmeier)>,
 
+    /// index into all_sensors
     sensor_index: usize,
-    sensors: Vec<(String, Sensor)>,
+    /// all sensor representations
+    all_sensors: Vec<(String, Sensor)>,
+    /// buffer of the current sensor
     pub sensor_buffer: Buffer,
     /// positions of the rays and the sensor
     pub pos_params_buffer: wgpu::Buffer,
+    /// positions of the rays and the sensor
     pub pos_bind_group: wgpu::BindGroup,
+    /// positions of the rays and the sensor
     pub pos_bind_group_layout: wgpu::BindGroupLayout,
     /// Data for the positions of the rays and the sensor
     pub pos_params: [f32; 12],
 
+    /// buffer for the currently selected lens
     lens_buffer: Buffer,
+    /// buffer for the currently selected lens for raytracing
     lens_rt_buffer: Buffer,
+    /// bind group for both representations of the current lens
     pub lens_bind_group: wgpu::BindGroup,
+    /// bind group layout for both representations of the current lens
     pub lens_bind_group_layout: wgpu::BindGroupLayout,
 
     last_frame_time: Instant,
     fps: f64,
 
+    /// are we rendering the first frame right now?
     first_frame: bool,
 }
 
 impl LensState {
+    /// just some random (very bad) lens
     pub fn default(device: &Device) -> Self {
         let lens = vec![
             ElementState::Lens(GlassElement {
@@ -262,7 +301,7 @@ impl LensState {
             selected_lens: 0,
             current_filename: String::new(),
             all_glasses: Sellmeier::get_all_glasses(),
-            sensors,
+            all_sensors: sensors,
             sensor_index,
             sensor_buffer,
             lens_rt_buffer,
@@ -279,6 +318,7 @@ impl LensState {
 }
 
 impl LensState {
+    /// Convert from the GUI representation to the `polynomial_optics` representation
     fn get_lens_arr(lens: &Vec<ElementState>) -> Vec<polynomial_optics::Element> {
         let mut elements: Vec<Element> = vec![];
         let mut dst: f32 = -5.;
@@ -320,10 +360,12 @@ impl LensState {
         }
         elements
     }
+    /// get the `polynomial_optics` representation of the Lens
     pub fn get_lens(&self) -> Vec<polynomial_optics::Element> {
         Self::get_lens_arr(&self.lens)
     }
 
+    /// Convert from the `polynomial_optics` representation to the GUI representation
     fn get_lens_state(&self) -> Vec<ElementState> {
         let mut elements = vec![];
         let mut last_pos = -5.;
@@ -370,6 +412,7 @@ impl LensState {
         elements
     }
 
+    /// update the buffers from the internal state
     pub fn update(&mut self, device: &Device, queue: &Queue) {
         self.actual_lens = Lens::new(self.get_lens(), self.actual_lens.sensor_dist);
 
@@ -491,13 +534,13 @@ impl LensState {
                 if ui.combo(
                     "select sensor",
                     &mut self.sensor_index,
-                    self.sensors.as_slice(),
+                    self.all_sensors.as_slice(),
                     |(label, _lens)| std::borrow::Cow::Borrowed(label),
                 ) {
                     queue.write_buffer(
                         &self.sensor_buffer,
                         0,
-                        bytemuck::cast_slice(&self.sensors[self.sensor_index].1.get_data()),
+                        bytemuck::cast_slice(&self.all_sensors[self.sensor_index].1.get_data()),
                     );
                 }
 
