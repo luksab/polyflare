@@ -125,6 +125,79 @@ impl Ray {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct QuarterWaveCoating {
+    pub thickness: f64,
+    pub ior: f64,
+}
+
+impl QuarterWaveCoating {
+    /// return a QuarterWaveCoating that is infinitely thin and so does nothing
+    pub fn none() -> Self {
+        Self {
+            thickness: 0.,
+            ior: 1.,
+        }
+    }
+
+    /// return the optimal QuarterWaveCoating for the given parameters
+    pub fn optimal(n0: f64, n2: f64, lambda0: f64) -> Self {
+        let n1 = f64::max((n0 * n2).sqrt(), 1.23); // 1.38 = lowest achievable
+        let d1 = lambda0 / 4. / n1; // phasedelay
+        Self {
+            thickness: d1,
+            ior: n1,
+        }
+    }
+
+    /// calculate the reflectivity R(λ, θ) of a surface coated with a single dielectric layer
+    /// from Physically-Based Real-Time Lens Flare Rendering: Hullin 2011
+    ///
+    /// theta0: angle of incidence;
+    /// lambda: wavelength of ray;
+    /// d1: thickness of AR coating;
+    /// n0: RI ( refr. index ) of 1st medium;
+    /// n1: RI of coating layer;
+    /// n2: RI of the 2nd medium;
+    ///
+    /// n1 = cmp::max((n0*n2).sqrt() , 1.38); // 1.38 = lowest achievable
+    /// d1 = lambda0 / 4 / n1 ; // phasedelay
+    ///
+    /// ```
+    /// # use polynomial_optics::QuarterWaveCoating;
+    /// let coating = QuarterWaveCoating::none();
+    /// assert_eq!(coating.fresnel_ar(std::f64::consts::PI / 2., 1., 1., 1.5), 1.0);
+    /// //assert_eq!(fresnel_ar(1., 1., 0.25, 1.0, 1.5, 1.5), fresnel_ar(1., 1., 0.25, 1.0, 1.0, 1.5));
+    /// ```
+    pub fn fresnel_ar(&self, theta0: f64, lambda: f64, n0: f64, n2: f64) -> f64 {
+        // refracton angle sin coating and the 2nd medium
+        let theta1 = (theta0.sin() * n0 / self.ior).asin();
+        let theta2 = (theta0.sin() * n0 / n2).asin();
+        println!("t1: {}, t2: {}", theta1, theta2);
+        // amplitude for outer refl. / transmission on topmost interface
+        let rs01 = -(theta0 - theta1).sin() / (theta0 + theta1).sin();
+        let rp01 = (theta0 - theta1).tan() / (theta0 + theta1).tan();
+        let ts01 = 2. * theta1.sin() * theta0.cos() / (theta0 + theta1).sin();
+        let tp01 = ts01 * (theta0 - theta1).cos();
+        // amplitude for inner reflection
+        let rs12 = -(theta1 - theta2).sin() / (theta1 + theta2).sin();
+        let rp12 = (theta1 - theta2).tan() / (theta1 + theta2).tan();
+        // after passing through first surface twice:
+        // 2 transmissions and 1 reflection
+        let ris = ts01 * ts01 * rs12;
+        let rip = tp01 * tp01 * rp12;
+        // phasedifference between outer and inner reflections
+        let dy = self.thickness * self.ior;
+        let dx = theta1.tan() * dy;
+        let delay = (dx * dx + dy * dy).sqrt();
+        let rel_phase = 4. * std::f64::consts::PI / lambda * (delay - dx * theta0.sin());
+        // Add up sines of different phase and amplitude
+        let out_s2 = rs01 * rs01 + ris * ris + 2. * rs01 * ris * rel_phase.cos();
+        let out_p2 = rp01 * rp01 + rip * rip + 2. * rp01 * rip * rel_phase.cos();
+        return (out_s2 + out_p2) / 2.; // reflectivity
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Sellmeier {
     pub b: [f64; 3],
@@ -132,6 +205,13 @@ pub struct Sellmeier {
 }
 
 impl Sellmeier {
+    pub fn air() -> Self {
+        Self {
+            b: [0., 0., 0.],
+            c: [0., 0., 0.],
+        }
+    }
+
     pub fn ior(&self, wavelength: f64) -> f64 {
         let wavelength_sq = wavelength * wavelength;
         let mut n_sq = 1.;
@@ -188,9 +268,10 @@ impl Sellmeier {
 pub struct Glass {
     /// ior vs air
     pub sellmeier: Sellmeier,
-    /// coating - modifies wavelength
-    pub coating: (),
+    /// coating - modifies wavelength, only used for reflection
+    pub coating: QuarterWaveCoating,
     pub entry: bool,
+    pub outer_ior: Sellmeier,
     pub spherical: bool,
 }
 
@@ -201,7 +282,7 @@ pub struct Glass {
 ///    radius: 3.,
 ///    properties: Properties::Glass(Glass {
 ///        ior: 1.5,
-///        coating: (),
+///        coating: QuarterWaveCoating::none(),
 ///        entry: true,
 ///        spherical: true,
 ///    }),
@@ -364,20 +445,33 @@ impl Ray {
 
             self.d = self.d - 2.0 * normal.dot(self.d) * normal;
 
-            self.strength *= Ray::fresnel_r(
-                d_in.angle(normal).0,
-                self.d.angle(-normal).0,
-                if entry == (self.d.z > 0.) {
-                    glass.sellmeier.ior(self.wavelength)
+            self.strength *= glass.coating.fresnel_ar(
+                d_in.angle(-normal).0,
+                self.wavelength,
+                if entry {
+                    glass.outer_ior.ior(self.wavelength)
                 } else {
-                    1.0
+                    glass.sellmeier.ior(self.wavelength)
                 },
-                if entry == (self.d.z > 0.) {
-                    1.0
-                } else {
+                if entry {
                     glass.sellmeier.ior(self.wavelength)
+                } else {
+                    glass.outer_ior.ior(self.wavelength)
                 },
             );
+            //     d_in.angle(normal).0,
+            //     self.d.angle(-normal).0,
+            //     if entry == (self.d.z > 0.) {
+            //         glass.sellmeier.ior(self.wavelength)
+            //     } else {
+            //         glass.outerIOR.ior(self.wavelength)
+            //     },
+            //     if entry == (self.d.z > 0.) {
+            //         glass.outerIOR.ior(self.wavelength)
+            //     } else {
+            //         glass.sellmeier.ior(self.wavelength)
+            //     },
+            // );
         } else {
             let eta = if entry {
                 1.0 / glass.sellmeier.ior(self.wavelength)
@@ -416,7 +510,6 @@ impl Ray {
         }
     }
 
-    // let tpi: f32 = 6.283185307179586;
     fn clip_poly(&mut self, pos: f64, num_edge: u32, size: f64) {
         self.mov_plane(pos);
 
@@ -754,25 +847,28 @@ impl Lens {
                     Lens::draw_rays(pixmap, &one, &ray);
                 }
             }
-            // let mut ray = Ray::new(
-            //     Vector3 {
+            // let mut ray = Ray {
+            //     o: Vector3 {
             //         x: 0.0,
             //         y: ray_num as f64 / (num_rays as f64) * width - width / 2.,
             //         z: -5.,
             //     },
-            //     Vector3 {
+            //     d: Vector3 {
             //         x: 0.0,
-            //         y: 0.0,
+            //         y: 0.2,
             //         z: 1.0,
-            //     },
-            // );
+            //     }
+            //     .normalize(),
+            //     wavelength,
+            //     strength,
+            // };
             // let mut one = ray;
             // for element in &self.elements {
             //     ray.propagate(element);
             //     Lens::draw_rays(pixmap, &one, &ray);
             //     one = ray;
             // }
-            // ray.propagate(&Element::Space(100.));
+            // ray.o += ray.d * 100.;
             // Lens::draw_rays(pixmap, &one, &ray);
         }
     }

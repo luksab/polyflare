@@ -5,7 +5,7 @@ use std::time::Instant;
 use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
 use imgui::{Condition, Drag, Slider, Ui};
-use polynomial_optics::{Element, Glass, Lens, Properties, Sellmeier};
+use polynomial_optics::{Element, Glass, Lens, Properties, Sellmeier, QuarterWaveCoating};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
@@ -334,8 +334,9 @@ impl LensState {
                         radius: lens.r1 as f64,
                         properties: Properties::Glass(Glass {
                             sellmeier: lens.sellmeier,
-                            coating: (),
+                            coating: QuarterWaveCoating::none(),
                             entry: true,
+                            outer_ior: Sellmeier::air(),
                             spherical: lens.spherical,
                         }),
                         position: dst as f64,
@@ -345,8 +346,9 @@ impl LensState {
                         radius: lens.r2 as f64,
                         properties: Properties::Glass(Glass {
                             sellmeier: lens.sellmeier,
-                            coating: (),
+                            coating: QuarterWaveCoating::none(),
                             entry: false,
+                            outer_ior: Sellmeier::air(),
                             spherical: lens.spherical,
                         }),
                         position: dst as f64,

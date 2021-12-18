@@ -60,8 +60,9 @@ fn main() {
         radius,
         properties: Properties::Glass(Glass {
             sellmeier: Sellmeier::bk7(),
-            coating: (),
+            coating: QuarterWaveCoating::none(),//optimal(1.5, 1.0, 0.5),
             entry: true,
+            outer_ior: Sellmeier::air(),
             spherical: true,
         }),
         position: -2.0,
@@ -71,8 +72,9 @@ fn main() {
         radius,
         properties: Properties::Glass(Glass {
             sellmeier: Sellmeier::bk7(),
-            coating: (),
+            coating: QuarterWaveCoating::none(),//optimal(1.5, 1.0, 0.5),
             entry: false,
+            outer_ior: Sellmeier::air(),
             spherical: true,
         }),
         position: lens_exit_pos,
@@ -89,7 +91,7 @@ fn main() {
         0.,
         radius as f32,
     );
-    line.width = 0.1;
+    line.width = 1.;
 
     println!("lens: {:?}", lens_entry);
     // let wave_num = 10;
