@@ -154,7 +154,7 @@ fn propagate_element(
         };
         let c = vec2<f32>(0., cy);
 
-        let intersection_2d = normalize(vec2<f32>(intersection.y, intersection.z));
+        let intersection_2d = vec2<f32>(intersection.y, intersection.z);
 
         let normal2d = intersection_2d - c;
 

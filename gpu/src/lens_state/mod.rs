@@ -23,6 +23,8 @@ pub struct GlassElement {
     d2: f32,
     /// radius of the back of the GlassElement
     r2: f32,
+    /// whether this element is spherical or cylindrical
+    spherical: bool,
     sellmeier: Sellmeier,
     /// index into `LensState.all_glasses`
     sellmeier_index: usize,
@@ -117,6 +119,7 @@ impl LensState {
                 r1: 3.,
                 d2: 1.5,
                 r2: 3.,
+                spherical: true,
                 sellmeier: Sellmeier::bk7(),
                 sellmeier_index: 0,
             }),
@@ -130,6 +133,7 @@ impl LensState {
                 r1: 3.,
                 d2: 1.5,
                 r2: 3.,
+                spherical: true,
                 sellmeier: Sellmeier::bk7(),
                 sellmeier_index: 0,
             }),
@@ -332,7 +336,7 @@ impl LensState {
                             sellmeier: lens.sellmeier,
                             coating: (),
                             entry: true,
-                            spherical: true,
+                            spherical: lens.spherical,
                         }),
                         position: dst as f64,
                     });
@@ -343,7 +347,7 @@ impl LensState {
                             sellmeier: lens.sellmeier,
                             coating: (),
                             entry: false,
-                            spherical: true,
+                            spherical: lens.spherical,
                         }),
                         position: dst as f64,
                     });
@@ -391,6 +395,7 @@ impl LensState {
                             r1: enty.1,
                             d2: element.position as f32 - last_pos,
                             r2: element.radius as f32,
+                            spherical: glass.spherical,
                             sellmeier: glass.sellmeier,
                             sellmeier_index,
                         }));
@@ -547,6 +552,7 @@ impl LensState {
                 for (i, element) in self.lens.iter_mut().enumerate() {
                     match element {
                         ElementState::Lens(lens) => {
+                            ui.push_item_width(ui.window_size()[0] / 2. - 45.);
                             ui.text(format!("Lens: {:?}", i + 1));
 
                             ui.same_line();
@@ -559,8 +565,9 @@ impl LensState {
                                 lens.sellmeier = self.all_glasses[lens.sellmeier_index].1;
                                 update_lens = true;
                             }
+                            ui.same_line();
+                            update_lens |= ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
 
-                            ui.push_item_width(ui.window_size()[0] / 2. - 45.);
                             update_lens |=
                                 Slider::new(format!("d1##{}", i), 0., 5.).build(&ui, &mut lens.d1);
                             ui.same_line();

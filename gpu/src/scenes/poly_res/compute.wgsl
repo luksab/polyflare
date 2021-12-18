@@ -118,8 +118,8 @@ fn propagate_element(
             cy = position - radius;
         };
         let c = vec2<f32>(0., cy);
-        let o = vec2<f32>(ray.o.y,ray.o.z);
-        let d = normalize(vec2<f32>(ray.d.y, ray.d.z));
+        let o = vec2<f32>(ray.o.x,ray.o.z);
+        let d = normalize(vec2<f32>(ray.d.x, ray.d.z));
         let delta = dot(d, o - c) * dot(d, o - c)
                     - (length(o - c) * length(o - c) - radius * radius);
 
@@ -167,7 +167,7 @@ fn propagate_element(
         };
         let c = vec2<f32>(0., cy);
 
-        let intersection_2d = normalize(vec2<f32>(intersection.y, intersection.z));
+        let intersection_2d = vec2<f32>(intersection.x, intersection.z);
 
         let normal2d = intersection_2d - c;
 
@@ -368,7 +368,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let ray_num_x = f32(ray_num / sqrt_num);
   let ray_num_y = f32(ray_num % sqrt_num);
 
-  let wave_num = u32(10);
+  let wave_num = u32(500);
 
   // how many dots have we added to the buffer
   var counter = u32(0);
