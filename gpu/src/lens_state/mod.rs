@@ -5,7 +5,7 @@ use std::time::Instant;
 use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
 use imgui::{Condition, Drag, Slider, Ui};
-use polynomial_optics::{Element, Glass, Lens, Properties, Sellmeier, QuarterWaveCoating};
+use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
@@ -28,6 +28,8 @@ pub struct GlassElement {
     sellmeier: Sellmeier,
     /// index into `LensState.all_glasses`
     sellmeier_index: usize,
+    coating_optimal: f32,
+    coating_enable: bool,
 }
 
 /// The representation of an aperture in the GUI
@@ -55,11 +57,11 @@ pub struct LensState {
     /// number of dots for high-res render = 2^dots_exponent
     pub hi_dots_exponent: f64,
     /// "render nothing": 0
-    /// 
+    ///
     /// "render both": 3
-    /// 
+    ///
     /// "render normal": 2
-    /// 
+    ///
     /// "render ghosts": 1
     pub draw: u32,
     /// multiplier for alpha of rays/dots
@@ -122,6 +124,8 @@ impl LensState {
                 spherical: true,
                 sellmeier: Sellmeier::bk7(),
                 sellmeier_index: 0,
+                coating_optimal: 0.5,
+                coating_enable: false,
             }),
             ElementState::Aperture(Aperture {
                 d: 1.5,
@@ -136,6 +140,8 @@ impl LensState {
                 spherical: true,
                 sellmeier: Sellmeier::bk7(),
                 sellmeier_index: 0,
+                coating_optimal: 0.5,
+                coating_enable: false,
             }),
         ];
         let sensor_dist = 3.;
@@ -334,7 +340,15 @@ impl LensState {
                         radius: lens.r1 as f64,
                         properties: Properties::Glass(Glass {
                             sellmeier: lens.sellmeier,
-                            coating: QuarterWaveCoating::none(),
+                            coating: if lens.coating_enable {
+                                QuarterWaveCoating::optimal(
+                                    lens.sellmeier.ior(lens.coating_optimal as f64),
+                                    1.,
+                                    lens.coating_optimal as f64,
+                                )
+                            } else {
+                                QuarterWaveCoating::none()
+                            },
                             entry: true,
                             outer_ior: Sellmeier::air(),
                             spherical: lens.spherical,
@@ -346,7 +360,15 @@ impl LensState {
                         radius: lens.r2 as f64,
                         properties: Properties::Glass(Glass {
                             sellmeier: lens.sellmeier,
-                            coating: QuarterWaveCoating::none(),
+                            coating: if lens.coating_enable {
+                                QuarterWaveCoating::optimal(
+                                    lens.sellmeier.ior(lens.coating_optimal as f64),
+                                    1.,
+                                    lens.coating_optimal as f64,
+                                )
+                            } else {
+                                QuarterWaveCoating::none()
+                            },
                             entry: false,
                             outer_ior: Sellmeier::air(),
                             spherical: lens.spherical,
@@ -392,6 +414,7 @@ impl LensState {
                             }
                         }
 
+                        let coating_enable = glass.coating.thickness > 0.;
                         elements.push(ElementState::Lens(GlassElement {
                             d1: enty.0,
                             r1: enty.1,
@@ -400,6 +423,8 @@ impl LensState {
                             spherical: glass.spherical,
                             sellmeier: glass.sellmeier,
                             sellmeier_index,
+                            coating_optimal: 0.5,// TODO: read from file somehow
+                            coating_enable,
                         }));
                         expect_entry = true;
                     } else {
@@ -568,7 +593,8 @@ impl LensState {
                                 update_lens = true;
                             }
                             ui.same_line();
-                            update_lens |= ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
+                            update_lens |=
+                                ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
 
                             update_lens |=
                                 Slider::new(format!("d1##{}", i), 0., 5.).build(&ui, &mut lens.d1);
@@ -580,6 +606,12 @@ impl LensState {
                             ui.same_line();
                             update_lens |=
                                 Slider::new(format!("r2##{}", i), -6., 3.).build(&ui, &mut lens.r2);
+
+                            // thickness: 0.1016260162601626, ior: 1.23
+                            update_lens |= Slider::new(format!("wavelen##{}", i), 0.3, 0.8)
+                                .build(&ui, &mut lens.coating_optimal);
+                            ui.same_line();
+                            update_lens |= ui.checkbox(format!("coating##{}", i), &mut lens.coating_enable);
                             ui.push_item_width(0.);
 
                             // update_size |= ui.checkbox(format!("button##{}", i), &mut element.4);

@@ -13,6 +13,14 @@ struct Element {
   c1: f32;
   c2: f32;
   c3: f32;
+  b1_2: f32;
+  b2_2: f32;
+  b3_2: f32;
+  c1_2: f32;
+  c2_2: f32;
+  c3_2: f32;
+  coating_ior: f32;
+  coating_thickness: f32;
   position: f32;// num_blades if aperture
   entry: f32;// 0: false, 1: true, 2: aperture
   spherical: f32;// 0: false, 1: true
@@ -38,12 +46,12 @@ struct PosParams {
 
 [[block]]
 struct Rays {
-  rays : [[stride(32)]] array<Ray>;
+  rays: [[stride(32)]] array<Ray>;
 };
 
 [[block]]
 struct Elements {
-  el : [[stride(40)]] array<Element>;
+  el: [[stride(72)]] array<Element>;
 };
 
 [[group(0), binding(0)]] var<uniform> params : SimParams;
@@ -77,21 +85,59 @@ fn ior(self: Element, wavelength: f32) -> f32 {
     return sqrt(n_sq);
 }
 
+fn ior_other(self: Element, wavelength: f32) -> f32 {
+    let wavelength_sq = wavelength * wavelength;
+    let n_sq = 1. + (self.b1_2 * wavelength_sq) / (wavelength_sq - self.c1_2)
+                      + (self.b2_2 * wavelength_sq) / (wavelength_sq - self.c2_2)
+                      + (self.b3_2 * wavelength_sq) / (wavelength_sq - self.c3_2);
+    return sqrt(n_sq);
+}
+
 fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
   let s = 0.5 * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2))) * ((n1 * cos(t1) - n2 * cos(t2)) / (n1 * cos(t1) + n2 * cos(t2)));
   let p = 0.5 * ((n1 * cos(t2) - n2 * cos(t1)) / (n1 * cos(t2) + n2 * cos(t1))) * ((n1 * cos(t2) - n2 * cos(t1)) / (n1 * cos(t2) + n2 * cos(t1)));
   return s + p;
 }
 
+fn fresnel_ar(theta0: f32, lambda: f32, thickness: f32, n0: f32, n1: f32, n2: f32) -> f32 {
+    // refracton angle sin coating and the 2nd medium
+    let theta1 = asin(sin(theta0) * n0 / n1);
+    let theta2 = asin(sin(theta0) * n0 / n2);
+    // amplitude for outer refl. / transmission on topmost interface
+    let rs01 = -sin(theta0 - theta1) / sin(theta0 + theta1);
+    let rp01 = tan(theta0 - theta1) / tan(theta0 + theta1);
+    let ts01 = 2. * sin(theta1) * cos(theta0) / sin(theta0 + theta1);
+    let tp01 = ts01 * cos(theta0 - theta1);
+    // amplitude for inner reflection
+    let rs12 = -sin(theta1 - theta2) / sin(theta1 + theta2);
+    let rp12 = tan(theta1 - theta2) / tan(theta1 + theta2);
+    // after passing through first surface twice:
+    // 2 transmissions and 1 reflection
+    let ris = ts01 * ts01 * rs12;
+    let rip = tp01 * tp01 * rp12;
+    // phasedifference between outer and inner reflections
+    let dy = thickness * n1;
+    let dx = tan(theta1) * dy;
+    let delay = sqrt(dx * dx + dy * dy);
+    let rel_phase = 4. * 3.141592653589793 / lambda * (delay - dx * sin(theta0));
+    // Add up sines of different phase and amplitude
+    let out_s2 = rs01 * rs01 + ris * ris + 2. * rs01 * ris * cos(rel_phase);
+    let out_p2 = rp01 * rp01 + rip * rip + 2. * rp01 * rip * cos(rel_phase);
+    return (out_s2 + out_p2) / 2.; // reflectivity
+}
+
 fn propagate_element(
     self: Ray,
     radius: f32,
     ior: f32,
+    other_ior: f32,
     position: f32,
     reflect: bool,
     entry: bool,
     cylindrical: bool,
-) -> Ray{
+    coating_ior: f32,
+    coating_thickness: f32,
+) -> Ray {
     var ray = self;
     ray.d = normalize(ray.d);
     var intersection: vec3<f32>;
@@ -199,12 +245,15 @@ fn propagate_element(
             b = ior;
         }
 
-        ray.strength = ray.strength * fresnel_r(
-            acos(dot(normalize(d_in), normal)),
-            acos(dot(normalize(ray.d), -normal)),
-            a,
-            b,
-        );
+        ray.strength = ray.strength * fresnel_ar(
+                acos(dot(normalize(d_in), -normal)),
+                ray.wavelength,
+                coating_thickness,
+                b,
+                coating_ior,
+                a,
+            );
+        
     } else {
         var eta: f32;
         if (entry) { eta = 1.0 / ior; } else { eta = ior; };
@@ -235,10 +284,12 @@ fn propagate_element(
             b = ior;
         }
         ray.strength = ray.strength * (1.0
-            - fresnel_r(
+            - fresnel_ar(
                 acos(dot(normalize(d_in), -normal)),
-                acos(dot(normalize(ray.d), -normal)),
+                ray.wavelength,
+                coating_thickness,
                 b,
+                coating_ior,
                 a,
             ));
     }
@@ -262,7 +313,7 @@ fn intersect_ray_to_ray(self: Ray, plane: f32) -> Ray {
 }
 
 let tpi: f32 = 6.283185307179586;
-fn clip_ray_poly(self: Ray, pos: f32, num_edge: u32, size: f32) -> bool{
+fn clip_ray_poly(self: Ray, pos: f32, num_edge: u32, size: f32) -> bool {
     let ray = intersect_ray_to_ray(self, pos);
     var clipped = false;
     for (var i = u32(0); i < num_edge; i = i + u32(1)) {
@@ -289,10 +340,13 @@ fn propagate(self: Ray, element: Element) -> Ray {
             self,
             element.radius,
             ior(element, self.wavelength),
+            ior_other(element, self.wavelength),
             element.position,
             false,
             element.entry > 0.,
             !(element.spherical > 0.),
+            element.coating_ior,
+            element.coating_thickness,
         );
     }
 }
@@ -304,10 +358,13 @@ fn reflect_ray(self: Ray, element: Element) -> Ray {
         self,
         element.radius,
         ior(element, self.wavelength),
+        ior_other(element, self.wavelength),
         element.position,
         true,
         element.entry > 0.,
         !(element.spherical > 0.),
+        element.coating_ior,
+        element.coating_thickness,
     );
 }
 
@@ -337,7 +394,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
   let num_rays = total;
   let ray_num = index;
-  let width = posParams.width;;
+  let width = posParams.width;
 
   let center_pos = posParams.init.o;
 

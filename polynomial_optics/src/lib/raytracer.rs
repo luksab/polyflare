@@ -686,6 +686,14 @@ impl Lens {
                     elements.push(glass.sellmeier.c[0] as f32);
                     elements.push(glass.sellmeier.c[1] as f32);
                     elements.push(glass.sellmeier.c[2] as f32);
+                    elements.push(glass.outer_ior.b[0] as f32);
+                    elements.push(glass.outer_ior.b[1] as f32);
+                    elements.push(glass.outer_ior.b[2] as f32);
+                    elements.push(glass.outer_ior.c[0] as f32);
+                    elements.push(glass.outer_ior.c[1] as f32);
+                    elements.push(glass.outer_ior.c[2] as f32);
+                    elements.push(glass.coating.ior as f32);
+                    elements.push(glass.coating.thickness as f32);
                     elements.push(element.position as f32);
                     elements.push(glass.entry as i32 as f32);
                     elements.push(glass.spherical as i32 as f32);
@@ -697,6 +705,16 @@ impl Lens {
                     elements.push(0. as f32);
                     elements.push(0. as f32);
                     elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+                    elements.push(0. as f32);
+
                     elements.push(0. as f32);
                     elements.push(0. as f32);
                     // placeholder end
