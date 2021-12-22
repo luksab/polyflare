@@ -270,7 +270,6 @@ fn main() {
                     poly_optics.sim_params[5] = poly_optics.draw_mode as f32;
                     poly_res.sim_params[6] = lens_ui.which_ghost as f32;
                     poly_optics.sim_params[6] = lens_ui.which_ghost as f32;
-                    println!("which_ghost: {}", lens_ui.which_ghost as f32);
 
                     poly_optics.sim_params[0] = lens_ui.opacity.powf(3.);
                     poly_res.sim_params[0] = lens_ui.opacity.powf(3.);

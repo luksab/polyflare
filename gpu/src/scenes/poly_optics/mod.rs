@@ -373,7 +373,7 @@ impl PolyOptics {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new((num_rays * 32) as _),
+                            min_binding_size: None,
                         },
                         count: None,
                     },
@@ -536,7 +536,7 @@ impl PolyOptics {
         lens_state: &LensState,
     ) {
         if update_size {
-            println!("update: {}", self.num_rays);
+            // println!("update: {}", self.num_rays);
             let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
                 device,
                 &self.sim_params,

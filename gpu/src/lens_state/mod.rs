@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
-use imgui::{Condition, Drag, Slider, Ui};
+use imgui::{CollapsingHeader, Condition, Drag, Slider, Ui};
 use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
@@ -14,15 +14,14 @@ mod sensor;
 use sensor::*;
 
 /// The representation of a piece of glass in the GUI
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct GlassElement {
     /// distance in front of the GlassElement
-    d1: f32,
+    d: f32,
     /// radius of the front of the GlassElement
-    r1: f32,
-    /// distance from the middle of the front to the middle of the back side of the GlassElement
-    d2: f32,
-    /// radius of the back of the GlassElement
-    r2: f32,
+    r: f32,
+    /// whether this element is the first or second part of a Lens
+    entry: bool,
     /// whether this element is spherical or cylindrical
     spherical: bool,
     sellmeier: Sellmeier,
@@ -33,6 +32,7 @@ pub struct GlassElement {
 }
 
 /// The representation of an aperture in the GUI
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Aperture {
     /// distance in front of the Apterture
     d: f32,
@@ -43,6 +43,7 @@ pub struct Aperture {
 }
 
 /// One Part of a Lens in the GUI
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum ElementState {
     Lens(GlassElement),
     Aperture(Aperture),
@@ -117,10 +118,19 @@ impl LensState {
     pub fn default(device: &Device) -> Self {
         let lens = vec![
             ElementState::Lens(GlassElement {
-                d1: 0.,
-                r1: 3.,
-                d2: 1.5,
-                r2: 3.,
+                d: 0.,
+                r: 3.,
+                entry: true,
+                spherical: true,
+                sellmeier: Sellmeier::bk7(),
+                sellmeier_index: 0,
+                coating_optimal: 0.5,
+                coating_enable: false,
+            }),
+            ElementState::Lens(GlassElement {
+                d: 1.5,
+                r: 3.,
+                entry: false,
                 spherical: true,
                 sellmeier: Sellmeier::bk7(),
                 sellmeier_index: 0,
@@ -133,10 +143,19 @@ impl LensState {
                 num_blades: 6,
             }),
             ElementState::Lens(GlassElement {
-                d1: 0.,
-                r1: 3.,
-                d2: 1.5,
-                r2: 3.,
+                d: 0.,
+                r: 3.,
+                entry: true,
+                spherical: true,
+                sellmeier: Sellmeier::bk7(),
+                sellmeier_index: 0,
+                coating_optimal: 0.5,
+                coating_enable: false,
+            }),
+            ElementState::Lens(GlassElement {
+                d: 1.5,
+                r: 3.,
+                entry: false,
                 spherical: true,
                 sellmeier: Sellmeier::bk7(),
                 sellmeier_index: 0,
@@ -186,9 +205,7 @@ impl LensState {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                (lens_rt_data.len() * std::mem::size_of::<f32>()) as _,
-                            ),
+                            min_binding_size: None,
                         },
                         count: None,
                     },
@@ -198,9 +215,7 @@ impl LensState {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                (lens_data.len() * std::mem::size_of::<f32>()) as _,
-                            ),
+                            min_binding_size: None,
                         },
                         count: None,
                     },
@@ -329,52 +344,58 @@ impl LensState {
 
 impl LensState {
     /// Convert from the GUI representation to the `polynomial_optics` representation
-    fn get_lens_arr(lens: &Vec<ElementState>) -> Vec<polynomial_optics::Element> {
+    fn get_lens_arr(lenses: &Vec<ElementState>) -> Vec<polynomial_optics::Element> {
         let mut elements: Vec<Element> = vec![];
         let mut dst: f32 = -5.;
-        for element in lens {
+        // let mut cemented = false;
+        let mut entry = true;
+        for (i, element) in lenses.iter().enumerate() {
             match element {
                 ElementState::Lens(lens) => {
-                    dst += lens.d1;
+                    dst += lens.d;
+
+                    let outer_ior = if lens.entry && lens.d == 0. && i > 0 {
+                        if let ElementState::Lens(lens) = &lenses[i - 1] {
+                            println!("test2");
+                            lens.sellmeier
+                        } else {
+                            Sellmeier::air()
+                        }
+                    } else if !lens.entry && i + 1 < lenses.len() {
+                        match &lenses[i + 1] {
+                            ElementState::Lens(lens) => {
+                                if lens.d == 0. {
+                                    println!("test");
+                                    lens.sellmeier
+                                } else {
+                                    Sellmeier::air()
+                                }
+                            }
+                            ElementState::Aperture(_) => Sellmeier::air(),
+                        }
+                    } else {
+                        Sellmeier::air()
+                    };
                     elements.push(Element {
-                        radius: lens.r1 as f64,
+                        radius: lens.r as f64,
                         properties: Properties::Glass(Glass {
                             sellmeier: lens.sellmeier,
                             coating: if lens.coating_enable {
                                 QuarterWaveCoating::optimal(
                                     lens.sellmeier.ior(lens.coating_optimal as f64),
-                                    1.,
+                                    1.0,
                                     lens.coating_optimal as f64,
                                 )
                             } else {
                                 QuarterWaveCoating::none()
                             },
-                            entry: true,
-                            outer_ior: Sellmeier::air(),
+                            entry: entry,
+                            outer_ior,
                             spherical: lens.spherical,
                         }),
                         position: dst as f64,
                     });
-                    dst += lens.d2;
-                    elements.push(Element {
-                        radius: lens.r2 as f64,
-                        properties: Properties::Glass(Glass {
-                            sellmeier: lens.sellmeier,
-                            coating: if lens.coating_enable {
-                                QuarterWaveCoating::optimal(
-                                    lens.sellmeier.ior(lens.coating_optimal as f64),
-                                    1.,
-                                    lens.coating_optimal as f64,
-                                )
-                            } else {
-                                QuarterWaveCoating::none()
-                            },
-                            entry: false,
-                            outer_ior: Sellmeier::air(),
-                            spherical: lens.spherical,
-                        }),
-                        position: dst as f64,
-                    });
+                    entry = !entry;
                 }
                 ElementState::Aperture(aperture) => {
                     dst += aperture.d;
@@ -389,11 +410,12 @@ impl LensState {
         elements
     }
     /// get the `polynomial_optics` representation of the Lens
-    pub fn get_lens(&self) -> Vec<polynomial_optics::Element> {
-        Self::get_lens_arr(&self.lens)
+    pub fn get_lens(&self) -> Lens {
+        Lens::new(Self::get_lens_arr(&self.lens), self.actual_lens.sensor_dist)
     }
 
     /// Convert from the `polynomial_optics` representation to the GUI representation
+    #[allow(dead_code)]
     fn get_lens_state(&self) -> Vec<ElementState> {
         let mut elements = vec![];
         let mut last_pos = -5.;
@@ -416,14 +438,23 @@ impl LensState {
 
                         let coating_enable = glass.coating.thickness > 0.;
                         elements.push(ElementState::Lens(GlassElement {
-                            d1: enty.0,
-                            r1: enty.1,
-                            d2: element.position as f32 - last_pos,
-                            r2: element.radius as f32,
+                            d: enty.0,
+                            r: enty.1,
+                            entry: true,
                             spherical: glass.spherical,
                             sellmeier: glass.sellmeier,
                             sellmeier_index,
-                            coating_optimal: 0.5,// TODO: read from file somehow
+                            coating_optimal: 0.5, // TODO: read from file somehow
+                            coating_enable,
+                        }));
+                        elements.push(ElementState::Lens(GlassElement {
+                            d: element.position as f32 - last_pos,
+                            r: element.radius as f32,
+                            entry: false,
+                            spherical: glass.spherical,
+                            sellmeier: glass.sellmeier,
+                            sellmeier_index,
+                            coating_optimal: 0.5, // TODO: read from file somehow
                             coating_enable,
                         }));
                         expect_entry = true;
@@ -446,7 +477,7 @@ impl LensState {
 
     /// update the buffers from the internal state
     pub fn update(&mut self, device: &Device, queue: &Queue) {
-        self.actual_lens = Lens::new(self.get_lens(), self.actual_lens.sensor_dist);
+        self.actual_lens = self.get_lens();
 
         let lens_rt_data = self.actual_lens.get_rt_elements_buffer();
         self.lens_rt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -493,7 +524,7 @@ impl LensState {
     /// ```
     /// println!("{:?}", get_lenses());
     /// ```
-    pub fn get_lenses() -> Vec<(String, Lens)> {
+    pub fn get_lenses() -> Vec<(String, Vec<ElementState>)> {
         let mut lenses = vec![];
 
         let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
@@ -504,7 +535,7 @@ impl LensState {
                 let path = entry.path();
 
                 if !path.is_dir() {
-                    match Lens::read(&path) {
+                    match Self::read_lens(&path) {
                         Ok(lens) => lenses.push((
                             path.file_name().unwrap().to_owned().into_string().unwrap(),
                             lens,
@@ -521,8 +552,19 @@ impl LensState {
         lenses
     }
 
+    /// read the lens descriptions from path
+    fn read_lens(path: &Path) -> Result<Vec<ElementState>, String> {
+        if let Ok(str) = std::fs::read_to_string(path) {
+            return match ron::de::from_str(str.as_str()) {
+                Ok(lens) => Ok(lens),
+                Err(err) => Err(String::from(format!("{}", err))),
+            };
+        }
+        return Err(String::from("problem reading file"));
+    }
+
     /// save the lens descriptions to ~/.config/polyflare/lenses/{name}
-    pub fn save_lens(name: &str, lens: &Lens) {
+    fn save(&self, name: &str) -> std::io::Result<()> {
         let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
         let dir = proj_dirs.config_dir().join(Path::new("lenses"));
         if !dir.is_dir() {
@@ -530,7 +572,21 @@ impl LensState {
             DirBuilder::new().recursive(true).create(&dir).unwrap();
         }
 
-        lens.save(&dir.join(Path::new(&name))).unwrap();
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&dir.join(Path::new(&name)))?;
+        let pretty_config = ron::ser::PrettyConfig::new();
+        std::io::Write::write_all(
+            &mut file,
+            ron::ser::to_string_pretty(&self.lens, pretty_config)
+                .unwrap()
+                .as_bytes(),
+        )?;
+        // handle errors
+        file.sync_all()?;
+        Ok(())
     }
 
     /// create an imgui window from Self and return
@@ -557,8 +613,8 @@ impl LensState {
                     lenses.as_slice(),
                     |(label, _lens)| std::borrow::Cow::Borrowed(label),
                 ) {
-                    self.actual_lens = lenses[self.selected_lens].1.clone();
-                    self.lens = self.get_lens_state();
+                    self.lens = lenses[self.selected_lens].1.clone();
+                    self.actual_lens = self.get_lens();
                     self.current_filename = lenses[self.selected_lens].0.clone();
                     update_lens = true;
                 }
@@ -576,68 +632,152 @@ impl LensState {
                     );
                 }
 
+                let mut delete_glass = None;
+                let mut delete_aperture = None;
+
+                let mut next_sellmeier = None;
+                // how many elements to draw within the current header
+                let mut ui_draw_next = 0;
+                let mut element_counter = 0;
+                let mut aperture_counter = 0;
                 for (i, element) in self.lens.iter_mut().enumerate() {
                     match element {
                         ElementState::Lens(lens) => {
-                            ui.push_item_width(ui.window_size()[0] / 2. - 45.);
-                            ui.text(format!("Lens: {:?}", i + 1));
+                            if lens.entry {
+                                element_counter += 1;
+                                if CollapsingHeader::new(format!("Element {:?}", element_counter))
+                                    .build(ui)
+                                {
+                                    ui_draw_next += 2;
+                                    ui.push_item_width(ui.window_size()[0] / 2. - 45.);
 
-                            ui.same_line();
-                            if ui.combo(
-                                format!("select glass##{}", i),
-                                &mut lens.sellmeier_index,
-                                self.all_glasses.as_slice(),
-                                |(label, _lens)| std::borrow::Cow::Borrowed(label),
-                            ) {
-                                lens.sellmeier = self.all_glasses[lens.sellmeier_index].1;
-                                update_lens = true;
+                                    if ui.combo(
+                                        format!("select glass##{}", i),
+                                        &mut lens.sellmeier_index,
+                                        self.all_glasses.as_slice(),
+                                        |(label, _lens)| std::borrow::Cow::Borrowed(label),
+                                    ) {
+                                        lens.sellmeier = self.all_glasses[lens.sellmeier_index].1;
+                                        next_sellmeier = Some((
+                                            self.all_glasses[lens.sellmeier_index].1,
+                                            lens.sellmeier_index,
+                                        ));
+                                        update_lens = true;
+                                    }
+                                }
+                            } else if let Some(sellmeier) = next_sellmeier {
+                                lens.sellmeier = sellmeier.0;
+                                lens.sellmeier_index = sellmeier.1;
+                                next_sellmeier = None;
                             }
-                            ui.same_line();
-                            update_lens |=
-                                ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
+                            if ui_draw_next > 0 {
+                                ui.same_line();
+                                update_lens |=
+                                    ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
 
-                            update_lens |=
-                                Slider::new(format!("d1##{}", i), 0., 5.).build(&ui, &mut lens.d1);
-                            ui.same_line();
-                            update_lens |=
-                                Slider::new(format!("r1##{}", i), -6., 3.).build(&ui, &mut lens.r1);
-                            update_lens |=
-                                Slider::new(format!("d2##{}", i), -3., 6.).build(&ui, &mut lens.d2);
-                            ui.same_line();
-                            update_lens |=
-                                Slider::new(format!("r2##{}", i), -6., 3.).build(&ui, &mut lens.r2);
+                                update_lens |= Slider::new(format!("d##{}", i), 0., 5.)
+                                    .build(&ui, &mut lens.d);
+                                ui.same_line();
+                                update_lens |= Slider::new(format!("r##{}", i), -6., 3.)
+                                    .build(&ui, &mut lens.r);
+                                // update_lens |=
+                                //     Slider::new(format!("d2##{}", i), -3., 6.).build(&ui, &mut lens.d2);
+                                // ui.same_line();
+                                // update_lens |=
+                                //     Slider::new(format!("r2##{}", i), -6., 3.).build(&ui, &mut lens.r2);
 
-                            // thickness: 0.1016260162601626, ior: 1.23
-                            update_lens |= Slider::new(format!("wavelen##{}", i), 0.3, 0.8)
-                                .build(&ui, &mut lens.coating_optimal);
-                            ui.same_line();
-                            update_lens |= ui.checkbox(format!("coating##{}", i), &mut lens.coating_enable);
-                            ui.push_item_width(0.);
+                                // thickness: 0.1016260162601626, ior: 1.23
+                                update_lens |= Slider::new(format!("wavelen##{}", i), 0.3, 0.8)
+                                    .build(&ui, &mut lens.coating_optimal);
+                                ui.same_line();
+                                update_lens |= ui
+                                    .checkbox(format!("coating##{}", i), &mut lens.coating_enable);
 
-                            // update_size |= ui.checkbox(format!("button##{}", i), &mut element.4);
-                            // update_lens |= update_size;
-                            ui.separator();
+                                if ui.button(format!("delete##{}", i)) {
+                                    delete_glass = Some(i - 1);
+                                }
+
+                                // update_size |= ui.checkbox(format!("button##{}", i), &mut element.4);
+                                // update_lens |= update_size;
+                                if !lens.entry {
+                                    ui.separator();
+                                    ui.push_item_width(0.);
+                                }
+
+                                ui_draw_next -= 1;
+                            }
                         }
                         ElementState::Aperture(aperture) => {
-                            ui.text(format!("Aperture: {:?}", i + 1));
-                            update_lens |= Slider::new(format!("d##{}", i), 0., 5.)
-                                .build(&ui, &mut aperture.d);
-                            update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
-                                .build(&ui, &mut aperture.r);
-                            update_lens |= Slider::new(format!("num_blades##{}", i), 3, 6)
-                                .build(&ui, &mut aperture.num_blades);
+                            aperture_counter += 1;
+                            if CollapsingHeader::new(format!("Aperture {:?}", aperture_counter))
+                                .build(ui)
+                            {
+                                update_lens |= Slider::new(format!("d##{}", i), 0., 5.)
+                                    .build(&ui, &mut aperture.d);
+                                update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
+                                    .build(&ui, &mut aperture.r);
+                                update_lens |= Slider::new(format!("num_blades##{}", i), 3, 16)
+                                    .build(&ui, &mut aperture.num_blades);
 
-                            // update_size |= ui.checkbox(format!("button##{}", i), &mut element.4);
-                            // update_lens |= update_size;
-                            ui.separator();
+                                if ui.button(format!("delete##{}", i)) {
+                                    delete_aperture = Some(i - 1);
+                                }
+
+                                ui.separator();
+                            }
                         }
                     }
                 }
 
+                if let Some(delete_element) = delete_glass {
+                    self.lens.remove(delete_element);
+                    self.lens.remove(delete_element);
+                    update_lens = true;
+                }
+
+                if let Some(delete_aperture) = delete_aperture {
+                    self.lens.remove(delete_aperture);
+                    update_lens = true;
+                }
+
+                if ui.button("add aperture") {
+                    self.lens.push(ElementState::Aperture(Aperture {
+                        d: 1.5,
+                        r: 1.,
+                        num_blades: 6,
+                    }));
+                    update_lens = true;
+                }
                 ui.same_line();
+                if ui.button("add element") {
+                    self.lens.push(ElementState::Lens(GlassElement {
+                        d: 1.5,
+                        r: 3.,
+                        entry: true,
+                        spherical: true,
+                        sellmeier: Sellmeier::bk7(),
+                        sellmeier_index: 0,
+                        coating_optimal: 0.5,
+                        coating_enable: false,
+                    }));
+                    self.lens.push(ElementState::Lens(GlassElement {
+                        d: 1.5,
+                        r: 3.,
+                        entry: false,
+                        spherical: true,
+                        sellmeier: Sellmeier::bk7(),
+                        sellmeier_index: 0,
+                        coating_optimal: 0.5,
+                        coating_enable: false,
+                    }));
+                    update_lens = true;
+                }
+
                 if ui.button("save as") {
                     if self.current_filename.len() > 0 {
-                        Self::save_lens(self.current_filename.as_str(), &self.actual_lens);
+                        if let Err(err) = self.save(self.current_filename.as_str()) {
+                            println!("fuck, {:?}", err);
+                        };
                     } else {
                         ui.open_popup("no name selected");
                     }

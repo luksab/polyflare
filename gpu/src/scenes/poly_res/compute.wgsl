@@ -250,11 +250,11 @@ fn propagate_element(
         if (entry == (ray.d.z > 0.)) {
             a = ior;
         } else {
-            a = 1.0;
+            a = other_ior;
         };
         var b: f32;
         if (entry == (ray.d.z > 0.)) {
-            b = 1.0;
+            b = other_ior;
         } else {
             b = ior;
         }
@@ -288,11 +288,11 @@ fn propagate_element(
         if (entry == (ray.d.z > 0.)) {
             a = ior;
         } else {
-            a = 1.0;
+            a = other_ior;
         };
         var b: f32;
         if (entry == (ray.d.z > 0.)) {
-            b = 1.0;
+            b = other_ior;
         } else {
             b = ior;
         }

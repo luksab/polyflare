@@ -337,7 +337,7 @@ impl PolyRes {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new((num_dots * 32) as _),
+                            min_binding_size: None,
                         },
                         count: None,
                     },
@@ -413,7 +413,7 @@ impl PolyRes {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let (boid_render_pipeline, render_bind_group)  = Self::shader_draw(
+        let (boid_render_pipeline, render_bind_group) = Self::shader_draw(
             device,
             &sim_params,
             &sim_param_buffer,
@@ -480,7 +480,7 @@ impl PolyRes {
         lens_state: &LensState,
     ) {
         if update_size {
-            println!("update: {}", self.num_dots);
+            // println!("update: {}", self.num_dots);
             let (compute_pipeline, compute_bind_group, dots_buffer) = Self::raytrace_shader(
                 device,
                 &self.sim_params,
@@ -855,9 +855,11 @@ impl PolyRes {
         let mut first_pass = true;
         for i in 0..iters {
             for j in 0..iters {
-                lens_state.pos_params[4] = (i as f32 + 0.5) * width - (width * iters as f32 / 2.); //x center
-                lens_state.pos_params[5] = (j as f32 + 0.5) * width - (width * iters as f32 / 2.); //y center
-                                                                                                   // println!("center: {},{}", lens_state.pos_params[4], lens_state.pos_params[5]);
+                lens_state.pos_params[4] =
+                    (i as f32 + 0.5) * width - (width * iters as f32 / 2.) + old_x; //x center
+                lens_state.pos_params[5] =
+                    (j as f32 + 0.5) * width - (width * iters as f32 / 2.) + old_y; //y center
+                                                                                    // println!("center: {},{}", lens_state.pos_params[4], lens_state.pos_params[5]);
                 lens_state.update(device, queue);
                 self.update_dots(device, queue, first_pass, lens_state);
                 // pollster::block_on(queue.on_submitted_work_done());
