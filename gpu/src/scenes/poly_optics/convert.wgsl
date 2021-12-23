@@ -44,7 +44,7 @@ struct PosParams {
   width: f32;
 };
 
-[[group(0), binding(2)]] var<uniform> params : SimParams;
+[[group(1), binding(2)]] var<uniform> params : SimParams;
 [[group(2), binding(1)]] var<storage, read> elements : Elements;
 
 [[group(1), binding(0)]] var<uniform> posParams : PosParams;

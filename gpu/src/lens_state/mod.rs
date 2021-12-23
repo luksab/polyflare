@@ -51,6 +51,8 @@ pub enum ElementState {
 
 /// The state of the application
 pub struct LensState {
+    /// whether buffers need updating
+    pub needs_update: bool,
     /// number of rays = 2^ray_exponent
     pub ray_exponent: f64,
     /// number of dots = 2^dots_exponent
@@ -89,13 +91,45 @@ pub struct LensState {
     /// buffer of the current sensor
     pub sensor_buffer: Buffer,
     /// positions of the rays and the sensor
-    pub pos_params_buffer: wgpu::Buffer,
+    pos_params_buffer: wgpu::Buffer,
     /// positions of the rays and the sensor
-    pub pos_bind_group: wgpu::BindGroup,
+    pub params_bind_group: wgpu::BindGroup,
     /// positions of the rays and the sensor
-    pub pos_bind_group_layout: wgpu::BindGroupLayout,
+    pub params_bind_group_layout: wgpu::BindGroupLayout,
     /// Data for the positions of the rays and the sensor
+    /// ```
+    /// pos_params {
+    /// 0: ox: f32;
+    /// 1: oy: f32;
+    /// 2: oz: f32;
+    /// 3: wavelength: f32;
+    /// 4: dx: f32;
+    /// 5: dy: f32;
+    /// 6: dz: f32;
+    /// 7: strength: f32;
+    /// 8: sensor: f32;
+    /// 9: width: f32;
+    /// padding
+    /// };
+    /// ```
     pub pos_params: [f32; 12],
+    sim_param_buffer: wgpu::Buffer,
+    /// ```
+    /// struct SimParams {
+    ///   0:opacity: f32;
+    ///   1:width_scaled: f32;
+    ///   2:height_scaled: f32;
+    ///   3:width: f32;
+    ///   4:height: f32;
+    ///   5:draw_mode: f32;
+    ///   6:which_ghost: f32;
+    ///   7:window_width_scaled: f32;
+    ///   8:window_height_scaled: f32;
+    ///   9:window_width: f32;
+    ///  10:window_height: f32;
+    /// };
+    /// ```
+    pub sim_params: [f32; 11],
 
     /// buffer for the currently selected lens
     lens_buffer: Buffer,
@@ -265,14 +299,31 @@ impl LensState {
         let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
             contents: bytemuck::cast_slice(&pos_params),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
         });
-        let pos_bind_group_layout =
+
+        // buffer for simulation parameters uniform
+        let sim_params = [
+            0.1, 512., 512., 512., 512., 1.0, 1.0, 512., 512., 512., 512.,
+        ];
+        let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Simulation Parameter Buffer"),
+            contents: bytemuck::cast_slice(&sim_params),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
+        let params_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
+                        visibility: wgpu::ShaderStages::COMPUTE
+                            | wgpu::ShaderStages::VERTEX
+                            | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -284,7 +335,9 @@ impl LensState {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
+                        visibility: wgpu::ShaderStages::COMPUTE
+                            | wgpu::ShaderStages::VERTEX
+                            | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
@@ -294,11 +347,25 @@ impl LensState {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE
+                            | wgpu::ShaderStages::VERTEX
+                            | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (sim_params.len() * std::mem::size_of::<f32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
                 ],
                 label: None,
             });
-        let pos_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &pos_bind_group_layout,
+        let params_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &params_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -308,11 +375,16 @@ impl LensState {
                     binding: 1,
                     resource: sensor_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: sim_param_buffer.as_entire_binding(),
+                },
             ],
             label: None,
         });
 
         Self {
+            needs_update: false,
             ray_exponent: 5.,
             dots_exponent: 7.,
             hi_dots_exponent: 10.,
@@ -332,17 +404,35 @@ impl LensState {
             lens_rt_buffer,
             lens_buffer,
             pos_params_buffer,
-            pos_bind_group,
+            params_bind_group,
             pos_params,
-            pos_bind_group_layout,
+            params_bind_group_layout,
             lens_bind_group,
             lens_bind_group_layout,
             first_frame: true,
+            sim_param_buffer,
+            sim_params,
         }
     }
 }
 
 impl LensState {
+    pub fn resize_main(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: f64) {
+        self.sim_params[1] = new_size.width as f32 * scale_factor as f32;
+        self.sim_params[2] = new_size.height as f32 * scale_factor as f32;
+        self.sim_params[3] = new_size.width as f32;
+        self.sim_params[4] = new_size.height as f32;
+        self.needs_update = true;
+    }
+
+    pub fn resize_window(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: f64) {
+        self.sim_params[7] = new_size.width as f32 * scale_factor as f32;
+        self.sim_params[8] = new_size.height as f32 * scale_factor as f32;
+        self.sim_params[9] = new_size.width as f32;
+        self.sim_params[10] = new_size.height as f32;
+        self.needs_update = true;
+    }
+
     /// Convert from the GUI representation to the `polynomial_optics` representation
     fn get_lens_arr(lenses: &Vec<ElementState>) -> Vec<polynomial_optics::Element> {
         let mut elements: Vec<Element> = vec![];
@@ -356,7 +446,6 @@ impl LensState {
 
                     let outer_ior = if lens.entry && lens.d == 0. && i > 0 {
                         if let ElementState::Lens(lens) = &lenses[i - 1] {
-                            println!("test2");
                             lens.sellmeier
                         } else {
                             Sellmeier::air()
@@ -365,7 +454,6 @@ impl LensState {
                         match &lenses[i + 1] {
                             ElementState::Lens(lens) => {
                                 if lens.d == 0. {
-                                    println!("test");
                                     lens.sellmeier
                                 } else {
                                     Sellmeier::air()
@@ -477,6 +565,11 @@ impl LensState {
 
     /// update the buffers from the internal state
     pub fn update(&mut self, device: &Device, queue: &Queue) {
+        self.sim_params[0] = self.opacity;
+
+        self.sim_params[5] = self.draw as f32;
+        self.sim_params[6] = self.which_ghost as f32;
+
         self.actual_lens = self.get_lens();
 
         let lens_rt_data = self.actual_lens.get_rt_elements_buffer();
@@ -517,6 +610,11 @@ impl LensState {
             &self.pos_params_buffer,
             0,
             bytemuck::cast_slice(&self.pos_params),
+        );
+        queue.write_buffer(
+            &self.sim_param_buffer,
+            0,
+            bytemuck::cast_slice(&self.sim_params),
         );
     }
 
@@ -597,7 +695,7 @@ impl LensState {
         ui: &Ui,
         device: &Device,
         queue: &Queue,
-    ) -> (bool, bool, bool, bool, bool) {
+    ) -> (bool, bool, bool) {
         let mut update_lens = self.first_frame;
         let mut update_sensor = self.first_frame;
         imgui::Window::new("Lens")
@@ -848,13 +946,14 @@ impl LensState {
                 Slider::new("num_hi_rays", 0., 12.).build(&ui, &mut self.hi_dots_exponent);
             });
 
-        if update_lens {
+        if update_lens || self.needs_update {
             self.update(device, queue);
+            self.needs_update = false;
         }
 
         self.last_frame_time = Instant::now();
 
         self.first_frame = false;
-        (update_lens, false, update_rays, update_dots, render)
+        (update_rays, update_dots, render)
     }
 }

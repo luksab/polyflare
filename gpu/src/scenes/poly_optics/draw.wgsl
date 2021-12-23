@@ -28,8 +28,8 @@ struct Sensor {
     measuremens: [[stride(16)]] array<SensorDatapoint>;
 };
 
-[[group(0), binding(0)]] var<uniform> params : SimParams;
-[[group(1), binding(1)]] var<storage, read> sensor : Sensor;
+[[group(0), binding(2)]] var<uniform> params : SimParams;
+[[group(0), binding(1)]] var<storage, read> sensor : Sensor;
 
 fn lookup_rgb(wavelength: f32) -> vec3<f32> {
     let lower_index = u32(clamp((wavelength - sensor.measuremens[0].wavelength / 1000.) * 100., 0., 34.));

@@ -105,4 +105,6 @@ fn main() {
     lens.draw(&mut pixmap);
 
     pixmap.save_png("image.png").unwrap();
+
+    println!("{:?}", QuarterWaveCoating::optimal(1.5, 1.0, 0.5));
 }

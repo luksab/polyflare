@@ -14,6 +14,8 @@ struct VertexOutput {
 [[block]]
 struct SimParams {
   opacity: f32;
+  width_scaled: f32;
+  height_scaled: f32;
   width: f32;
   height: f32;
 };
@@ -28,8 +30,8 @@ struct Sensor {
     measuremens: [[stride(16)]] array<SensorDatapoint>;
 };
 
-[[group(0), binding(0)]] var<uniform> params : SimParams;
-[[group(1), binding(1)]] var<storage, read> sensor : Sensor;
+[[group(0), binding(2)]] var<uniform> params : SimParams;
+[[group(0), binding(1)]] var<storage, read> sensor : Sensor;
 
 
 fn lookup_rgb(wavelength: f32) -> vec3<f32> {

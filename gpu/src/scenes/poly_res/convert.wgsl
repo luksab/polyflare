@@ -13,9 +13,15 @@ struct SimParams {
   height_scaled: f32;
   width: f32;
   height: f32;
+  draw_mode: f32;
+  which_ghost: f32;
+  window_width_scaled: f32;
+  window_height_scaled: f32;
+  window_width: f32;
+  window_height: f32;
 };
 
-[[group(0), binding(2)]] var<uniform> params : SimParams;
+[[group(1), binding(2)]] var<uniform> params : SimParams;
 
 [[stage(vertex)]]
 fn main(
@@ -33,9 +39,9 @@ var s_diffuse: sampler;
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let screenAspect = normalize(vec2<f32>(params.height, params.width)) * 3.;
+    let screenAspect = normalize(vec2<f32>(params.window_height_scaled, params.window_width_scaled)) * 2.;
 
-    let pos = (vec2<f32>(in.clip_position.x / params.width, in.clip_position.y / params.height) + vec2<f32>(0.55,0.5)) / screenAspect;
+    let pos = (vec2<f32>(in.clip_position.x / params.window_width_scaled, in.clip_position.y / params.window_height_scaled) + vec2<f32>(0.21,0.21)) / screenAspect;
     let sample = textureSample(t_diffuse, s_diffuse, pos);
     var bg = vec4<f32>(0.0,0.0,0.0,1.0);
 

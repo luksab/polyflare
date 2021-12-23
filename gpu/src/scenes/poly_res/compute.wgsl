@@ -62,8 +62,8 @@ struct Elements {
   el: [[stride(72)]] array<Element>;
 };
 
-[[group(0), binding(0)]] var<uniform> params : SimParams;
-[[group(0), binding(1)]] var<storage, read_write> rays : Rays;
+[[group(0), binding(0)]] var<storage, read_write> rays : Rays;
+[[group(1), binding(2)]] var<uniform> params : SimParams;
 
 [[group(1), binding(0)]] var<uniform> posParams : PosParams;
 

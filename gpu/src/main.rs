@@ -32,7 +32,7 @@ fn main() {
 
     let mut poly_res =
         pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
-    poly_optics.update_buffers(&state.queue, &state.device, true, &lens_ui);
+    poly_optics.update_buffers(&state.device, true, &lens_ui);
 
     // Set up dear imgui
     let mut imgui = imgui::Context::create();
@@ -48,14 +48,7 @@ fn main() {
     // Set font for imgui
     {
         let hidpi_factor = state.window.scale_factor();
-        poly_optics.resize(
-            state.size,
-            hidpi_factor,
-            &state.device,
-            &state.config,
-            &state.queue,
-            &lens_ui,
-        );
+        poly_optics.resize(&state.device, &state.config, &lens_ui);
         // poly_res.resize(
         //     state.size,
         //     hidpi_factor,
@@ -134,14 +127,8 @@ fn main() {
                     } => *control_flow = ControlFlow::Exit,
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size, None);
-                        poly_optics.resize(
-                            state.size,
-                            state.scale_factor,
-                            &state.device,
-                            &state.config,
-                            &state.queue,
-                            &lens_ui,
-                        );
+                        poly_optics.resize(&state.device, &state.config, &lens_ui);
+                        lens_ui.resize_main(state.size, state.scale_factor)
                     }
                     WindowEvent::ScaleFactorChanged {
                         new_inner_size,
@@ -149,21 +136,8 @@ fn main() {
                         ..
                     } => {
                         state.resize(**new_inner_size, Some(scale_factor));
-                        poly_optics.resize(
-                            state.size,
-                            *scale_factor,
-                            &state.device,
-                            &state.config,
-                            &state.queue,
-                            &lens_ui,
-                        );
-                        poly_res.resize(
-                            state.size,
-                            *scale_factor,
-                            &state.device,
-                            &state.config,
-                            &state.queue,
-                        );
+                        poly_optics.resize(&state.device, &state.config, &lens_ui);
+                        poly_res.resize(state.size, *scale_factor, &state.device, &state.config);
                     }
                     _ => {}
                 }
@@ -205,10 +179,11 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
-                let (update_lens, _update_size, update_ray_num, update_dot_num, render) =
+                let (update_ray_num, update_dot_num, render) =
                     lens_ui.build_ui(&ui, &state.device, &state.queue);
 
                 if render {
+                    let now = Instant::now();
                     let size = [2048, 2048];
                     let extend = wgpu::Extent3d {
                         width: size[0],
@@ -231,12 +206,21 @@ fn main() {
                     poly_res.resize(
                         winit::dpi::PhysicalSize {
                             width: size[0],
-                            height: size[0],
+                            height: size[1],
                         },
                         1.0,
                         &state.device,
                         &state.config,
-                        &state.queue,
+                    );
+
+                    let sim_params = lens_ui.sim_params;
+
+                    lens_ui.resize_window(
+                        winit::dpi::PhysicalSize {
+                            width: size[0],
+                            height: size[1],
+                        },
+                        1.0,
                     );
 
                     poly_res
@@ -250,41 +234,24 @@ fn main() {
                         .unwrap();
 
                     poly_res.resize(
-                        state.size,
+                        winit::dpi::PhysicalSize {
+                            width: sim_params[9] as _,
+                            height: sim_params[10] as _,
+                        },
                         state.scale_factor,
                         &state.device,
                         &state.config,
-                        &state.queue,
                     );
+                    lens_ui.sim_params = sim_params;
+                    lens_ui.needs_update = true;
                     save_png::save_png(&tex, size, &state.device, &state.queue);
+
+                    println!("Rendering and saving image took {:?}", now.elapsed());
                 }
                 // Dot/ray num
                 poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
                 poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
-
-                poly_optics.draw_mode = lens_ui.draw;
-
-                if update_lens {
-                    poly_res.sim_params[5] = poly_optics.draw_mode as f32;
-                    poly_optics.sim_params[5] = poly_optics.draw_mode as f32;
-                    poly_res.sim_params[6] = lens_ui.which_ghost as f32;
-                    poly_optics.sim_params[6] = lens_ui.which_ghost as f32;
-
-                    poly_optics.sim_params[0] = lens_ui.opacity.powf(3.);
-                    poly_res.sim_params[0] = lens_ui.opacity.powf(3.);
-                    poly_optics.write_buffer(&state.queue);
-                    poly_res.write_buffer(&state.queue);
-                    // poly_optics.lens.elements = lens_ui.get_lens();
-                    // poly_optics.update_buffers(&state.queue, &state.device, update_ray_num);
-                    // poly_res.update_buffers(
-                    //     &state.queue,
-                    //     &state.device,
-                    //     update_dot_num,
-                    //     &poly_optics.lens_rt_data,
-                    //     &poly_optics.lens_rt_buffer,
-                    // )
-                }
 
                 poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
                 poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
@@ -327,14 +294,9 @@ fn main() {
                                 state.scale_factor,
                                 &state.device,
                                 &state.config,
-                                &state.queue,
                             );
 
-                            poly_res.sim_params[1] = size[0];
-                            poly_res.sim_params[2] = size[1];
-                            poly_res.sim_params[3] = size[0] * state.scale_factor as f32;
-                            poly_res.sim_params[4] = size[1] * state.scale_factor as f32;
-                            poly_res.write_buffer(&state.queue);
+                            lens_ui.resize_window(size.into(), state.scale_factor);
                         }
 
                         // Only render contents if the window is not collapsed
