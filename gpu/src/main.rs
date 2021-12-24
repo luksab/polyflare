@@ -32,6 +32,8 @@ fn main() {
 
     let mut poly_res =
         pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
+    let mut poly_tri =
+        pollster::block_on(scenes::PolyTri::new(&state.device, &state.config, &lens_ui));
     poly_optics.update_buffers(&state.device, true, &lens_ui);
 
     // Set up dear imgui
@@ -138,6 +140,7 @@ fn main() {
                         state.resize(**new_inner_size, Some(scale_factor));
                         poly_optics.resize(&state.device, &state.config, &lens_ui);
                         poly_res.resize(state.size, *scale_factor, &state.device, &state.config);
+                        poly_tri.resize(state.size, *scale_factor, &state.device, &state.config);
                     }
                     _ => {}
                 }
@@ -167,6 +170,7 @@ fn main() {
                 // Render normally at background
                 poly_optics.update(&state.device, &lens_ui);
                 poly_res.update(&state.device, &lens_ui);
+                poly_tri.update(&state.device, &lens_ui);
 
                 // Render debug view
                 match poly_optics.render(&view, &state.device, &state.queue, &lens_ui) {
@@ -252,9 +256,11 @@ fn main() {
                 poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
                 poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                poly_tri.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
 
                 poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
                 poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
+                poly_tri.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
 
                 // Render PolyRes
                 {
@@ -296,11 +302,37 @@ fn main() {
                                 &state.config,
                             );
 
+                            poly_tri.resize(
+                                size.into(),
+                                state.scale_factor,
+                                &state.device,
+                                &state.config,
+                            );
+
                             lens_ui.resize_window(size.into(), state.scale_factor);
                         }
 
                         // Only render contents if the window is not collapsed
-                        match poly_res.render(
+                        // match poly_res.render(
+                        //     &renderer.textures.get(res_window_texture_id).unwrap().view(),
+                        //     &state.device,
+                        //     &state.queue,
+                        //     &lens_ui,
+                        // ) {
+                        //     Ok(_) => {}
+                        //     // Reconfigure the surface if lost
+                        //     Err(wgpu::SurfaceError::Lost) => {
+                        //         state.resize(state.size, None);
+                        //     }
+                        //     // The system is out of memory, we should probably quit
+                        //     Err(wgpu::SurfaceError::OutOfMemory) => {
+                        //         *control_flow = ControlFlow::Exit
+                        //     }
+                        //     // All other errors (Outdated, Timeout) should be resolved by the next frame
+                        //     Err(e) => eprintln!("{:?}", e),
+                        // }
+
+                        match poly_tri.render(
                             &renderer.textures.get(res_window_texture_id).unwrap().view(),
                             &state.device,
                             &state.queue,
