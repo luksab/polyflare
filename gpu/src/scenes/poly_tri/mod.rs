@@ -15,6 +15,7 @@ pub struct PolyTri {
     conversion_bind_group: wgpu::BindGroup,
     compute_pipeline: ComputePipeline,
     compute_bind_group: BindGroup,
+    compute_bind_group_layout: BindGroupLayout,
     vertex_buffer: wgpu::Buffer,
     tri_index_buffer: wgpu::Buffer,
 
@@ -23,6 +24,7 @@ pub struct PolyTri {
     convert_meta: std::fs::Metadata,
     draw_meta: std::fs::Metadata,
     compute_meta: std::fs::Metadata,
+    triangulate_meta: std::fs::Metadata,
     format: TextureFormat,
     conf_format: TextureFormat,
 }
@@ -32,6 +34,7 @@ impl PolyTri {
         device: &wgpu::Device,
         format: TextureFormat,
         params_bind_group_layout: &BindGroupLayout,
+        lens_bind_group_layout: &BindGroupLayout,
     ) -> RenderPipeline {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyOptics"),
@@ -45,11 +48,11 @@ impl PolyTri {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render"),
-                bind_group_layouts: &[&params_bind_group_layout],
+                bind_group_layouts: &[&params_bind_group_layout, &lens_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
-        let boid_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let tri_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
@@ -123,7 +126,7 @@ impl PolyTri {
             multisample: wgpu::MultisampleState::default(),
         });
 
-        boid_render_pipeline
+        tri_render_pipeline
     }
 
     fn convert_shader(
@@ -247,7 +250,7 @@ impl PolyTri {
         lens_bind_group_layout: &BindGroupLayout,
         params_bind_group_layout: &BindGroupLayout,
         dot_side_len: u32,
-    ) -> (ComputePipeline, BindGroup, Buffer) {
+    ) -> (ComputePipeline, BindGroup, BindGroupLayout, Buffer) {
         let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
@@ -315,11 +318,17 @@ impl PolyTri {
             label: None,
         });
 
-        (compute_pipeline, compute_bind_group, rays_buffer)
+        (
+            compute_pipeline,
+            compute_bind_group,
+            compute_bind_group_layout,
+            rays_buffer,
+        )
     }
 
     fn triangulate_shader(
         device: &wgpu::Device,
+        compute_bind_group_layout: &BindGroupLayout,
         params_bind_group_layout: &BindGroupLayout,
         dot_side_len: u32,
     ) -> (ComputePipeline, Buffer) {
@@ -332,25 +341,10 @@ impl PolyTri {
             ),
         });
 
-        // create compute bind layout group and compute pipeline layout
-        let triangulate_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: None,
-            });
         let triangulate_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("triangulate"),
-                bind_group_layouts: &[&triangulate_bind_group_layout, &params_bind_group_layout],
+                bind_group_layouts: &[&compute_bind_group_layout, &params_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -410,8 +404,12 @@ impl PolyTri {
         let high_color_tex =
             Texture::create_color_texture(device, config, format, "high_color_tex");
 
-        let tri_render_pipeline =
-            Self::shader_draw(device, format, &lens_state.params_bind_group_layout);
+        let tri_render_pipeline = Self::shader_draw(
+            device,
+            format,
+            &lens_state.params_bind_group_layout,
+            &lens_state.lens_bind_group_layout,
+        );
 
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
@@ -421,19 +419,26 @@ impl PolyTri {
         );
 
         let dot_side_len = 2;
-        let (compute_pipeline, compute_bind_group, vertex_buffer) = Self::raytrace_shader(
+        let (compute_pipeline, compute_bind_group, compute_bind_group_layout, vertex_buffer) =
+            Self::raytrace_shader(
+                device,
+                &lens_state.lens_bind_group_layout,
+                &lens_state.params_bind_group_layout,
+                dot_side_len,
+            );
+
+        let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
             device,
-            &lens_state.lens_bind_group_layout,
+            &compute_bind_group_layout,
             &lens_state.params_bind_group_layout,
             dot_side_len,
         );
 
-        let (triangulate_pipeline, tri_index_buffer) =
-            Self::triangulate_shader(device, &lens_state.params_bind_group_layout, dot_side_len);
-
         let convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").unwrap();
         let draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").unwrap();
         let compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").unwrap();
+        let triangulate_meta =
+            std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").unwrap();
 
         Self {
             tri_render_pipeline,
@@ -447,11 +452,13 @@ impl PolyTri {
             convert_meta,
             draw_meta,
             compute_meta,
+            triangulate_meta,
             format,
             conf_format: config.format,
             dot_side_len,
             compute_pipeline,
             compute_bind_group,
+            compute_bind_group_layout,
         }
     }
 
@@ -464,17 +471,19 @@ impl PolyTri {
     ) {
         if update_size {
             // println!("update: {}", self.num_dots);
-            let (compute_pipeline, compute_bind_group, vertex_buffer) = Self::raytrace_shader(
-                device,
-                &lens_state.lens_bind_group_layout,
-                &lens_state.params_bind_group_layout,
-                self.dot_side_len,
-            );
+            let (compute_pipeline, compute_bind_group, compute_bind_group_layout, vertex_buffer) =
+                Self::raytrace_shader(
+                    device,
+                    &lens_state.lens_bind_group_layout,
+                    &lens_state.params_bind_group_layout,
+                    self.dot_side_len,
+                );
             self.compute_pipeline = compute_pipeline;
             self.compute_bind_group = compute_bind_group;
             self.vertex_buffer = vertex_buffer;
             let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
                 device,
+                &compute_bind_group_layout,
                 &lens_state.params_bind_group_layout,
                 self.dot_side_len,
             );
@@ -494,6 +503,18 @@ impl PolyTri {
             cpass.set_bind_group(0, &self.compute_bind_group, &[]);
             cpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
             cpass.set_bind_group(2, &lens_state.lens_bind_group, &[]);
+            cpass.dispatch(work_group_count, 1, 1);
+        }
+
+        let work_group_count = (self.dot_side_len * self.dot_side_len + 64 - 1) / 64; // round up
+        {
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.triangulate_pipeline);
+            cpass.set_bind_group(0, &self.compute_bind_group, &[]);
+            cpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
+            // cpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
+            // cpass.set_bind_group(2, &lens_state.lens_bind_group, &[]);
             cpass.dispatch(work_group_count, 1, 1);
         }
 
@@ -640,8 +661,12 @@ impl PolyTri {
             self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").unwrap();
             print!("reloading draw shader! ");
             let now = Instant::now();
-            let pipeline =
-                Self::shader_draw(device, self.format, &lens_state.params_bind_group_layout);
+            let pipeline = Self::shader_draw(
+                device,
+                self.format,
+                &lens_state.params_bind_group_layout,
+                &lens_state.lens_bind_group_layout,
+            );
             self.tri_render_pipeline = pipeline;
             println!("took {:?}.", now.elapsed());
         }
@@ -653,17 +678,47 @@ impl PolyTri {
                 .unwrap()
         {
             self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").unwrap();
-            print!("reloading compute shader! ");
+            print!("reloading compute shader!");
             let now = Instant::now();
-            let (pipeline, bind_group, vertex_buffer) = Self::raytrace_shader(
-                device,
-                &lens_state.lens_bind_group_layout,
-                &lens_state.params_bind_group_layout,
-                self.dot_side_len,
-            );
+            let (pipeline, bind_group, compute_bind_group_layout, vertex_buffer) =
+                Self::raytrace_shader(
+                    device,
+                    &lens_state.lens_bind_group_layout,
+                    &lens_state.params_bind_group_layout,
+                    self.dot_side_len,
+                );
             self.compute_pipeline = pipeline;
             self.compute_bind_group = bind_group;
             self.vertex_buffer = vertex_buffer;
+            let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
+                device,
+                &compute_bind_group_layout,
+                &lens_state.params_bind_group_layout,
+                self.dot_side_len,
+            );
+            self.triangulate_pipeline = triangulate_pipeline;
+            self.tri_index_buffer = tri_index_buffer;
+            println!("took {:?}.", now.elapsed());
+        }
+
+        if self.triangulate_meta.modified().unwrap()
+            != std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl")
+                .unwrap()
+                .modified()
+                .unwrap()
+        {
+            self.triangulate_meta =
+                std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").unwrap();
+            print!("reloading triangulate shader!");
+            let now = Instant::now();
+            let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
+                device,
+                &self.compute_bind_group_layout,
+                &lens_state.params_bind_group_layout,
+                self.dot_side_len,
+            );
+            self.triangulate_pipeline = triangulate_pipeline;
+            self.tri_index_buffer = tri_index_buffer;
             println!("took {:?}.", now.elapsed());
         }
     }
@@ -707,6 +762,7 @@ impl PolyTri {
             let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
             rpass.set_pipeline(&self.tri_render_pipeline);
             rpass.set_bind_group(0, &lens_state.params_bind_group, &[]);
+            rpass.set_bind_group(1, &lens_state.lens_bind_group, &[]);
             // the three instance-local vertices
             rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             rpass.set_index_buffer(self.tri_index_buffer.slice(..), wgpu::IndexFormat::Uint32);

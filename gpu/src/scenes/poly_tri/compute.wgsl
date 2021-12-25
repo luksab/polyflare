@@ -101,7 +101,7 @@ fn plank(wavelen: f32, temp: f32) -> f32 {
 }
 
 fn str_from_wavelen(wavelen: f32) -> f32 {
-    return plank(wavelen / 1000000., 3000.) * 1000.;
+    return plank(wavelen / 1000000., 3000.) * 10.;
 }
 
 fn ior(self: Element, wavelength: f32) -> f32 {
@@ -330,38 +330,26 @@ fn propagate_element(
 
 // intersect a ray with the sensor / any plane on the optical axis
 fn intersect_ray_to_ray(self: Ray, plane: f32) -> Ray {
+    let diff = plane - self.o.z;
+    let num_z = diff / self.d.z;
+
+    let intersect = self.o + self.d * num_z;
     var ray = self;
-    let diff = plane - ray.o.z;
-    let num_z = diff / ray.d.z;
-
-    let intersect = ray.o + ray.d * num_z;
-    ray.o = intersect;
+    ray.aperture_pos.x = intersect.x;
+    ray.aperture_pos.y = intersect.y;
     return ray;
-}
-
-let tpi: f32 = 6.283185307179586;
-fn clip_ray_poly(self: Ray, pos: f32, num_edge: u32, size: f32) -> bool {
-    let ray = intersect_ray_to_ray(self, pos);
-    var clipped = false;
-    for (var i = u32(0); i < num_edge; i = i + u32(1)) {
-        let part = f32(i) * tpi / f32(num_edge);
-        let dir = vec2<f32>(cos(part), sin(part));
-
-        let dist = dot(dir, ray.o.xy);
-        clipped = clipped || (dist > size);
-    }
-    return clipped;
 }
 
 /// propagate a ray through an element
 ///
 fn propagate(self: Ray, element: Element) -> Ray {
     if (element.entry > 1.) {
-        var ray = self;
-        // ray.strength = self.strength * f32(u32(clip_ray_poly(self, u32(element.position), element.radius)));
-        let pass = !clip_ray_poly(self, element.position, u32(element.b1), element.radius);
-        ray.strength = self.strength * f32(u32(pass));
-        return ray;
+        // var ray = self;
+        // // ray.strength = self.strength * f32(u32(clip_ray_poly(self, u32(element.position), element.radius)));
+        // let pass = !clip_ray_poly(self, element.position, u32(element.b1), element.radius);
+        // ray.strength = self.strength * f32(u32(pass));
+        // ray.aperture_pos = 
+        return intersect_ray_to_ray(self, element.position);
     } else {
         return propagate_element(
             self,
