@@ -1,8 +1,8 @@
 struct VertexInput {
-    [[location(0)]] o: vec3<f32>;
-    [[location(1)]] wavelength: f32;
-    [[location(2)]] d: vec3<f32>;
-    [[location(3)]] strength: f32;
+    [[location(0)]] pos: vec2<f32>;
+    [[location(1)]] aperture_pos: vec2<f32>;
+    [[location(2)]] strength: f32;
+    [[location(3)]] wavelength: f32;
 };
 
 struct VertexOutput {
@@ -47,7 +47,7 @@ fn main(
 ) -> VertexOutput {
     var out: VertexOutput;
     // out.clip_position = vec4<f32>(pos, 0.,1.);
-    out.clip_position = vec4<f32>(vec2<f32>(in.o.x, in.o.y) / 4.0, 0.,1.);
+    out.clip_position = vec4<f32>(in.pos / 4.0, 0.,1.);
     // out.clip_position = vec4<f32>(0.5, 0.5, 0.,1.);
     out.strength = in.strength;
     out.wavelength = in.wavelength;

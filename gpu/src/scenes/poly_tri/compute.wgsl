@@ -1,9 +1,24 @@
 /// one Ray with origin, direction, and strength
+struct InitRay {
+  o: vec3<f32>;
+  wavelength: f32;
+  d: vec3<f32>;
+  strength: f32;
+};
+
 struct Ray {
   o: vec3<f32>;
   wavelength: f32;
   d: vec3<f32>;
   strength: f32;
+  aperture_pos: vec2<f32>;
+};
+
+struct DrawRay {
+    pos: vec2<f32>;
+    aperture_pos: vec2<f32>;
+    strength: f32;
+    wavelength: f32;
 };
 
 /// one Lens Element 
@@ -32,20 +47,24 @@ struct Element {
 [[block]]
 struct SimParams {
   opacity: f32;
-  /// scaled for high dpi screens
   width_scaled: f32;
   height_scaled: f32;
   width: f32;
   height: f32;
   draw_mode: f32;
   which_ghost: f32;
+  window_width_scaled: f32;
+  window_height_scaled: f32;
+  window_width: f32;
+  window_height: f32;
+  side_len: f32;
 };
 
 [[block]]
 // static parameters for positions
 struct PosParams {
   // the Ray to be modified as a base for ray tracing
-  init: Ray;
+  init: InitRay;
   // position of the sensor in the optical plane
   sensor: f32;
   width: f32;
@@ -53,7 +72,7 @@ struct PosParams {
 
 [[block]]
 struct Rays {
-  rays: [[stride(32)]] array<Ray>;
+  rays: [[stride(24)]] array<DrawRay>;
 };
 
 [[block]]
@@ -388,27 +407,21 @@ fn intersect_ray(self: Ray, plane: f32) -> Ray {
     return ray;
 }
 
+fn drawRay_from_Ray(self: Ray) -> DrawRay {
+    return DrawRay(self.o.xy, self.aperture_pos.xy, self.strength, self.wavelength);
+}
+
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let draw_mode = u32(params.draw_mode);//u32(1);
   let which_ghost = u32(params.which_ghost);//u32(1);
 
-  // calculate the number of dots for a given input ray
-  var num_segments = u32((draw_mode & u32(2)) > u32(0));// if normal drawing
-  if ((draw_mode & u32(1)) > u32(0)) { // if ghost drawing
-    var ghost_num = u32(0);
-    for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
-        for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
-            ghost_num = ghost_num + u32(1);
-            if ((ghost_num == which_ghost || which_ghost == u32(0)) && elements.el[i].entry < 1.5 && elements.el[j].entry < 1.5) {
-                num_segments = num_segments + u32(1);
-            }
-        }
-    }
-  }
   // the total number of possible shader executions
-  let total = arrayLength(&rays.rays) / num_segments;
+  let total = arrayLength(&rays.rays);
   let index = global_invocation_id.x;
+//   for (var i = u32(0); i < arrayLength(&rays.rays) - u32(1); i = i + u32(1)) {
+//     rays.rays[i] = DrawRay(vec2<f32>(f32(global_invocation_id.x), f32(global_invocation_id.y)), vec2<f32>(0., 0.), 1., params.side_len);
+//   }
   if (index >= total) { // if we don't fit in the buffer - return early
     return;
   }
@@ -420,11 +433,9 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let width = posParams.width;
 
   // we need the sqrt to scale the movement in each direction by
-  let sqrt_num = u32(sqrt(f32(num_rays)));
+  let sqrt_num = u32(params.side_len);//u32(sqrt(f32(num_rays)) + 0.5);
   let ray_num_x = f32(ray_num / sqrt_num);
   let ray_num_y = f32(ray_num % sqrt_num);
-
-  let wave_num = u32(500);
 
   // how many dots have we added to the buffer
   var counter = u32(0);
@@ -443,12 +454,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
                 dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
                 dir = normalize(dir);
-                // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-                let wavelen = f32(ray_num % wave_num);
-                let start_wavelen = 0.38;
-                let end_wavelen = 0.78;
-                let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
-                var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength));
+                let wavelength = 0.5;
+                var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength), vec2<f32>(0., 0.));
 
                 for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
                     let element = elements.el[ele];
@@ -478,13 +485,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 ray = intersect_ray(ray, posParams.sensor);
 
                 // only return rays that have made it through
-                if (length(ray.d) > 0. && ray.strength > 0.) {
-                    rays.rays[ray_num * num_segments + counter] = ray;
-                    counter = counter + u32(1);
-                } else {
-                    rays.rays[ray_num * num_segments + counter] = Ray(vec3<f32>(100., 100., 100.), 0.5, vec3<f32>(0.0, 0.0, 0.0), 0.0);
-                    counter = counter + u32(1);
-                }
+                rays.rays[ray_num] = drawRay_from_Ray(ray);
+                // counter = counter + u32(1);
             }
         }
     }
@@ -497,11 +499,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
     dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
     dir = normalize(dir);
-    let wavelen = f32(ray_num % wave_num);
-    let start_wavelen = 0.38;
-    let end_wavelen = 0.78;
-    let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
-    var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength));
+    let wavelength = 0.5;
+    var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength), vec2<f32>(0., 0.));
     // iterate through all Elements and propagate the Ray through
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];
@@ -510,6 +509,6 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // intersect the ray with the sensor
     ray = intersect_ray(ray, posParams.sensor);
     // save the Ray in the current buffer position
-    rays.rays[ray_num * num_segments + counter] = ray;
+    rays.rays[ray_num] = drawRay_from_Ray(ray);
   }
 }

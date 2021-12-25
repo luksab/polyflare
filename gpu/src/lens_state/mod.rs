@@ -127,9 +127,10 @@ pub struct LensState {
     ///   8:window_height_scaled: f32;
     ///   9:window_width: f32;
     ///  10:window_height: f32;
+    ///  11:side_len: f32;
     /// };
     /// ```
-    pub sim_params: [f32; 11],
+    pub sim_params: [f32; 12],
 
     /// buffer for the currently selected lens
     lens_buffer: Buffer,
@@ -306,7 +307,7 @@ impl LensState {
 
         // buffer for simulation parameters uniform
         let sim_params = [
-            0.1, 512., 512., 512., 512., 1.0, 1.0, 512., 512., 512., 512.,
+            0.1, 512., 512., 512., 512., 1.0, 1.0, 512., 512., 512., 512., 0.,
         ];
         let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
@@ -386,7 +387,7 @@ impl LensState {
         Self {
             needs_update: false,
             ray_exponent: 5.,
-            dots_exponent: 7.,
+            dots_exponent: 2.,
             hi_dots_exponent: 10.,
             draw: 1,
             opacity: 0.75,
@@ -690,12 +691,7 @@ impl LensState {
     /// create an imgui window from Self and return
     ///
     /// (update_lens, update_lens_size, update_ray_num, update_dot_num, render)
-    pub fn build_ui(
-        &mut self,
-        ui: &Ui,
-        device: &Device,
-        queue: &Queue,
-    ) -> (bool, bool, bool) {
+    pub fn build_ui(&mut self, ui: &Ui, device: &Device, queue: &Queue) -> (bool, bool, bool) {
         let mut update_lens = self.first_frame;
         let mut update_sensor = self.first_frame;
         imgui::Window::new("Lens")

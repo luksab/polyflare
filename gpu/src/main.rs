@@ -253,10 +253,16 @@ fn main() {
                     println!("Rendering and saving image took {:?}", now.elapsed());
                 }
                 // Dot/ray num
-                poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
+                if update_ray_num {
+                    poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
+                }
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
-                poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
-                poly_tri.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                if update_dot_num {
+                    poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                    poly_tri.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                    lens_ui.sim_params[11] = poly_tri.dot_side_len as f32;
+                    lens_ui.needs_update = true;
+                }
 
                 poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
                 poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
