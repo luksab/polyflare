@@ -1,6 +1,7 @@
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use lens_state::LensState;
+use std::ascii::AsciiExt;
 use std::time::Instant;
 use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -16,11 +17,41 @@ mod scenes;
 mod lens_state;
 mod save_png;
 
+use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+struct Opt {
+    /// whether to request lower requirements for the GPU
+    #[structopt(short, long = "low_requirements")]
+    low_req: bool,
+
+    /// Set which api to use
+    #[structopt(short, long, default_value = "all")]
+    api: String,
+}
+
 fn main() {
+    let opt: Opt = Opt::from_args();
+
+    println!("API: {:?}, low requirements: {}", opt.api, opt.low_req);
+
+    let backend = match opt.api.to_lowercase().as_str() {
+        "opengl" => wgpu::Backends::GL,
+        "gl" => wgpu::Backends::GL,
+        "vulkan" => wgpu::Backends::VULKAN,
+        "dx" => wgpu::Backends::DX12,
+        "dx12" => wgpu::Backends::DX12,
+        "dx11" => wgpu::Backends::DX11,
+        "metal" => wgpu::Backends::METAL,
+        _ => panic!("unknown backend!"),
+    };
+
+    // VULKAN, GL, METAL, DX11, DX12, BROWSER_WEBGPU, PRIMARY
+
     let event_loop = EventLoop::new();
 
     // state saves all the scenes and manages them
-    let mut state = pollster::block_on(State::new(&event_loop, wgpu::Backends::all()));
+    let mut state = pollster::block_on(State::new(&event_loop, backend, opt.low_req));
     let mut lens_ui: LensState = LensState::default(&state.device);
 
     // create scenes and push into state
