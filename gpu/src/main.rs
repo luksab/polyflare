@@ -43,10 +43,9 @@ fn main() {
         "dx12" => wgpu::Backends::DX12,
         "dx11" => wgpu::Backends::DX11,
         "metal" => wgpu::Backends::METAL,
+        "all" => wgpu::Backends::all(),
         _ => panic!("unknown backend!"),
     };
-
-    // VULKAN, GL, METAL, DX11, DX12, BROWSER_WEBGPU, PRIMARY
 
     let event_loop = EventLoop::new();
 
