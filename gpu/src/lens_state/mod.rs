@@ -435,7 +435,7 @@ impl LensState {
     }
 
     /// Convert from the GUI representation to the `polynomial_optics` representation
-    fn get_lens_arr(lenses: &Vec<ElementState>) -> Vec<polynomial_optics::Element> {
+    fn get_lens_arr(lenses: &[ElementState]) -> Vec<polynomial_optics::Element> {
         let mut elements: Vec<Element> = vec![];
         let mut dst: f32 = -5.;
         // let mut cemented = false;
@@ -478,7 +478,7 @@ impl LensState {
                             } else {
                                 QuarterWaveCoating::none()
                             },
-                            entry: entry,
+                            entry,
                             outer_ior,
                             spherical: lens.spherical,
                         }),
@@ -656,10 +656,10 @@ impl LensState {
         if let Ok(str) = std::fs::read_to_string(path) {
             return match ron::de::from_str(str.as_str()) {
                 Ok(lens) => Ok(lens),
-                Err(err) => Err(String::from(format!("{}", err))),
+                Err(err) => Err(format!("{}", err)),
             };
         }
-        return Err(String::from("problem reading file"));
+        Err(String::from("problem reading file"))
     }
 
     /// save the lens descriptions to ~/.config/polyflare/lenses/{name}
@@ -770,10 +770,10 @@ impl LensState {
                                     ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
 
                                 update_lens |= Slider::new(format!("d##{}", i), 0., 5.)
-                                    .build(&ui, &mut lens.d);
+                                    .build(ui, &mut lens.d);
                                 ui.same_line();
                                 update_lens |= Slider::new(format!("r##{}", i), -6., 3.)
-                                    .build(&ui, &mut lens.r);
+                                    .build(ui, &mut lens.r);
                                 // update_lens |=
                                 //     Slider::new(format!("d2##{}", i), -3., 6.).build(&ui, &mut lens.d2);
                                 // ui.same_line();
@@ -782,7 +782,7 @@ impl LensState {
 
                                 // thickness: 0.1016260162601626, ior: 1.23
                                 update_lens |= Slider::new(format!("wavelen##{}", i), 0.3, 0.8)
-                                    .build(&ui, &mut lens.coating_optimal);
+                                    .build(ui, &mut lens.coating_optimal);
                                 ui.same_line();
                                 update_lens |= ui
                                     .checkbox(format!("coating##{}", i), &mut lens.coating_enable);
@@ -807,11 +807,11 @@ impl LensState {
                                 .build(ui)
                             {
                                 update_lens |= Slider::new(format!("d##{}", i), 0., 5.)
-                                    .build(&ui, &mut aperture.d);
+                                    .build(ui, &mut aperture.d);
                                 update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
-                                    .build(&ui, &mut aperture.r);
+                                    .build(ui, &mut aperture.r);
                                 update_lens |= Slider::new(format!("num_blades##{}", i), 3, 16)
-                                    .build(&ui, &mut aperture.num_blades);
+                                    .build(ui, &mut aperture.num_blades);
 
                                 if ui.button(format!("delete##{}", i)) {
                                     delete_aperture = Some(i - 1);
@@ -868,7 +868,7 @@ impl LensState {
                 }
 
                 if ui.button("save as") {
-                    if self.current_filename.len() > 0 {
+                    if !self.current_filename.is_empty() {
                         if let Err(err) = self.save(self.current_filename.as_str()) {
                             println!("fuck, {:?}", err);
                         };
@@ -887,7 +887,7 @@ impl LensState {
                 });
 
                 update_sensor |= Slider::new("sensor distance", 0., 20.)
-                    .build(&ui, &mut self.actual_lens.sensor_dist);
+                    .build(ui, &mut self.actual_lens.sensor_dist);
                 update_lens |= update_sensor
             });
 
@@ -901,23 +901,23 @@ impl LensState {
         imgui::Window::new("Params")
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([600.0, 100.0], Condition::FirstUseEver)
-            .build(&ui, || {
+            .build(ui, || {
                 let num_ghosts = (self.lens.len() * self.lens.len()) as u32;
                 update_lens |=
-                    Slider::new("which ghost", 0, num_ghosts + 1).build(&ui, &mut self.which_ghost);
+                    Slider::new("which ghost", 0, num_ghosts + 1).build(ui, &mut self.which_ghost);
                 ui.text(format!("Framerate: {:.0}", self.fps));
                 update_rays |=
-                    Slider::new("rays_exponent", 0., 6.5).build(&ui, &mut self.ray_exponent);
+                    Slider::new("rays_exponent", 0., 6.5).build(ui, &mut self.ray_exponent);
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));
 
                 update_dots |=
-                    Slider::new("dots_exponent", 0., 7.8).build(&ui, &mut self.dots_exponent);
+                    Slider::new("dots_exponent", 0., 7.8).build(ui, &mut self.dots_exponent);
                 ui.text(format!(
                     "dots: {}",
                     10.0_f64.powf(self.dots_exponent) as u32
                 ));
 
-                update_lens |= Slider::new("opacity", 0., 4.).build(&ui, &mut self.opacity);
+                update_lens |= Slider::new("opacity", 0., 4.).build(ui, &mut self.opacity);
 
                 update_lens |= ui.radio_button("render nothing", &mut self.draw, 0)
                     || ui.radio_button("render both", &mut self.draw, 3)
@@ -928,18 +928,18 @@ impl LensState {
                 update_lens |= Drag::new("ray origin")
                     .speed(0.01)
                     .range(-10., 10.)
-                    .build_array(&ui, &mut self.pos_params[0..3]);
+                    .build_array(ui, &mut self.pos_params[0..3]);
 
                 update_lens |= Drag::new("ray direction")
                     .speed(0.01)
                     .range(-1., 1.)
-                    .build_array(&ui, &mut self.pos_params[4..7]);
+                    .build_array(ui, &mut self.pos_params[4..7]);
 
-                update_lens |= Slider::new("ray width", 0., 1.).build(&ui, &mut self.pos_params[9]);
+                update_lens |= Slider::new("ray width", 0., 1.).build(ui, &mut self.pos_params[9]);
 
                 render = ui.button("hi-res render");
                 ui.same_line();
-                Slider::new("num_hi_rays", 0., 12.).build(&ui, &mut self.hi_dots_exponent);
+                Slider::new("num_hi_rays", 0., 12.).build(ui, &mut self.hi_dots_exponent);
             });
 
         if update_lens || self.needs_update {

@@ -48,11 +48,13 @@ impl PolyTri {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render"),
-                bind_group_layouts: &[&params_bind_group_layout, &lens_bind_group_layout],
+                bind_group_layouts: &[params_bind_group_layout, lens_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
-        let tri_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        
+
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
@@ -93,7 +95,7 @@ impl PolyTri {
                 module: &draw_shader,
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
-                    format: format,
+                    format,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -124,9 +126,7 @@ impl PolyTri {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-        });
-
-        tri_render_pipeline
+        })
     }
 
     fn convert_shader(
@@ -178,7 +178,7 @@ impl PolyTri {
         let conversion_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Conversion Pipeline Layout"),
-                bind_group_layouts: &[&conversion_bind_group_layout, &params_bind_group_layout],
+                bind_group_layouts: &[&conversion_bind_group_layout, params_bind_group_layout],
                 push_constant_ranges: &[],
             });
         let conversion_render_pipeline = {
@@ -280,7 +280,7 @@ impl PolyTri {
                 label: Some("compute"),
                 bind_group_layouts: &[
                     &compute_bind_group_layout,
-                    &params_bind_group_layout,
+                    params_bind_group_layout,
                     lens_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -297,10 +297,10 @@ impl PolyTri {
         // buffer for all particles data of type [bool,...]
         // vec3: 16 bytes, 4 floats
         // vec3, vec3, float
-        let initial_ray_data = vec![0.1 as f32; (dot_side_len * dot_side_len * 8) as usize];
+        let initial_ray_data = vec![0.1_f32; (dot_side_len * dot_side_len * 8) as usize];
 
         let rays_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(&format!("Rays Buffer")),
+            label: Some(&"Rays Buffer".to_string()),
             contents: bytemuck::cast_slice(&initial_ray_data),
             usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::STORAGE
@@ -344,7 +344,7 @@ impl PolyTri {
         let triangulate_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("triangulate"),
-                bind_group_layouts: &[&compute_bind_group_layout, &params_bind_group_layout],
+                bind_group_layouts: &[compute_bind_group_layout, params_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -381,7 +381,7 @@ impl PolyTri {
         // assert_eq!(initial_tri_index_data.len() / 3, num_tris);
 
         let tri_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(&format!("Tris Buffer")),
+            label: Some(&"Tris Buffer".to_string()),
             contents: bytemuck::cast_slice(&initial_tri_index_data),
             usage: wgpu::BufferUsages::INDEX
                 | wgpu::BufferUsages::STORAGE
@@ -793,7 +793,7 @@ impl PolyTri {
 
             // create render pass descriptor and its color attachments
             let color_attachments = [wgpu::RenderPassColorAttachment {
-                view: view,
+                view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -947,7 +947,7 @@ impl PolyTri {
 
             // create render pass descriptor and its color attachments
             let color_attachments = [wgpu::RenderPassColorAttachment {
-                view: view,
+                view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {

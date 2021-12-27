@@ -1,7 +1,7 @@
+#![allow(clippy::float_cmp)]
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use lens_state::LensState;
-use std::ascii::AsciiExt;
 use std::time::Instant;
 use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -369,7 +369,7 @@ fn main() {
                         // }
 
                         match poly_tri.render(
-                            &renderer.textures.get(res_window_texture_id).unwrap().view(),
+                            renderer.textures.get(res_window_texture_id).unwrap().view(),
                             &state.device,
                             &state.queue,
                             &lens_ui,

@@ -87,6 +87,7 @@ where
     }
 }
 
+#[allow(clippy::many_single_char_names)]
 impl<
         N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq,
         const DEGREE: usize,
@@ -130,9 +131,7 @@ impl<
         for (i, element) in c.iter().enumerate() {
             coefficients[i / DEGREE][i % DEGREE] = *element;
         }
-        Polynom2d {
-            coefficients: coefficients,
-        }
+        Polynom2d { coefficients }
     }
 }
 
@@ -153,7 +152,7 @@ impl<
         const DEGREE: usize,
     > Polynom2d<N, DEGREE>
 {
-    fn dist(phi: &crate::Polynomial<N, 2>, cp: (), points: &Vec<(N, N, N)>) -> N {
+    fn dist(phi: &crate::Polynomial<N, 2>, cp: (), points: &[(N, N, N)]) -> N {
         let mut result = num::Zero::zero();
         for point in points {
             let input = [point.0, point.1];
@@ -253,7 +252,7 @@ impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom2d<N, DEGRE
             }
         }
         Polynom2d {
-            coefficients: coefficients,
+            coefficients,
         }
     }
 }
@@ -285,7 +284,7 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
             }
         }
         Polynom2d {
-            coefficients: coefficients,
+            coefficients,
         }
     }
 }
@@ -372,7 +371,7 @@ impl<
         const DEGREE: usize,
     > Polynom4d<N, DEGREE>
 {
-    fn dist(phi: &crate::Polynomial<N, 4>, cp: (), points: &Vec<(N, N, N, N, N)>) -> N {
+    fn dist(phi: &crate::Polynomial<N, 4>, cp: (), points: &[(N, N, N, N, N)]) -> N {
         let mut result = N::zero();
         for point in points {
             let input = [point.0, point.1, point.2, point.3];
@@ -469,6 +468,7 @@ impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usiz
     }
 }
 
+#[allow(clippy::many_single_char_names)]
 impl<
         N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq,
         const DEGREE: usize,
@@ -564,7 +564,7 @@ impl<
             }
         }
         Polynom4d {
-            coefficients: coefficients,
+            coefficients,
         }
     }
 }
@@ -587,7 +587,7 @@ impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom4d<N, DEGRE
             }
         }
         Polynom4d {
-            coefficients: coefficients,
+            coefficients,
         }
     }
 }
@@ -610,7 +610,7 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
             }
         }
         Polynom4d {
-            coefficients: coefficients,
+            coefficients,
         }
     }
 }

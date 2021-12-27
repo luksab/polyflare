@@ -26,8 +26,7 @@ impl Line {
             pb.finish().unwrap()
         };
 
-        let mut stroke = Stroke::default();
-        stroke.width = self.width;
+        let mut stroke = Stroke{width: self.width, ..Default::default()};
         stroke.line_cap = LineCap::Round;
         if self.dashed {
             stroke.dash = StrokeDash::new(vec![20.0, 40.0], 0.0);
@@ -60,8 +59,7 @@ impl Line {
             pb.finish().unwrap()
         };
 
-        let mut stroke = Stroke::default();
-        stroke.width = self.width;
+        let mut stroke = Stroke{width: self.width, ..Default::default()};
         stroke.line_cap = LineCap::Round;
         if self.dashed {
             stroke.dash = StrokeDash::new(vec![20.0, 40.0], 0.0);
@@ -94,8 +92,7 @@ impl Line {
             pb.finish().unwrap()
         };
 
-        let mut stroke = Stroke::default();
-        stroke.width = self.width;
+        let mut stroke = Stroke{width: self.width, ..Default::default()};
         stroke.line_cap = LineCap::Round;
         if self.dashed {
             stroke.dash = StrokeDash::new(vec![20.0, 40.0], 0.0);
@@ -126,8 +123,7 @@ impl Line {
             pb.finish().unwrap()
         };
 
-        let mut stroke = Stroke::default();
-        stroke.width = self.width;
+        let mut stroke = Stroke{width: self.width, ..Default::default()};
         stroke.line_cap = LineCap::Round;
         if self.dashed {
             stroke.dash = StrokeDash::new(vec![20.0, 40.0], 0.0);

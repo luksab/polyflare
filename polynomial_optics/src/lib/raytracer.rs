@@ -62,27 +62,27 @@ impl Ray {
         let green;
         let blue;
 
-        if (wavelength >= 380.) && (wavelength < 440.) {
+        if (380. ..440.).contains(&wavelength) {
             red = -(wavelength - 440.) / (440. - 380.);
             green = 0.0;
             blue = 1.0;
-        } else if (wavelength >= 440.) && (wavelength < 490.) {
+        } else if (440. ..490.).contains(&wavelength) {
             red = 0.0;
             green = (wavelength - 440.) / (490. - 440.);
             blue = 1.0;
-        } else if (wavelength >= 490.) && (wavelength < 510.) {
+        } else if (490. ..510.).contains(&wavelength) {
             red = 0.0;
             green = 1.0;
             blue = -(wavelength - 510.) / (510. - 490.);
-        } else if (wavelength >= 510.) && (wavelength < 580.) {
+        } else if (510. ..580.).contains(&wavelength) {
             red = (wavelength - 510.) / (580. - 510.);
             green = 1.0;
             blue = 0.0;
-        } else if (wavelength >= 580.) && (wavelength < 645.) {
+        } else if (580. ..645.).contains(&wavelength) {
             red = 1.0;
             green = -(wavelength - 645.) / (645. - 580.);
             blue = 0.0;
-        } else if (wavelength >= 645.) && (wavelength < 781.) {
+        } else if (645. ..781.).contains(&wavelength) {
             red = 1.0;
             green = 0.0;
             blue = 0.0;
@@ -94,11 +94,11 @@ impl Ray {
 
         // Let the intensity fall off near the vision limits
 
-        if (wavelength >= 380.) && (wavelength < 420.) {
+        if (380. ..420.).contains(&wavelength) {
             factor = 0.3 + 0.7 * (wavelength - 380.) / (420. - 380.);
-        } else if (wavelength >= 420.) && (wavelength < 701.) {
+        } else if (420. ..701.).contains(&wavelength) {
             factor = 1.0;
-        } else if (wavelength >= 701.) && (wavelength < 781.) {
+        } else if (701. ..781.).contains(&wavelength) {
             factor = 0.3 + 0.7 * (780. - wavelength) / (780. - 700.);
         } else {
             factor = 0.0;
@@ -194,7 +194,7 @@ impl QuarterWaveCoating {
         // Add up sines of different phase and amplitude
         let out_s2 = rs01 * rs01 + ris * ris + 2. * rs01 * ris * rel_phase.cos();
         let out_p2 = rp01 * rp01 + rip * rip + 2. * rp01 * rip * rel_phase.cos();
-        return (out_s2 + out_p2) / 2.; // reflectivity
+        (out_s2 + out_p2) / 2. // reflectivity
     }
 }
 
@@ -242,21 +242,19 @@ impl Sellmeier {
 
         let mut rdr =
             csv::ReaderBuilder::new().from_reader(include_str!("../../LaCroix.csv").as_bytes());
-        for result in rdr.records() {
-            if let Ok(record) = result {
-                let b = [
-                    record[1].parse().unwrap(),
-                    record[2].parse().unwrap(),
-                    record[3].parse().unwrap(),
-                ];
-                let c = [
-                    record[4].parse().unwrap(),
-                    record[5].parse().unwrap(),
-                    record[6].parse().unwrap(),
-                ];
-                let glass = Sellmeier { b, c };
-                glasses.push((record[0].trim().to_string(), glass));
-            }
+        for result in rdr.records().flatten() {
+            let b = [
+                result[1].parse().unwrap(),
+                result[2].parse().unwrap(),
+                result[3].parse().unwrap(),
+            ];
+            let c = [
+                result[4].parse().unwrap(),
+                result[5].parse().unwrap(),
+                result[6].parse().unwrap(),
+            ];
+            let glass = Sellmeier { b, c };
+            glasses.push((result[0].trim().to_string(), glass));
         }
         glasses
     }
@@ -325,7 +323,7 @@ impl Ray {
         let s = 0.5 * ((n1 * t1.cos() - n2 * t2.cos()) / (n1 * t1.cos() + n2 * t2.cos())).pow(2);
         let p = 0.5 * ((n1 * t2.cos() - n2 * t1.cos()) / (n1 * t2.cos() + n2 * t1.cos())).pow(2);
 
-        return s + p;
+        s + p
     }
 
     fn propagate_element(
@@ -615,10 +613,10 @@ impl Lens {
         if let Ok(str) = std::fs::read_to_string(path) {
             return match ron::de::from_str(str.as_str()) {
                 Ok(lens) => Ok(lens),
-                Err(err) => Err(String::from(format!("{}", err))),
+                Err(err) => Err(format!("{}", err)),
             };
         }
-        return Err(String::from("problem reading file"));
+        Err(String::from("problem reading file"))
     }
 }
 
@@ -702,25 +700,25 @@ impl Lens {
                     elements.push(element.radius as f32);
                     elements.push(aperture as f32);
                     // placeholder
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
 
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
 
-                    elements.push(0. as f32);
-                    elements.push(0. as f32);
+                    elements.push(0_f32);
+                    elements.push(0_f32);
                     // placeholder end
                     elements.push(element.position as f32);
-                    elements.push(2. as f32);
-                    elements.push(2. as f32);
+                    elements.push(2_f32);
+                    elements.push(2_f32);
                 }
             }
         }
@@ -759,8 +757,10 @@ impl Lens {
             pb.finish().unwrap()
         };
 
-        let mut stroke = tiny_skia::Stroke::default();
-        stroke.width = 1.0;
+        let mut stroke = tiny_skia::Stroke {
+            width: 1.0,
+            ..Default::default()
+        };
         stroke.line_cap = tiny_skia::LineCap::Round;
         // if self.dashed {
         //     stroke.dash = tiny_skia::StrokeDash::new(vec![20.0, 40.0], 0.0);
@@ -1102,8 +1102,7 @@ impl Lens {
                     pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                     pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
                     let mut ray = Ray::new(pos, direction, wavelength);
-                    let mut ray_collection = vec![];
-                    ray_collection.push(ray);
+                    let mut ray_collection = vec![ray];
                     for element in &self.elements {
                         ray.propagate(element);
                         ray_collection.push(ray);

@@ -299,23 +299,23 @@ impl<'a, 'b, N: Add + Copy + Zero + PartialOrd, const VARIABLES: usize>
         loop {
             // Peek at iterators to decide which to take from
             let which = match (cur_iter.peek(), other_iter.peek()) {
-                (Some(cur), Some(other)) => Some((cur).partial_cmp(&other).expect("NaN :(")),
+                (Some(cur), Some(other)) => Some((cur).partial_cmp(other).expect("NaN :(")),
                 (Some(_), None) => Some(Ordering::Less),
                 (None, Some(_)) => Some(Ordering::Greater),
                 (None, None) => None,
             };
             // Push the smallest element to the `result` coefficient vec
             let smallest = match which {
-                Some(Ordering::Less) => cur_iter.next().unwrap().clone(),
+                Some(Ordering::Less) => *cur_iter.next().unwrap(),
                 Some(Ordering::Equal) => {
                     let other = other_iter.next().unwrap();
                     let cur = cur_iter.next().unwrap();
                     Monomial {
                         coefficient: cur.coefficient + other.coefficient,
-                        exponents: cur.exponents.clone(),
+                        exponents: cur.exponents,
                     }
                 }
-                Some(Ordering::Greater) => other_iter.next().unwrap().clone(),
+                Some(Ordering::Greater) => *other_iter.next().unwrap(),
                 None => break,
             };
             result.push(smallest);
@@ -375,9 +375,9 @@ impl<
     /// approx::abs_diff_eq!(pol.eval([1.0, 1.0]), 1.0, epsilon = f64::EPSILON);
     /// approx::abs_diff_eq!(pol.eval([1.5, 2.0]), 2.0, epsilon = f64::EPSILON);
     /// ```
-    pub fn fit(&mut self, points: &Vec<(N, N, N)>) {
+    pub fn fit(&mut self, points: &[(N, N, N)]) {
         let tems_num = self.terms.len();
-        let mut m = vec![num::Zero::zero(); tems_num.pow(2 as u32)];
+        let mut m = vec![num::Zero::zero(); tems_num.pow(2_u32)];
         let mut k = vec![num::Zero::zero(); tems_num];
         for (i, a) in self.terms.iter().enumerate() {
             for (j, b) in self.terms.iter().enumerate() {
@@ -415,8 +415,8 @@ impl<
     > Polynomial<N, 4>
 {
     pub fn fit(&mut self, points: Vec<(N, N, N, N, N)>) {
-        let mut m: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4 as u32).pow(2 as u32)];
-        let mut k: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4 as u32)];
+        let mut m: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4_u32).pow(2_u32)];
+        let mut k: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4_u32)];
         for (i, a) in self.terms.iter().enumerate() {
             for (j, b) in self.terms.iter().enumerate() {
                 m[i * self.terms.len() + j] = points
@@ -432,11 +432,11 @@ impl<
                 .sum::<N>()
         }
         let m = Matrix::new(
-            self.terms.len().pow(4 as u32),
-            self.terms.len().pow(4 as u32),
+            self.terms.len().pow(4_u32),
+            self.terms.len().pow(4_u32),
             m,
         );
-        let k = Vector::new_row(self.terms.len().pow(4 as u32), k);
+        let k = Vector::new_row(self.terms.len().pow(4_u32), k);
         let c = m.solve(&k).unwrap();
         for (i, term) in self.terms.iter_mut().enumerate() {
             term.coefficient = *c.get(i);
