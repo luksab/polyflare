@@ -199,8 +199,12 @@ fn main() {
 
                 // Render normally at background
                 poly_optics.update(&state.device, &lens_ui);
-                poly_res.update(&state.device, &lens_ui);
-                poly_tri.update(&state.device, &lens_ui);
+
+                if lens_ui.triangulate {
+                    poly_tri.update(&state.device, &lens_ui);
+                } else {
+                    poly_res.update(&state.device, &lens_ui);
+                }
 
                 // Render debug view
                 match poly_optics.render(&view, &state.device, &state.queue, &lens_ui) {
@@ -295,8 +299,12 @@ fn main() {
                 }
 
                 poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
-                poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
-                poly_tri.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
+
+                if lens_ui.triangulate {
+                    poly_tri.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
+                } else {
+                    poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
+                }
 
                 // Render PolyRes
                 {
@@ -348,43 +356,45 @@ fn main() {
                             lens_ui.resize_window(size.into(), state.scale_factor);
                         }
 
-                        // Only render contents if the window is not collapsed
-                        // match poly_res.render(
-                        //     &renderer.textures.get(res_window_texture_id).unwrap().view(),
-                        //     &state.device,
-                        //     &state.queue,
-                        //     &lens_ui,
-                        // ) {
-                        //     Ok(_) => {}
-                        //     // Reconfigure the surface if lost
-                        //     Err(wgpu::SurfaceError::Lost) => {
-                        //         state.resize(state.size, None);
-                        //     }
-                        //     // The system is out of memory, we should probably quit
-                        //     Err(wgpu::SurfaceError::OutOfMemory) => {
-                        //         *control_flow = ControlFlow::Exit
-                        //     }
-                        //     // All other errors (Outdated, Timeout) should be resolved by the next frame
-                        //     Err(e) => eprintln!("{:?}", e),
-                        // }
-
-                        match poly_tri.render(
-                            renderer.textures.get(res_window_texture_id).unwrap().view(),
-                            &state.device,
-                            &state.queue,
-                            &lens_ui,
-                        ) {
-                            Ok(_) => {}
-                            // Reconfigure the surface if lost
-                            Err(wgpu::SurfaceError::Lost) => {
-                                state.resize(state.size, None);
+                        if lens_ui.triangulate {
+                            match poly_tri.render(
+                                renderer.textures.get(res_window_texture_id).unwrap().view(),
+                                &state.device,
+                                &state.queue,
+                                &lens_ui,
+                            ) {
+                                Ok(_) => {}
+                                // Reconfigure the surface if lost
+                                Err(wgpu::SurfaceError::Lost) => {
+                                    state.resize(state.size, None);
+                                }
+                                // The system is out of memory, we should probably quit
+                                Err(wgpu::SurfaceError::OutOfMemory) => {
+                                    *control_flow = ControlFlow::Exit
+                                }
+                                // All other errors (Outdated, Timeout) should be resolved by the next frame
+                                Err(e) => eprintln!("{:?}", e),
                             }
-                            // The system is out of memory, we should probably quit
-                            Err(wgpu::SurfaceError::OutOfMemory) => {
-                                *control_flow = ControlFlow::Exit
+                        } else {
+                            // Only render contents if the window is not collapsed
+                            match poly_res.render(
+                                renderer.textures.get(res_window_texture_id).unwrap().view(),
+                                &state.device,
+                                &state.queue,
+                                &lens_ui,
+                            ) {
+                                Ok(_) => {}
+                                // Reconfigure the surface if lost
+                                Err(wgpu::SurfaceError::Lost) => {
+                                    state.resize(state.size, None);
+                                }
+                                // The system is out of memory, we should probably quit
+                                Err(wgpu::SurfaceError::OutOfMemory) => {
+                                    *control_flow = ControlFlow::Exit
+                                }
+                                // All other errors (Outdated, Timeout) should be resolved by the next frame
+                                Err(e) => eprintln!("{:?}", e),
                             }
-                            // All other errors (Outdated, Timeout) should be resolved by the next frame
-                            Err(e) => eprintln!("{:?}", e),
                         }
                     }
                 }

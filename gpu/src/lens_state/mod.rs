@@ -71,6 +71,8 @@ pub struct LensState {
     pub opacity: f32,
     /// which ghost to draw: 0 being all, 1 being the fist...
     pub which_ghost: u32,
+    /// whether to draw using triangulation or direct raytracing
+    pub triangulate: bool,
 
     /// GUI representation of the lens
     lens: Vec<ElementState>,
@@ -390,6 +392,7 @@ impl LensState {
             dots_exponent: 2.,
             hi_dots_exponent: 10.,
             draw: 1,
+            triangulate: true,
             opacity: 0.75,
             which_ghost: 0,
             lens,
@@ -923,6 +926,12 @@ impl LensState {
                     || ui.radio_button("render both", &mut self.draw, 3)
                     || ui.radio_button("render normal", &mut self.draw, 2)
                     || ui.radio_button("render ghosts", &mut self.draw, 1);
+                
+                ui.same_line();
+                if ui.checkbox("render triangulated", &mut self.triangulate) {
+                    update_lens = true;
+                    update_dots = true;
+                }
 
                 // ui.radio_button("num_rays", &mut lens_ui.1, true);
                 update_lens |= Drag::new("ray origin")
