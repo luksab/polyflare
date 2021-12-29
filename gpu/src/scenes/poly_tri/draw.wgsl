@@ -60,10 +60,10 @@ struct Elements {
   el: [[stride(72)]] array<Element>;
 };
 
-[[group(0), binding(2)]] var<uniform> params : SimParams;
-[[group(0), binding(1)]] var<storage, read> sensor : Sensor;
+[[group(0), binding(0)]] var<storage, read> elements : Elements;
 
-[[group(1), binding(0)]] var<storage, read> elements : Elements;
+[[group(1), binding(2)]] var<uniform> params : SimParams;
+[[group(1), binding(1)]] var<storage, read> sensor : Sensor;
 
 fn lookup_rgb(wavelength: f32) -> vec3<f32> {
     let lower_index = u32(clamp((wavelength - sensor.measuremens[0].wavelength / 1000.) * 100., 0., 34.));
@@ -111,7 +111,15 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
       }
   }
 
-  let s = in.strength * params.opacity;
+  var strength = in.strength;
+
+//   if (in.strength < 10000.) {
+//       strength = in.strength;
+//   } if (!(in.strength < 100.) && in.strength > 100.) {
+//       strength = 1.;
+//   }
+
+  let s = strength * params.opacity;
   var rgb = lookup_rgb(in.wavelength);
   rgb.g = rgb.g * 0.6;
   return vec4<f32>(rgb, s);

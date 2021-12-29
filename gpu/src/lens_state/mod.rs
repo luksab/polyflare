@@ -94,6 +94,9 @@ pub struct LensState {
     pub sensor_buffer: Buffer,
     /// positions of the rays and the sensor
     pos_params_buffer: wgpu::Buffer,
+    /// buffer for which ghost to draw
+    pub ghost_indices: [u32; 2],
+    ghost_indices_buffer: wgpu::Buffer,
     /// positions of the rays and the sensor
     pub params_bind_group: wgpu::BindGroup,
     /// positions of the rays and the sensor
@@ -319,6 +322,15 @@ impl LensState {
                 | wgpu::BufferUsages::STORAGE,
         });
 
+        let ghost_indices = [0, 1];
+        let ghost_indices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Ghost Indices Buffer"),
+            contents: bytemuck::cast_slice(&ghost_indices),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
         let params_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -364,6 +376,20 @@ impl LensState {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE
+                            | wgpu::ShaderStages::VERTEX
+                            | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                (ghost_indices.len() * std::mem::size_of::<u32>()) as _,
+                            ),
+                        },
+                        count: None,
+                    },
                 ],
                 label: None,
             });
@@ -381,6 +407,10 @@ impl LensState {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: sim_param_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: ghost_indices_buffer.as_entire_binding(),
                 },
             ],
             label: None,
@@ -413,6 +443,8 @@ impl LensState {
             params_bind_group_layout,
             lens_bind_group,
             lens_bind_group_layout,
+            ghost_indices,
+            ghost_indices_buffer,
             first_frame: true,
             sim_param_buffer,
             sim_params,
@@ -620,6 +652,12 @@ impl LensState {
             0,
             bytemuck::cast_slice(&self.sim_params),
         );
+        queue.write_buffer(
+            &self.ghost_indices_buffer,
+            0,
+            bytemuck::cast_slice(&self.ghost_indices),
+        );
+        println!("{:?}", self.ghost_indices);
     }
 
     /// read the available lens descriptions from ~/.config/polyflare/lenses/
@@ -772,8 +810,8 @@ impl LensState {
                                 update_lens |=
                                     ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
 
-                                update_lens |= Slider::new(format!("d##{}", i), 0., 5.)
-                                    .build(ui, &mut lens.d);
+                                update_lens |=
+                                    Slider::new(format!("d##{}", i), 0., 5.).build(ui, &mut lens.d);
                                 ui.same_line();
                                 update_lens |= Slider::new(format!("r##{}", i), -6., 3.)
                                     .build(ui, &mut lens.r);
@@ -906,8 +944,15 @@ impl LensState {
             .position([600.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
                 let num_ghosts = (self.lens.len() * self.lens.len()) as u32;
-                update_lens |=
-                    Slider::new("which ghost", 0, num_ghosts + 1).build(ui, &mut self.which_ghost);
+                if Slider::new("which ghost", 0, num_ghosts + 1).build(ui, &mut self.which_ghost) {
+                    update_lens = true;
+                    if let Some(ghosts) = self
+                        .actual_lens
+                        .get_ghost_index(self.draw as _, self.which_ghost as _)
+                    {
+                        self.ghost_indices = ghosts;
+                    }
+                }
                 ui.text(format!("Framerate: {:.0}", self.fps));
                 update_rays |=
                     Slider::new("rays_exponent", 0., 6.5).build(ui, &mut self.ray_exponent);
@@ -926,7 +971,7 @@ impl LensState {
                     || ui.radio_button("render both", &mut self.draw, 3)
                     || ui.radio_button("render normal", &mut self.draw, 2)
                     || ui.radio_button("render ghosts", &mut self.draw, 1);
-                
+
                 ui.same_line();
                 if ui.checkbox("render triangulated", &mut self.triangulate) {
                     update_lens = true;

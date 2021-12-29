@@ -61,6 +61,12 @@ struct SimParams {
 };
 
 [[block]]
+struct WhichGhost {
+  i: u32;
+  j: u32;
+};
+
+[[block]]
 // static parameters for positions
 struct PosParams {
   // the Ray to be modified as a base for ray tracing
@@ -82,11 +88,13 @@ struct Elements {
 };
 
 [[group(0), binding(0)]] var<storage, read_write> rays : Rays;
-[[group(1), binding(2)]] var<uniform> params : SimParams;
+[[group(2), binding(2)]] var<uniform> params : SimParams;
 
-[[group(1), binding(0)]] var<uniform> posParams : PosParams;
+[[group(2), binding(0)]] var<uniform> posParams : PosParams;
 
-[[group(2), binding(0)]] var<storage, read> elements : Elements;
+[[group(2), binding(3)]] var<uniform> whichGhost : WhichGhost;
+
+[[group(1), binding(0)]] var<storage, read> elements : Elements;
 
 fn plank(wavelen: f32, temp: f32) -> f32 {
     let h = 6.62607015e-34; // J/Hz
@@ -128,14 +136,15 @@ fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
 }
 
 fn fresnel_ar(theta0: f32, lambda: f32, thickness: f32, n0: f32, n1: f32, n2: f32) -> f32 {
+    let theta0_fixed = max(theta0, 0.001);
     // refracton angle sin coating and the 2nd medium
-    let theta1 = asin(sin(theta0) * n0 / n1);
-    let theta2 = asin(sin(theta0) * n0 / n2);
+    let theta1 = asin(sin(theta0_fixed) * n0 / n1);
+    let theta2 = asin(sin(theta0_fixed) * n0 / n2);
     // amplitude for outer refl. / transmission on topmost interface
-    let rs01 = -sin(theta0 - theta1) / sin(theta0 + theta1);
-    let rp01 = tan(theta0 - theta1) / tan(theta0 + theta1);
-    let ts01 = 2. * sin(theta1) * cos(theta0) / sin(theta0 + theta1);
-    let tp01 = ts01 * cos(theta0 - theta1);
+    let rs01 = -sin(theta0_fixed - theta1) / sin(theta0_fixed + theta1);
+    let rp01 = tan(theta0_fixed - theta1) / tan(theta0_fixed + theta1);
+    let ts01 = 2. * sin(theta1) * cos(theta0_fixed) / sin(theta0_fixed + theta1);
+    let tp01 = ts01 * cos(theta0_fixed - theta1);
     // amplitude for inner reflection
     let rs12 = -sin(theta1 - theta2) / sin(theta1 + theta2);
     let rp12 = tan(theta1 - theta2) / tan(theta1 + theta2);
@@ -147,7 +156,7 @@ fn fresnel_ar(theta0: f32, lambda: f32, thickness: f32, n0: f32, n1: f32, n2: f3
     let dy = thickness * n1;
     let dx = tan(theta1) * dy;
     let delay = sqrt(dx * dx + dy * dy);
-    let rel_phase = 4. * 3.141592653589793 / lambda * (delay - dx * sin(theta0));
+    let rel_phase = 4. * 3.141592653589793 / lambda * (delay - dx * sin(theta0_fixed));
     // Add up sines of different phase and amplitude
     let out_s2 = rs01 * rs01 + ris * ris + 2. * rs01 * ris * cos(rel_phase);
     let out_p2 = rp01 * rp01 + rip * rip + 2. * rp01 * rip * cos(rel_phase);
@@ -431,53 +440,49 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // which ghost are we on
     var ghost_num = u32(0);
     // iterate through all combinations of Elements to draw the ghosts
-    for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
-        for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
-            ghost_num = ghost_num + u32(1);
-            // if we want to draw this ghost or we want to draw all ghosts
-            if ((ghost_num == which_ghost || which_ghost == u32(0)) && elements.el[i].entry < 1.5 && elements.el[j].entry < 1.5) {
-                // make new ray
-                var dir = posParams.init.d;
-                // modify both directions according to our index
-                dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
-                dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
-                dir = normalize(dir);
-                let wavelength = 0.5;
-                var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength), vec2<f32>(0., 0.));
+    let i = whichGhost.i;
+    let j = whichGhost.j;
+    ghost_num = ghost_num + u32(1);
+    // if we want to draw this ghost or we want to draw all ghosts
+        // make new ray
+        var dir = posParams.init.d;
+        // modify both directions according to our index
+        dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
+        dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+        dir = normalize(dir);
+        let wavelength = 0.5;
+        var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength), vec2<f32>(0., 0.));
 
-                for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
-                    let element = elements.el[ele];
-                    // if we iterated through all elements up to
-                    // the first reflection point
+        for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
+            let element = elements.el[ele];
+            // if we iterated through all elements up to
+            // the first reflection point
 
-                    if (ele == j) {
-                        // reflect at the first element,
-                        // which is further down the optical path
-                        ray = reflect_ray(ray, element);
+            if (ele == j) {
+                // reflect at the first element,
+                // which is further down the optical path
+                ray = reflect_ray(ray, element);
 
-                        // propagate backwards through system
-                        // until the second reflection
-                        for (var k = j - u32(1); k > i; k = k - u32(1)) { // for k in (i + 1..j).rev() {
-                            ray = propagate(ray, elements.el[k]);
-                        }
-                        ray = reflect_ray(ray, elements.el[i]);
-
-                        for (var k = i + u32(1); k <= j; k = k + u32(1)) { // for k in i + 1..=j {
-                            ray = propagate(ray, elements.el[k]);
-                        }
-                        // println!("strength: {}", ray.strength);
-                    } else {
-                        ray = propagate(ray, element);
-                    }
+                // propagate backwards through system
+                // until the second reflection
+                for (var k = j - u32(1); k > i; k = k - u32(1)) { // for k in (i + 1..j).rev() {
+                    ray = propagate(ray, elements.el[k]);
                 }
-                ray = intersect_ray(ray, posParams.sensor);
+                ray = reflect_ray(ray, elements.el[i]);
 
-                // only return rays that have made it through
-                rays.rays[ray_num] = drawRay_from_Ray(ray);
-                // counter = counter + u32(1);
+                for (var k = i + u32(1); k <= j; k = k + u32(1)) { // for k in i + 1..=j {
+                    ray = propagate(ray, elements.el[k]);
+                }
+                // println!("strength: {}", ray.strength);
+            } else {
+                ray = propagate(ray, element);
             }
         }
-    }
+        ray = intersect_ray(ray, posParams.sensor);
+
+        // only return rays that have made it through
+        rays.rays[ray_num] = drawRay_from_Ray(ray);
+        // counter = counter + u32(1);
   }
   // if we want to draw normally
   if ((draw_mode & u32(2)) > u32(0)) {

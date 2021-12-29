@@ -98,8 +98,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     let s1 = self-b;
     let s2 = self-c;
     let area = abs(s1.x * s2.y - s1.y * s2.x);
-    averageArea = averageArea + area;
-    num_areas = num_areas + 1;
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }
   }
 
   if (x > u32(0) && y < dot_side_len - u32(1)){
@@ -109,8 +111,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     let s1 = self-b;
     let s2 = self-c;
     let area = abs(s1.x * s2.y - s1.y * s2.x);
-    averageArea = averageArea + area;
-    num_areas = num_areas + 1;
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }
   }
 
   if (x < dot_side_len - u32(1) && y > u32(0)){
@@ -120,8 +124,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     let s1 = self-b;
     let s2 = self-c;
     let area = abs(s1.x * s2.y - s1.y * s2.x);
-    averageArea = averageArea + area;
-    num_areas = num_areas + 1;
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }
   }
 
   if (x > u32(0) && y > u32(0)){
@@ -131,8 +137,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     let s1 = self-b;
     let s2 = self-c;
     let area = abs(s1.x * s2.y - s1.y * s2.x);
-    averageArea = averageArea + area;
-    num_areas = num_areas + 1;    
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }   
   }
 
   averageArea = averageArea / f32(num_areas);
