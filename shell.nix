@@ -7,6 +7,7 @@ let
 in pkgs.mkShell {
   buildInputs = [ 
     pkgs.cargo 
+    pkgs.clippy
     pkgs.rustc
     pkgs.rustfmt
     pkgs.xorg.libX11
