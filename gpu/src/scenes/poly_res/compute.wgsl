@@ -434,9 +434,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // iterate through all combinations of Elements to draw the ghosts
     for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
         for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
+            if ( elements.el[i].entry < 1.5 && elements.el[j].entry < 1.5 ){
             ghost_num = ghost_num + u32(1);
             // if we want to draw this ghost or we want to draw all ghosts
-            if ((ghost_num == which_ghost || which_ghost == u32(0)) && elements.el[i].entry < 1.5 && elements.el[j].entry < 1.5) {
+            if (ghost_num == which_ghost || which_ghost == u32(0)) {
                 // make new ray
                 var dir = posParams.init.d;
                 // modify both directions according to our index
@@ -485,6 +486,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                     rays.rays[ray_num * num_segments + counter] = Ray(vec3<f32>(100., 100., 100.), 0.5, vec3<f32>(0.0, 0.0, 0.0), 0.0);
                     counter = counter + u32(1);
                 }
+            }
             }
         }
     }

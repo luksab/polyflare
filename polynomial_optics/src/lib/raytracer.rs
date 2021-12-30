@@ -751,10 +751,10 @@ impl Lens {
             let mut ghost_num = 0;
             for i in 0..self.elements.len() - 1 {
                 for j in i + 1..self.elements.len() {
-                    ghost_num += 1;
-                    if ghost_num == which_ghost || which_ghost == 0 {
-                        if let Properties::Glass(_) = self.elements[i].properties {
-                            if let Properties::Glass(_) = self.elements[j].properties {
+                    if let Properties::Glass(_) = self.elements[i].properties {
+                        if let Properties::Glass(_) = self.elements[j].properties {
+                            ghost_num += 1;
+                            if ghost_num == which_ghost || which_ghost == 0 {
                                 return Some([i as u32, j as u32]);
                             }
                         }

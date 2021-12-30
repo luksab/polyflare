@@ -657,7 +657,6 @@ impl LensState {
             0,
             bytemuck::cast_slice(&self.ghost_indices),
         );
-        println!("{:?}", self.ghost_indices);
     }
 
     /// read the available lens descriptions from ~/.config/polyflare/lenses/
