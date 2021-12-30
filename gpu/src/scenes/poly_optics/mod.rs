@@ -668,9 +668,24 @@ impl PolyOptics {
             label: Some("Render Encoder"),
         });
 
+        self.render_dots(&self.high_color_tex.view, lens_state, &mut encoder);
+
+        // conversion pass
+        self.convert(device, lens_state, view, &mut encoder);
+        queue.submit(iter::once(encoder.finish()));
+
+        Ok(())
+    }
+
+    pub fn render_dots(
+        &self,
+        view: &TextureView,
+        lens_state: &LensState,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         // create render pass descriptor and its color attachments
         let color_attachments = [wgpu::RenderPassColorAttachment {
-            view: &self.high_color_tex.view,
+            view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -702,64 +717,58 @@ impl PolyOptics {
 
             rpass.draw(0..self.num_rays, 0..1);
         }
+    }
 
-        queue.submit(iter::once(encoder.finish()));
-
+    pub fn convert(
+        &self,
+        device: &wgpu::Device,
+        lens_state: &LensState,
+        view: &TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         // conversion pass
+        let vertex_buffer_data = [
+            -1.0f32, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
+        ];
+        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::bytes_of(&vertex_buffer_data),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // create render pass descriptor and its color attachments
+        let color_attachments = [wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                }),
+                store: true,
+            },
+        }];
+        let render_pass_descriptor = wgpu::RenderPassDescriptor {
+            label: Some("poly_optics conversion"),
+            color_attachments: &color_attachments,
+            depth_stencil_attachment: None,
+        };
+
+        //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
         {
-            // let vertex_buffer_data = [
-            //     -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
-            // ];
-            let vertex_buffer_data = [
-                -1.0f32, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
-            ];
-            let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::bytes_of(&vertex_buffer_data),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Poly_optics conversion Encoder"),
-            });
+            // render pass
+            let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
+            rpass.set_pipeline(&self.conversion_render_pipeline);
+            rpass.set_bind_group(0, &self.conversion_bind_group, &[]);
+            rpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
+            rpass.set_bind_group(2, &lens_state.lens_bind_group, &[]);
+            // the three instance-local vertices
+            rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
+            //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-            // create render pass descriptor and its color attachments
-            let color_attachments = [wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.0,
-                    }),
-                    store: true,
-                },
-            }];
-            let render_pass_descriptor = wgpu::RenderPassDescriptor {
-                label: Some("poly_optics conversion"),
-                color_attachments: &color_attachments,
-                depth_stencil_attachment: None,
-            };
-
-            //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
-            {
-                // render pass
-                let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
-                rpass.set_pipeline(&self.conversion_render_pipeline);
-                rpass.set_bind_group(0, &self.conversion_bind_group, &[]);
-                rpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
-                rpass.set_bind_group(2, &lens_state.lens_bind_group, &[]);
-                // the three instance-local vertices
-                rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
-                //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-
-                rpass.draw(0..vertex_buffer_data.len() as u32 / 2, 0..1);
-            }
-
-            queue.submit(iter::once(encoder.finish()));
+            rpass.draw(0..vertex_buffer_data.len() as u32 / 2, 0..1);
         }
-
-        Ok(())
     }
 }
