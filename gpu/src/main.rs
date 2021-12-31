@@ -28,6 +28,9 @@ struct Opt {
     /// Set which api to use
     #[structopt(short, long, default_value = "all")]
     api: String,
+
+    #[structopt(short = "d", long)]
+    adapter: Option<usize>,
 }
 
 fn main() {
@@ -50,7 +53,7 @@ fn main() {
     let event_loop = EventLoop::new();
 
     // state saves all the scenes and manages them
-    let mut state = pollster::block_on(State::new(&event_loop, backend, opt.low_req));
+    let mut state = pollster::block_on(State::new(&event_loop, backend, opt.low_req, opt.adapter));
     let mut lens_ui: LensState = LensState::default(&state.device);
 
     // create scenes and push into state
