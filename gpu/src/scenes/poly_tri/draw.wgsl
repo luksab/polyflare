@@ -35,7 +35,7 @@ struct Element {
   spherical: f32;// 0: false, 1: true
 };
 
-[[block]]
+
 struct SimParams {
   opacity: f32;
   width_scaled: f32;
@@ -49,12 +49,12 @@ struct SensorDatapoint {
     wavelength: f32;
 };
 
-[[block]]
+
 struct Sensor {
     measuremens: [[stride(16)]] array<SensorDatapoint>;
 };
 
-[[block]]
+
 /// all the Elements of the Lens under test
 struct Elements {
   el: [[stride(72)]] array<Element>;
@@ -73,7 +73,7 @@ fn lookup_rgb(wavelength: f32) -> vec3<f32> {
 }
 
 [[stage(vertex)]]
-fn main(
+fn mainv(
     in: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
@@ -99,9 +99,16 @@ fn clip_ray_poly(pos: vec2<f32>, num_edge: u32, size: f32) -> bool {
     return clipped;
 }
 
+fn isNan( val: f32 ) -> bool {
+  if ( val < 0.0 || 0.0 < val || val == 0.0 ) {
+    return false;
+  } else {
+    return true;
+  }
+}
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   for (var i = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
       let element = elements.el[i];
       if (element.entry > 1.) {
@@ -111,13 +118,11 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
       }
   }
 
-  var strength = in.strength;
+  let strength = in.strength;
 
-//   if (in.strength < 10000.) {
-//       strength = in.strength;
-//   } if (!(in.strength < 100.) && in.strength > 100.) {
-//       strength = 1.;
-//   }
+  if (isNan(strength)) {
+    return vec4<f32>(0., 0., 0., 0.);
+  }
 
   let s = strength * params.opacity;
   var rgb = lookup_rgb(in.wavelength);

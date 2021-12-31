@@ -68,9 +68,16 @@ impl State {
                             max_vertex_buffers: 8,          // default
                             max_vertex_attributes: 16,      // default
                             max_vertex_buffer_array_stride: 2048, // default
-                            max_push_constant_size: 0,
+                            max_push_constant_size: 0, // default
                             min_uniform_buffer_offset_alignment: 256, // default
                             min_storage_buffer_offset_alignment: 256, // default
+                            max_inter_stage_shader_components: 60, // default
+                            max_compute_workgroup_storage_size: 16352, // default
+                            max_compute_invocations_per_workgroup: 256, // default
+                            max_compute_workgroup_size_x: 256, // default
+                            max_compute_workgroup_size_y: 256, // default
+                            max_compute_workgroup_size_z: 64, // default
+                            max_compute_workgroups_per_dimension: 65535, // default
                         },
                     },
                     None, // Trace path
@@ -100,9 +107,16 @@ impl State {
                             max_vertex_buffers: 8,          // default
                             max_vertex_attributes: 16,      // default
                             max_vertex_buffer_array_stride: 2048, // default
-                            max_push_constant_size: 0,
+                            max_push_constant_size: 0, // default
                             min_uniform_buffer_offset_alignment: 256, // default
                             min_storage_buffer_offset_alignment: 256, // default
+                            max_inter_stage_shader_components: 60, // default
+                            max_compute_workgroup_storage_size: 16352, // default
+                            max_compute_invocations_per_workgroup: 256, // default
+                            max_compute_workgroup_size_x: 256, // default
+                            max_compute_workgroup_size_y: 256, // default
+                            max_compute_workgroup_size_z: 64, // default
+                            max_compute_workgroups_per_dimension: 65535, // default
                         },
                     },
                     None, // Trace path

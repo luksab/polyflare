@@ -11,7 +11,7 @@ struct VertexOutput {
     [[location(1)]] wavelength: f32;
 };
 
-[[block]]
+
 struct SimParams {
   opacity: f32;
   width_scaled: f32;
@@ -25,7 +25,7 @@ struct SensorDatapoint {
     wavelength: f32;
 };
 
-[[block]]
+
 struct Sensor {
     measuremens: [[stride(16)]] array<SensorDatapoint>;
 };
@@ -42,7 +42,7 @@ fn lookup_rgb(wavelength: f32) -> vec3<f32> {
 }
 
 [[stage(vertex)]]
-fn main(
+fn mainv(
     in: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
@@ -55,7 +55,7 @@ fn main(
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   let s = in.strength * params.opacity;
   var rgb = lookup_rgb(in.wavelength);
   rgb.g = rgb.g * 0.6;

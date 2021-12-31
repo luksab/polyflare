@@ -26,7 +26,7 @@ struct Element {
   spherical: f32;// 0: false, 1: true
 };
 
-[[block]]
+
 struct SimParams {
   opacity: f32;
   width_scaled: f32;
@@ -37,19 +37,19 @@ struct SimParams {
   which_ghost: f32;
 };
 
-[[block]]
+
 struct PosParams {
   init: Ray;
   sensor: f32;
   width: f32;
 };
 
-[[block]]
+
 struct Rays {
   rays: [[stride(32)]] array<Ray>;
 };
 
-[[block]]
+
 struct Elements {
   el: [[stride(72)]] array<Element>;
 };

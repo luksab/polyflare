@@ -57,7 +57,7 @@ impl PolyTri {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &draw_shader,
-                entry_point: "main",
+                entry_point: "mainv",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 6 * 4,
                     step_mode: wgpu::VertexStepMode::Vertex,
@@ -91,7 +91,7 @@ impl PolyTri {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &draw_shader,
-                entry_point: "main",
+                entry_point: "mainf",
                 targets: &[wgpu::ColorTargetState {
                     format,
                     blend: Some(wgpu::BlendState {
@@ -117,13 +117,13 @@ impl PolyTri {
                 cull_mode: None,
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLAMPING
-                clamp_depth: false,
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
+                unclipped_depth: false,
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
+            multiview: None,
         })
     }
 
@@ -149,10 +149,7 @@ impl PolyTri {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
@@ -193,7 +190,7 @@ impl PolyTri {
                 layout: Some(&conversion_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: "main",
+                    entry_point: "mainv",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: 2 * 4,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -206,7 +203,7 @@ impl PolyTri {
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: "main",
+                    entry_point: "mainf",
                     targets: &[wgpu::ColorTargetState {
                         format: *format,
                         blend: Some(wgpu::BlendState {
@@ -231,13 +228,13 @@ impl PolyTri {
                     cull_mode: None,
                     // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                     polygon_mode: wgpu::PolygonMode::Fill,
-                    // Requires Features::DEPTH_CLAMPING
-                    clamp_depth: false,
                     // Requires Features::CONSERVATIVE_RASTERIZATION
                     conservative: false,
+                    unclipped_depth: false,
                 },
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState::default(),
+                multiview: None,
             })
         };
         (conversion_render_pipeline, conversion_bind_group)
@@ -355,6 +352,13 @@ impl PolyTri {
                 entry_point: "main",
             });
 
+        (
+            triangulate_pipeline,
+            Self::get_tri_index(device, dot_side_len),
+        )
+    }
+
+    fn get_tri_index(device: &wgpu::Device, dot_side_len: u32) -> Buffer {
         // buffer for all verts data of type
         // vec2: 8 bytes, 2 floats
         // pos: vec2, aperture_pos: vec2, intensity: float + 1float alignment
@@ -378,15 +382,13 @@ impl PolyTri {
 
         // assert_eq!(initial_tri_index_data.len() / 3, num_tris);
 
-        let tri_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&"Tris Buffer".to_string()),
             contents: bytemuck::cast_slice(&initial_tri_index_data),
             usage: wgpu::BufferUsages::INDEX
                 | wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC,
-        });
-
-        (triangulate_pipeline, tri_index_buffer)
+        })
     }
 
     fn get_num_tris(&self) -> u32 {
@@ -463,7 +465,7 @@ impl PolyTri {
     pub fn update_dots(
         &mut self,
         device: &wgpu::Device,
-        queue: &Queue,
+        encoder: &mut wgpu::CommandEncoder,
         update_size: bool,
         lens_state: &LensState,
     ) {
@@ -488,10 +490,6 @@ impl PolyTri {
             self.triangulate_pipeline = triangulate_pipeline;
             self.tri_index_buffer = tri_index_buffer;
         }
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
 
         let work_group_count = (self.dot_side_len * self.dot_side_len + 64 - 1) / 64; // round up
         {
@@ -534,8 +532,6 @@ impl PolyTri {
                 (self.dot_side_len * self.dot_side_len * 24).into(),
             );
 
-            queue.submit(iter::once(encoder.finish()));
-
             let buffer_slice = output_buffer.slice(..);
             let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
             device.poll(wgpu::Maintain::Wait);
@@ -560,7 +556,6 @@ impl PolyTri {
                 panic!("Failed to copy ray buffer!")
             }
         } else {
-            queue.submit(iter::once(encoder.finish()));
         }
     }
 }
@@ -598,10 +593,7 @@ impl PolyTri {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
@@ -729,105 +721,37 @@ impl PolyTri {
         queue: &Queue,
         lens_state: &LensState,
     ) -> Result<(), wgpu::SurfaceError> {
-        self.dot_side_len *= 100;
-        self.update_dots(device, queue, true, lens_state);
+        let ghosts = lens_state
+            .actual_lens
+            .get_ghosts_indicies(lens_state.draw as _, lens_state.which_ghost as _);
+        // let dot_side_len = self.dot_side_len;
+        // self.dot_side_len *= ghosts.len() as u32;
+
+        // self.tri_index_buffer = Self::get_tri_index(device, dot_side_len);
+
+        let mut first = true;
+        for ghost in ghosts {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+            // println!("rendering ghost {:?}, first {}", ghost, first);
+            queue.write_buffer(
+                &lens_state.ghost_indices_buffer,
+                0,
+                bytemuck::cast_slice(&ghost),
+            );
+            self.update_dots(device, &mut encoder, false, lens_state);
+            self.render_dots(&self.high_color_tex.view, &mut encoder, lens_state, first);
+            first = false;
+            queue.submit(iter::once(encoder.finish()));
+        }
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
-
-        // create render pass descriptor and its color attachments
-        let color_attachments = [wgpu::RenderPassColorAttachment {
-            view: &self.high_color_tex.view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.0,
-                    g: 0.0,
-                    b: 0.0,
-                    a: 0.0,
-                }),
-                store: true,
-            },
-        }];
-        let render_pass_descriptor = wgpu::RenderPassDescriptor {
-            label: None,
-            color_attachments: &color_attachments,
-            depth_stencil_attachment: None,
-        };
-
-        {
-            // render pass
-            let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
-            rpass.set_pipeline(&self.tri_render_pipeline);
-            rpass.set_bind_group(0, &lens_state.params_bind_group, &[]);
-            rpass.set_bind_group(1, &lens_state.lens_bind_group, &[]);
-            // the three instance-local vertices
-            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            rpass.set_index_buffer(self.tri_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-
-            rpass.draw_indexed(0..self.get_num_tris() * 6, 0, 0..1);
-            // rpass.draw(0..self.dot_side_len * self.dot_side_len, 0..1);
-        }
+        self.convert(device, &mut encoder, view, lens_state);
 
         queue.submit(iter::once(encoder.finish()));
-
-        // conversion pass
-        {
-            // let vertex_buffer_data = [
-            //     -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
-            // ];
-            let vertex_buffer_data = [
-                -1.0f32, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
-            ];
-            let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::bytes_of(&vertex_buffer_data),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-            // create render pass descriptor and its color attachments
-            let color_attachments = [wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.0,
-                    }),
-                    store: true,
-                },
-            }];
-            let render_pass_descriptor = wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &color_attachments,
-                depth_stencil_attachment: None,
-            };
-
-            // println!("{},{},{}", rays[3], rays[4], rays[5]);
-
-            //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
-            {
-                // render pass
-                let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
-                rpass.set_pipeline(&self.conversion_render_pipeline);
-                rpass.set_bind_group(0, &self.conversion_bind_group, &[]);
-                rpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
-                // the three instance-local vertices
-                rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
-                //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-
-                rpass.draw(0..vertex_buffer_data.len() as u32 / 2, 0..1);
-            }
-
-            queue.submit(iter::once(encoder.finish()));
-        }
 
         Ok(())
     }
@@ -951,168 +875,5 @@ impl PolyTri {
 
             rpass.draw(0..vertex_buffer_data.len() as u32 / 2, 0..1);
         }
-    }
-
-    pub fn render_hires(
-        &mut self,
-        view: &TextureView,
-        device: &wgpu::Device,
-        queue: &Queue,
-        num_rays: u64,
-        lens_state: &mut LensState,
-    ) -> Result<(), wgpu::SurfaceError> {
-        let num_per_iter = 10_000_000;
-
-        let iters = ((num_rays / num_per_iter) as f32).sqrt() as u32;
-        let width = lens_state.pos_params[9] / iters as f32;
-        println!("iters: {}, width: {}", iters, width);
-        let old_width = lens_state.pos_params[9];
-        lens_state.pos_params[9] = width;
-        let num_dots = self.dot_side_len;
-        self.dot_side_len = num_per_iter as u32;
-
-        println!(
-            "opacity_mul: {}",
-            (num_dots as f64 / num_rays as f64) as f32
-        );
-        let opacity = lens_state.sim_params[0];
-        lens_state.opacity *= 2. * (num_dots as f64 / num_rays as f64) as f32;
-
-        lens_state.update(device, queue);
-
-        let old_x = lens_state.pos_params[4];
-        let old_y = lens_state.pos_params[5];
-
-        let mut first_pass = true;
-        for i in 0..iters {
-            for j in 0..iters {
-                lens_state.pos_params[4] =
-                    (i as f32 + 0.5) * width - (width * iters as f32 / 2.) + old_x; //x center
-                lens_state.pos_params[5] =
-                    (j as f32 + 0.5) * width - (width * iters as f32 / 2.) + old_y; //y center
-                                                                                    // println!("center: {},{}", lens_state.pos_params[4], lens_state.pos_params[5]);
-                lens_state.update(device, queue);
-                self.update_dots(device, queue, first_pass, lens_state);
-                // pollster::block_on(queue.on_submitted_work_done());
-                std::thread::sleep(core::time::Duration::from_millis(20));
-
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                });
-
-                // create render pass descriptor and its color attachments
-                let color_attachments = [wgpu::RenderPassColorAttachment {
-                    view: &self.high_color_tex.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        // clear if on first render
-                        load: if first_pass {
-                            wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 0.0,
-                            })
-                        } else {
-                            wgpu::LoadOp::Load
-                        },
-                        store: true,
-                    },
-                }];
-
-                let render_pass_descriptor = wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &color_attachments,
-                    depth_stencil_attachment: None,
-                };
-
-                // println!("{},{},{}", rays[3], rays[4], rays[5]);
-
-                //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
-                {
-                    // render pass
-                    let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
-                    rpass.set_pipeline(&self.tri_render_pipeline);
-                    rpass.set_bind_group(0, &lens_state.params_bind_group, &[]);
-                    // the three instance-local vertices
-                    rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                    //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-
-                    rpass.draw(0..self.dot_side_len, 0..1);
-                }
-
-                queue.submit(iter::once(encoder.finish()));
-                // std::thread::sleep(core::time::Duration::from_millis(100));
-                // pollster::block_on(queue.on_submitted_work_done());
-                first_pass = false;
-            }
-        }
-
-        // conversion pass
-        {
-            // let vertex_buffer_data = [
-            //     -0.1f32, -0.1, 0.1, -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1,
-            // ];
-            let vertex_buffer_data = [
-                -1.0f32, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
-            ];
-            let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::bytes_of(&vertex_buffer_data),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-            // create render pass descriptor and its color attachments
-            let color_attachments = [wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.0,
-                    }),
-                    store: true,
-                },
-            }];
-            let render_pass_descriptor = wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &color_attachments,
-                depth_stencil_attachment: None,
-            };
-
-            // println!("{},{},{}", rays[3], rays[4], rays[5]);
-
-            //let rays = vec![-1.0, -1.0, 0.0, 0.0, 1.0, 1.0];
-            {
-                // render pass
-                let mut rpass = encoder.begin_render_pass(&render_pass_descriptor);
-                rpass.set_pipeline(&self.conversion_render_pipeline);
-                rpass.set_bind_group(0, &self.conversion_bind_group, &[]);
-                rpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
-                // the three instance-local vertices
-                rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
-                //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-
-                rpass.draw(0..vertex_buffer_data.len() as u32 / 2, 0..1);
-            }
-
-            queue.submit(iter::once(encoder.finish()));
-        }
-
-        self.dot_side_len = num_dots;
-        lens_state.pos_params[9] = old_width;
-
-        lens_state.pos_params[4] = old_x;
-        lens_state.pos_params[5] = old_y;
-
-        lens_state.opacity = opacity;
-        lens_state.update(device, queue);
-        self.update_dots(device, queue, true, lens_state);
-        Ok(())
     }
 }

@@ -6,7 +6,7 @@ struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
 };
 
-[[block]]
+
 struct SimParams {
   opacity: f32;
   width_scaled: f32;
@@ -24,7 +24,7 @@ struct SimParams {
 [[group(1), binding(2)]] var<uniform> params : SimParams;
 
 [[stage(vertex)]]
-fn main(
+fn mainv(
     in: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
@@ -38,7 +38,7 @@ var t_diffuse: texture_2d<f32>;
 var s_diffuse: sampler;
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let screenAspect = normalize(vec2<f32>(params.window_height_scaled, params.window_width_scaled)) * 2.;
 
     let pos = (vec2<f32>(in.clip_position.x / params.window_width_scaled, in.clip_position.y / params.window_height_scaled) + vec2<f32>(0.21,0.21)) / screenAspect;

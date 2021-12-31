@@ -36,7 +36,7 @@ struct Element {
   spherical: f32;// 0: false, 1: true
 };
 
-[[block]]
+
 struct SimParams {
   opacity: f32;
   width_scaled: f32;
@@ -52,7 +52,7 @@ struct SimParams {
   side_len: f32;
 };
 
-[[block]]
+
 // static parameters for positions
 struct PosParams {
   // the Ray to be modified as a base for ray tracing
@@ -62,12 +62,12 @@ struct PosParams {
   width: f32;
 };
 
-[[block]]
+
 struct Rays {
   rays: [[stride(24)]] array<DrawRay>;
 };
 
-[[block]]
+
 /// all the Elements of the Lens under test
 struct Elements {
   el: [[stride(72)]] array<Element>;

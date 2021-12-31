@@ -96,7 +96,7 @@ pub struct LensState {
     pos_params_buffer: wgpu::Buffer,
     /// buffer for which ghost to draw
     pub ghost_indices: [u32; 2],
-    ghost_indices_buffer: wgpu::Buffer,
+    pub ghost_indices_buffer: wgpu::Buffer,
     /// positions of the rays and the sensor
     pub params_bind_group: wgpu::BindGroup,
     /// positions of the rays and the sensor

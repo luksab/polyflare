@@ -301,7 +301,14 @@ fn main() {
                 poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
 
                 if lens_ui.triangulate {
-                    poly_tri.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
+                    let mut encoder =
+                        state
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("Render Encoder"),
+                            });
+                    poly_tri.update_dots(&state.device, &mut encoder, update_dot_num, &lens_ui);
+                    state.queue.submit(Some(encoder.finish()));
                 } else {
                     poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
                 }
@@ -357,7 +364,7 @@ fn main() {
                         }
 
                         if lens_ui.triangulate {
-                            match poly_tri.render(
+                            match poly_tri.render_color(
                                 renderer.textures.get(res_window_texture_id).unwrap().view(),
                                 &state.device,
                                 &state.queue,

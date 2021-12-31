@@ -727,25 +727,6 @@ impl Lens {
     }
 
     /// get the indices of all distinct ghosts
-    pub fn get_ghosts_index(&self, draw_mode: usize) -> Vec<(u32, u32)> {
-        let mut rays = vec![];
-        if draw_mode & 1 > 0 {
-            let mut ghost_num = 0;
-            for i in 0..self.elements.len() - 1 {
-                for j in i + 1..self.elements.len() {
-                    ghost_num += 1;
-                    if let Properties::Glass(_) = self.elements[i].properties {
-                        if let Properties::Glass(_) = self.elements[j].properties {
-                            rays.push((i as u32, j as u32));
-                        }
-                    }
-                }
-            }
-        }
-        rays
-    }
-
-    /// get the indices of all distinct ghosts
     pub fn get_ghost_index(&self, draw_mode: usize, which_ghost: usize) -> Option<[u32; 2]> {
         if draw_mode & 1 > 0 {
             let mut ghost_num = 0;
@@ -766,27 +747,26 @@ impl Lens {
     }
 
     /// get the indices of all the elements at which to change direction for all distinct ghosts
-    pub fn get_ghosts_indicies(&self, draw_mode: usize, which_ghost: usize) -> Vec<u32> {
+    pub fn get_ghosts_indicies(&self, draw_mode: usize, which_ghost: usize) -> Vec<[u32; 2]> {
         let mut rays = vec![];
         if draw_mode & 1 > 0 {
             let mut ghost_num = 0;
             for i in 0..self.elements.len() - 1 {
                 for j in i + 1..self.elements.len() {
-                    ghost_num += 1;
-                    if ghost_num == which_ghost || which_ghost == 0 {
-                        if let Properties::Glass(_) = self.elements[i].properties {
-                            if let Properties::Glass(_) = self.elements[j].properties {
-                                ghost_num += 1;
-                                rays.push(ghost_num as u32);
+                    if let Properties::Glass(_) = self.elements[i].properties {
+                        if let Properties::Glass(_) = self.elements[j].properties {
+                            ghost_num += 1;
+                            if ghost_num == which_ghost || which_ghost == 0 {
+                                rays.push([i as u32, j as u32]);
                             }
                         }
                     }
                 }
             }
         }
-        if draw_mode & 2 > 0 {
-            rays.push(0);
-        }
+        // if draw_mode & 2 > 0 {
+        //     rays.push(0);
+        // }
         rays
     }
 

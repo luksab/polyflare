@@ -20,7 +20,7 @@ struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
 };
 
-[[block]]
+
 struct SimParams {
   opacity: f32;
   width_scaled: f32;
@@ -29,12 +29,12 @@ struct SimParams {
   height: f32;
 };
 
-[[block]]
+
 struct Elements {
   el : [[stride(16)]] array<Element>;
 };
 
-[[block]]
+
 // static parameters for positions
 struct PosParams {
   // the Ray to be modified as a base for ray tracing
@@ -50,7 +50,7 @@ struct PosParams {
 [[group(1), binding(0)]] var<uniform> posParams : PosParams;
 
 [[stage(vertex)]]
-fn main(
+fn mainv(
     in: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
@@ -64,7 +64,7 @@ var t_diffuse: texture_2d<f32>;
 var s_diffuse: sampler;
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let pos = vec2<f32>(in.clip_position.x / params.width, in.clip_position.y / params.height);
     let sample = textureSample(t_diffuse, s_diffuse, pos);
     var bg = vec4<f32>(0.15,0.15,0.25,1.0);

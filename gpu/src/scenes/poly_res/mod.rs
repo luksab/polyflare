@@ -52,7 +52,7 @@ impl PolyRes {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &draw_shader,
-                entry_point: "main",
+                entry_point: "mainv",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 8 * 4,
                     step_mode: wgpu::VertexStepMode::Vertex,
@@ -86,7 +86,7 @@ impl PolyRes {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &draw_shader,
-                entry_point: "main",
+                entry_point: "mainf",
                 targets: &[wgpu::ColorTargetState {
                     format,
                     blend: Some(wgpu::BlendState {
@@ -111,13 +111,13 @@ impl PolyRes {
                 cull_mode: None,
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLAMPING
-                clamp_depth: false,
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
+                unclipped_depth: false,
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
+            multiview: None,
         })
     }
 
@@ -143,10 +143,7 @@ impl PolyRes {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
@@ -187,7 +184,7 @@ impl PolyRes {
                 layout: Some(&conversion_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: "main",
+                    entry_point: "mainv",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: 2 * 4,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -200,7 +197,7 @@ impl PolyRes {
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: "main",
+                    entry_point: "mainf",
                     targets: &[wgpu::ColorTargetState {
                         format: *format,
                         blend: Some(wgpu::BlendState {
@@ -225,13 +222,13 @@ impl PolyRes {
                     cull_mode: None,
                     // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                     polygon_mode: wgpu::PolygonMode::Fill,
-                    // Requires Features::DEPTH_CLAMPING
-                    clamp_depth: false,
                     // Requires Features::CONSERVATIVE_RASTERIZATION
                     conservative: false,
+                    unclipped_depth: false,
                 },
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState::default(),
+                multiview: None,
             })
         };
         (conversion_render_pipeline, conversion_bind_group)
@@ -476,10 +473,7 @@ impl PolyRes {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
