@@ -80,7 +80,11 @@ struct Elements {
 
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
-  let ray_num = global_invocation_id.x;
+  let index = global_invocation_id.x % (u32(params.side_len) * u32(params.side_len));
+  let ghost_num = global_invocation_id.x / (u32(params.side_len) * u32(params.side_len));
+  let offset = ghost_num * (u32(params.side_len) * u32(params.side_len));
+
+  let ray_num = index;
 
   // we need the sqrt to scale the movement in each direction by
   let dot_side_len = u32(params.side_len);
@@ -89,7 +93,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
   var averageArea = 0.;
   var num_areas = 0;
-  let self = rays.rays[(x + y * dot_side_len)].pos;
+  let self = rays.rays[(x + y * dot_side_len) + offset].pos;
 
   if (x < dot_side_len - u32(1) && y < dot_side_len - u32(1)){
     let b = rays.rays[(x + u32(1) + y * dot_side_len)].pos;
@@ -143,7 +147,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     }   
   }
 
-  averageArea = averageArea / f32(num_areas);
+  averageArea = sqrt(averageArea / f32(num_areas));
 
-  rays.rays[(x + y * dot_side_len)].strength = rays.rays[(x + y * dot_side_len)].strength / averageArea;
+  rays.rays[(x + y * dot_side_len) + offset].strength = rays.rays[(x + y * dot_side_len) + offset].strength / averageArea;
 }

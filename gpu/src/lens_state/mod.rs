@@ -95,7 +95,7 @@ pub struct LensState {
     /// positions of the rays and the sensor
     pos_params_buffer: wgpu::Buffer,
     /// buffer for which ghost to draw
-    pub ghost_indices: [u32; 2],
+    pub ghost_indices: Vec<[u32; 2]>,
     pub ghost_indices_buffer: wgpu::Buffer,
     /// positions of the rays and the sensor
     pub params_bind_group: wgpu::BindGroup,
@@ -236,6 +236,15 @@ impl LensState {
                 | wgpu::BufferUsages::STORAGE,
         });
 
+        let ghost_indices = vec![[0, 1]];
+        let ghost_indices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Ghost Indices Buffer"),
+            contents: bytemuck::cast_slice(&ghost_indices),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
         let lens_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -259,6 +268,18 @@ impl LensState {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE
+                            | wgpu::ShaderStages::VERTEX
+                            | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
                 label: None,
             });
@@ -272,6 +293,10 @@ impl LensState {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: lens_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: ghost_indices_buffer.as_entire_binding(),
                 },
             ],
             label: None,
@@ -322,15 +347,6 @@ impl LensState {
                 | wgpu::BufferUsages::STORAGE,
         });
 
-        let ghost_indices = [0, 1];
-        let ghost_indices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Ghost Indices Buffer"),
-            contents: bytemuck::cast_slice(&ghost_indices),
-            usage: wgpu::BufferUsages::UNIFORM
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::STORAGE,
-        });
-
         let params_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -376,20 +392,6 @@ impl LensState {
                         },
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::COMPUTE
-                            | wgpu::ShaderStages::VERTEX
-                            | wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                (ghost_indices.len() * std::mem::size_of::<u32>()) as _,
-                            ),
-                        },
-                        count: None,
-                    },
                 ],
                 label: None,
             });
@@ -407,10 +409,6 @@ impl LensState {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: sim_param_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: ghost_indices_buffer.as_entire_binding(),
                 },
             ],
             label: None,
@@ -626,6 +624,18 @@ impl LensState {
                 | wgpu::BufferUsages::STORAGE,
         });
 
+        self.ghost_indices = self
+            .actual_lens
+            .get_ghosts_indicies(self.draw as _, self.which_ghost as _);
+
+        self.ghost_indices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Ghost Indices Buffer"),
+            contents: bytemuck::cast_slice(&self.ghost_indices),
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        });
+
         self.lens_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &self.lens_bind_group_layout,
             entries: &[
@@ -636,6 +646,10 @@ impl LensState {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: self.lens_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.ghost_indices_buffer.as_entire_binding(),
                 },
             ],
             label: None,
@@ -651,11 +665,6 @@ impl LensState {
             &self.sim_param_buffer,
             0,
             bytemuck::cast_slice(&self.sim_params),
-        );
-        queue.write_buffer(
-            &self.ghost_indices_buffer,
-            0,
-            bytemuck::cast_slice(&self.ghost_indices),
         );
     }
 
@@ -731,7 +740,7 @@ impl LensState {
     /// create an imgui window from Self and return
     ///
     /// (update_lens, update_lens_size, update_ray_num, update_dot_num, render)
-    pub fn build_ui(&mut self, ui: &Ui, device: &Device, queue: &Queue) -> (bool, bool, bool) {
+    pub fn build_ui(&mut self, ui: &Ui, device: &Device, queue: &Queue) -> (bool, bool, bool, bool) {
         let mut update_lens = self.first_frame;
         let mut update_sensor = self.first_frame;
         imgui::Window::new("Lens")
@@ -945,12 +954,6 @@ impl LensState {
                 let num_ghosts = (self.lens.len() * self.lens.len()) as u32;
                 if Slider::new("which ghost", 0, num_ghosts + 1).build(ui, &mut self.which_ghost) {
                     update_lens = true;
-                    if let Some(ghosts) = self
-                        .actual_lens
-                        .get_ghost_index(self.draw as _, self.which_ghost as _)
-                    {
-                        self.ghost_indices = ghosts;
-                    }
                 }
                 ui.text(format!("Framerate: {:.0}", self.fps));
                 update_rays |=
@@ -1003,6 +1006,6 @@ impl LensState {
         self.last_frame_time = Instant::now();
 
         self.first_frame = false;
-        (update_rays, update_dots, render)
+        (update_lens, update_rays, update_dots, render)
     }
 }

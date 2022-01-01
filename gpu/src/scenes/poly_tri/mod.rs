@@ -245,6 +245,7 @@ impl PolyTri {
         lens_bind_group_layout: &BindGroupLayout,
         params_bind_group_layout: &BindGroupLayout,
         dot_side_len: u32,
+        num_ghosts: u32,
     ) -> (ComputePipeline, BindGroup, BindGroupLayout, Buffer) {
         let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
@@ -292,9 +293,10 @@ impl PolyTri {
         // buffer for all particles data of type [bool,...]
         // vec3: 16 bytes, 4 floats
         // vec3, vec3, float
-        let initial_ray_data = vec![0.1_f32; (dot_side_len * dot_side_len * 8) as usize];
+        let initial_ray_data =
+            vec![0.1_f32; (dot_side_len * dot_side_len * num_ghosts * 8) as usize];
 
-        let rays_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&"Rays Buffer".to_string()),
             contents: bytemuck::cast_slice(&initial_ray_data),
             usage: wgpu::BufferUsages::VERTEX
@@ -308,7 +310,7 @@ impl PolyTri {
             layout: &compute_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: rays_buffer.as_entire_binding(),
+                resource: vertex_buffer.as_entire_binding(),
             }],
             label: None,
         });
@@ -317,7 +319,7 @@ impl PolyTri {
             compute_pipeline,
             compute_bind_group,
             compute_bind_group_layout,
-            rays_buffer,
+            vertex_buffer,
         )
     }
 
@@ -326,7 +328,9 @@ impl PolyTri {
         compute_bind_group_layout: &BindGroupLayout,
         params_bind_group_layout: &BindGroupLayout,
         dot_side_len: u32,
+        num_ghosts: u32,
     ) -> (ComputePipeline, Buffer) {
+        println!("rendering {} ghosts", num_ghosts);
         let triangulate_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
@@ -354,33 +358,51 @@ impl PolyTri {
 
         (
             triangulate_pipeline,
-            Self::get_tri_index(device, dot_side_len),
+            Self::get_tri_index(device, dot_side_len, num_ghosts),
         )
     }
 
-    fn get_tri_index(device: &wgpu::Device, dot_side_len: u32) -> Buffer {
+    fn get_tri_index(device: &wgpu::Device, dot_side_len: u32, num_ghosts: u32) -> Buffer {
         // buffer for all verts data of type
         // vec2: 8 bytes, 2 floats
         // pos: vec2, aperture_pos: vec2, intensity: float + 1float alignment
         // let num_tris = (((dot_side_len - 1) * 2) * (dot_side_len - 1)) as usize;
         let mut initial_tri_index_data = vec![]; //0 as u32; (num_tris * 6) as usize];
 
-        for y in 0..dot_side_len - 1 {
-            for x in 0..dot_side_len - 1 {
-                // println!("x:{} y:{}", x, y);
-                initial_tri_index_data.push(x + y * dot_side_len);
-                initial_tri_index_data.push(x + 1 + y * dot_side_len);
-                initial_tri_index_data.push(x + dot_side_len + y * dot_side_len);
+        for i in 0..num_ghosts {
+            let offset = i * (dot_side_len * dot_side_len);
+            for y in 0..dot_side_len - 1 {
+                for x in 0..dot_side_len - 1 {
+                    // println!("x:{} y:{}", x, y);
+                    initial_tri_index_data.push(x + y * dot_side_len + offset);
+                    initial_tri_index_data.push(x + 1 + y * dot_side_len + offset);
+                    initial_tri_index_data.push(x + dot_side_len + y * dot_side_len + offset);
 
-                initial_tri_index_data.push(x + 1 + y * dot_side_len);
-                initial_tri_index_data.push(x + dot_side_len + y * dot_side_len);
-                initial_tri_index_data.push(x + 1 + dot_side_len + y * dot_side_len);
+                    initial_tri_index_data.push(x + 1 + y * dot_side_len + offset);
+                    initial_tri_index_data.push(x + dot_side_len + y * dot_side_len + offset);
+                    initial_tri_index_data.push(x + 1 + dot_side_len + y * dot_side_len + offset);
+                }
             }
         }
 
-        // println!("{} {:?}", dot_side_len, initial_tri_index_data);
+        if cfg!(debug_assertions) {
+            println!(
+                "initial_tri_index_data: {} {:?}",
+                dot_side_len, initial_tri_index_data
+            );
+        }
 
         // assert_eq!(initial_tri_index_data.len() / 3, num_tris);
+
+        // let now = Instant::now();
+        // for i in 0..num_ghosts {
+        //     initial_tri_index_data
+        //         .append(&mut initial_tri_index_data.iter().map(|x| *x + offset).collect());
+        // }
+        // if cfg!(debug_assertions) {
+        //     println!("Triangulate index buffer: {:?}", initial_tri_index_data);
+        // }
+        // println!("creating {} took {:?}", num_ghosts, now.elapsed());
 
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&"Tris Buffer".to_string()),
@@ -425,6 +447,7 @@ impl PolyTri {
                 &lens_state.lens_bind_group_layout,
                 &lens_state.params_bind_group_layout,
                 dot_side_len,
+                lens_state.ghost_indices.len() as u32,
             );
 
         let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
@@ -432,6 +455,7 @@ impl PolyTri {
             &compute_bind_group_layout,
             &lens_state.params_bind_group_layout,
             dot_side_len,
+            lens_state.ghost_indices.len() as u32,
         );
 
         let convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").unwrap();
@@ -477,6 +501,7 @@ impl PolyTri {
                     &lens_state.lens_bind_group_layout,
                     &lens_state.params_bind_group_layout,
                     self.dot_side_len,
+                    lens_state.ghost_indices.len() as u32,
                 );
             self.compute_pipeline = compute_pipeline;
             self.compute_bind_group = compute_bind_group;
@@ -486,12 +511,15 @@ impl PolyTri {
                 &compute_bind_group_layout,
                 &lens_state.params_bind_group_layout,
                 self.dot_side_len,
+                lens_state.ghost_indices.len() as u32,
             );
             self.triangulate_pipeline = triangulate_pipeline;
             self.tri_index_buffer = tri_index_buffer;
         }
 
-        let work_group_count = (self.dot_side_len * self.dot_side_len + 64 - 1) / 64; // round up
+        let num_ghosts = lens_state.ghost_indices.len() as u32;
+
+        let work_group_count = (self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64; // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -502,7 +530,7 @@ impl PolyTri {
             cpass.dispatch(work_group_count, 1, 1);
         }
 
-        let work_group_count = (self.dot_side_len * self.dot_side_len + 64 - 1) / 64; // round up
+        let work_group_count = (self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64; // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -512,50 +540,6 @@ impl PolyTri {
             // cpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
             // cpass.set_bind_group(2, &lens_state.lens_bind_group, &[]);
             cpass.dispatch(work_group_count, 1, 1);
-        }
-
-        if cfg!(debug_assertions) {
-            let output_buffer_size =
-                (self.dot_side_len * self.dot_side_len * 24) as wgpu::BufferAddress;
-            let output_buffer_desc = wgpu::BufferDescriptor {
-                size: output_buffer_size,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                label: Some("Ray DST"),
-                mapped_at_creation: false,
-            };
-            let output_buffer = device.create_buffer(&output_buffer_desc);
-            encoder.copy_buffer_to_buffer(
-                &self.vertex_buffer,
-                0,
-                &output_buffer,
-                0,
-                (self.dot_side_len * self.dot_side_len * 24).into(),
-            );
-
-            let buffer_slice = output_buffer.slice(..);
-            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-            device.poll(wgpu::Maintain::Wait);
-
-            if let Ok(()) = pollster::block_on(buffer_future) {
-                let data = buffer_slice.get_mapped_range();
-
-                let vertices = unsafe { data.align_to::<f32>().1 };
-                let vec_vertices = vertices.to_vec();
-                let data = vec_vertices;
-
-                println!("----------------------------------------------------------------------------------");
-                for (i, elements) in data.chunks(6).enumerate() {
-                    print!("{:03}:", i);
-                    print!("pos: {}, {}  ", elements[0], elements[1]);
-                    print!("aper: {}, {}  ", elements[2], elements[3]);
-                    print!("s: {}", elements[4]);
-                    println!("w: {}", elements[5]);
-                }
-                // println!("{:?}", data);
-            } else {
-                panic!("Failed to copy ray buffer!")
-            }
-        } else {
         }
     }
 }
@@ -676,6 +660,7 @@ impl PolyTri {
                     &lens_state.lens_bind_group_layout,
                     &lens_state.params_bind_group_layout,
                     self.dot_side_len,
+                    lens_state.ghost_indices.len() as u32,
                 );
             self.compute_pipeline = pipeline;
             self.compute_bind_group = bind_group;
@@ -685,6 +670,7 @@ impl PolyTri {
                 &compute_bind_group_layout,
                 &lens_state.params_bind_group_layout,
                 self.dot_side_len,
+                lens_state.ghost_indices.len() as u32,
             );
             self.triangulate_pipeline = triangulate_pipeline;
             self.tri_index_buffer = tri_index_buffer;
@@ -706,6 +692,7 @@ impl PolyTri {
                 &self.compute_bind_group_layout,
                 &lens_state.params_bind_group_layout,
                 self.dot_side_len,
+                lens_state.ghost_indices.len() as u32,
             );
             self.triangulate_pipeline = triangulate_pipeline;
             self.tri_index_buffer = tri_index_buffer;
@@ -720,38 +707,78 @@ impl PolyTri {
         device: &wgpu::Device,
         queue: &Queue,
         lens_state: &LensState,
+        update: bool,
     ) -> Result<(), wgpu::SurfaceError> {
-        let ghosts = lens_state
-            .actual_lens
-            .get_ghosts_indicies(lens_state.draw as _, lens_state.which_ghost as _);
-        // let dot_side_len = self.dot_side_len;
-        // self.dot_side_len *= ghosts.len() as u32;
-
-        // self.tri_index_buffer = Self::get_tri_index(device, dot_side_len);
-
-        let mut first = true;
-        for ghost in ghosts {
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-            // println!("rendering ghost {:?}, first {}", ghost, first);
-            queue.write_buffer(
-                &lens_state.ghost_indices_buffer,
-                0,
-                bytemuck::cast_slice(&ghost),
-            );
-            self.update_dots(device, &mut encoder, false, lens_state);
-            self.render_dots(&self.high_color_tex.view, &mut encoder, lens_state, first);
-            first = false;
-            queue.submit(iter::once(encoder.finish()));
-        }
-
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
-        self.convert(device, &mut encoder, view, lens_state);
 
-        queue.submit(iter::once(encoder.finish()));
+        self.update_dots(device, &mut encoder, update, lens_state);
+
+        self.render_dots(
+            &self.high_color_tex.view,
+            &mut encoder,
+            lens_state,
+            true,
+            lens_state.ghost_indices.len() as u32,
+        );
+
+        if cfg!(debug_assertions) {
+            let output_buffer_size = (self.dot_side_len
+                * self.dot_side_len
+                * 24
+                * lens_state.ghost_indices.len() as u32)
+                as wgpu::BufferAddress;
+            let output_buffer_desc = wgpu::BufferDescriptor {
+                size: output_buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                label: Some("Ray DST"),
+                mapped_at_creation: false,
+            };
+            let output_buffer = device.create_buffer(&output_buffer_desc);
+            encoder.copy_buffer_to_buffer(
+                &self.vertex_buffer,
+                0,
+                &output_buffer,
+                0,
+                (self.dot_side_len
+                    * self.dot_side_len
+                    * 24
+                    * lens_state.ghost_indices.len() as u32)
+                    .into(),
+            );
+
+            self.convert(device, &mut encoder, view, lens_state);
+
+            queue.submit(Some(encoder.finish()));
+
+            let buffer_slice = output_buffer.slice(..);
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+            device.poll(wgpu::Maintain::Wait);
+
+            if let Ok(()) = pollster::block_on(buffer_future) {
+                let data = buffer_slice.get_mapped_range();
+
+                let vertices = unsafe { data.align_to::<f32>().1 };
+                let vec_vertices = vertices.to_vec();
+                let data = vec_vertices;
+
+                println!("----------------------------------------------------------------------------------");
+                for (i, elements) in data.chunks(6).enumerate() {
+                    print!("{:03}:", i);
+                    print!("pos: {}, {}  ", elements[0], elements[1]);
+                    print!("aper: {}, {}  ", elements[2], elements[3]);
+                    print!("s: {}", elements[4]);
+                    println!("w: {}", elements[5]);
+                }
+                // println!("{:?}", data);
+            } else {
+                panic!("Failed to copy ray buffer!")
+            }
+        } else {
+            self.convert(device, &mut encoder, view, lens_state);
+            queue.submit(iter::once(encoder.finish()));
+        }
 
         Ok(())
     }
@@ -767,7 +794,7 @@ impl PolyTri {
             label: Some("Render Encoder"),
         });
 
-        self.render_dots(&self.high_color_tex.view, &mut encoder, lens_state, true);
+        self.render_dots(&self.high_color_tex.view, &mut encoder, lens_state, true, 1);
 
         self.convert(device, &mut encoder, view, lens_state);
 
@@ -784,6 +811,7 @@ impl PolyTri {
         encoder: &mut CommandEncoder,
         lens_state: &LensState,
         clear: bool,
+        num_ghosts: u32,
     ) {
         // create render pass descriptor and its color attachments
         let color_attachments = [wgpu::RenderPassColorAttachment {
@@ -823,7 +851,7 @@ impl PolyTri {
             rpass.set_index_buffer(self.tri_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-            rpass.draw_indexed(0..self.get_num_tris() * 6, 0, 0..1);
+            rpass.draw_indexed(0..self.get_num_tris() * num_ghosts * 6, 0, 0..1);
             // rpass.draw(0..self.dot_side_len * self.dot_side_len, 0..1);
         }
     }

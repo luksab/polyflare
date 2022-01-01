@@ -87,12 +87,17 @@ struct Elements {
   el: [[stride(72)]] array<Element>;
 };
 
+/// all the Elements of the Lens under test
+struct Ghosts {
+  el: [[stride(8)]] array<WhichGhost>;
+};
+
 [[group(0), binding(0)]] var<storage, read_write> rays : Rays;
 [[group(2), binding(2)]] var<uniform> params : SimParams;
 
 [[group(2), binding(0)]] var<uniform> posParams : PosParams;
 
-[[group(2), binding(3)]] var<uniform> whichGhost : WhichGhost;
+[[group(1), binding(2)]] var<storage, read> whichGhost : Ghosts;
 
 [[group(1), binding(0)]] var<storage, read> elements : Elements;
 
@@ -415,11 +420,12 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
   // the total number of possible shader executions
   let total = arrayLength(&rays.rays);
-  let index = global_invocation_id.x;
+  let index = global_invocation_id.x % (u32(params.side_len) * u32(params.side_len));
+  let ghost_num = global_invocation_id.x / (u32(params.side_len) * u32(params.side_len));
 //   for (var i = u32(0); i < arrayLength(&rays.rays) - u32(1); i = i + u32(1)) {
 //     rays.rays[i] = DrawRay(vec2<f32>(f32(global_invocation_id.x), f32(global_invocation_id.y)), vec2<f32>(0., 0.), 1., params.side_len);
 //   }
-  if (index >= total) { // if we don't fit in the buffer - return early
+  if (global_invocation_id.x >= total) { // if we don't fit in the buffer - return early
     return;
   }
 
@@ -437,13 +443,11 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   // how many dots have we added to the buffer
   var counter = u32(0);
   if ((draw_mode & u32(1)) > u32(0)) {
-    // which ghost are we on
-    var ghost_num = u32(0);
-    // iterate through all combinations of Elements to draw the ghosts
-    let i = whichGhost.i;
-    let j = whichGhost.j;
-    ghost_num = ghost_num + u32(1);
-    // if we want to draw this ghost or we want to draw all ghosts
+    let i = whichGhost.el[ghost_num].i;
+    let j = whichGhost.el[ghost_num].j;
+    if(i == u32(0) && j == u32(0)) {
+        return;
+    }
         // make new ray
         var dir = posParams.init.d;
         // modify both directions according to our index
@@ -481,7 +485,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         ray = intersect_ray(ray, posParams.sensor);
 
         // only return rays that have made it through
-        rays.rays[ray_num] = drawRay_from_Ray(ray);
+        rays.rays[ray_num + ghost_num * (u32(params.side_len) * u32(params.side_len))] = drawRay_from_Ray(ray);
         // counter = counter + u32(1);
   }
   // if we want to draw normally
@@ -502,6 +506,6 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // intersect the ray with the sensor
     ray = intersect_ray(ray, posParams.sensor);
     // save the Ray in the current buffer position
-    rays.rays[ray_num] = drawRay_from_Ray(ray);
+    rays.rays[ray_num + ghost_num * (u32(params.side_len) * u32(params.side_len))] = drawRay_from_Ray(ray);
   }
 }

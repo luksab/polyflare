@@ -28,6 +28,7 @@ impl State {
         backend: Backends,
         low_req: bool,
         adapter: Option<usize>,
+        disable_vsync: bool,
     ) -> Self {
         // get the title at compile time from env
         let title = env!("CARGO_PKG_NAME");
@@ -143,7 +144,7 @@ impl State {
             format: surface.get_preferred_format(&adapter).expect("surface not compatible with gpu"),
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: if disable_vsync {wgpu::PresentMode::Immediate } else {wgpu::PresentMode::Fifo},
         };
 
         surface.configure(&device, &config);

@@ -27,18 +27,21 @@ struct Opt {
 
     /// Set which api to use
     #[structopt(short, long, default_value = "all")]
-    api: String,
+    backend: String,
 
-    #[structopt(short = "d", long)]
+    #[structopt(short, long)]
     adapter: Option<usize>,
+
+    #[structopt(short = "v", long)]
+    disable_vsync: bool,
 }
 
 fn main() {
     let opt: Opt = Opt::from_args();
 
-    println!("API: {:?}, low requirements: {}", opt.api, opt.low_req);
+    println!("API: {:?}, low requirements: {}", opt.backend, opt.low_req);
 
-    let backend = match opt.api.to_lowercase().as_str() {
+    let backend = match opt.backend.to_lowercase().as_str() {
         "opengl" => wgpu::Backends::GL,
         "gl" => wgpu::Backends::GL,
         "vulkan" => wgpu::Backends::VULKAN,
@@ -53,7 +56,13 @@ fn main() {
     let event_loop = EventLoop::new();
 
     // state saves all the scenes and manages them
-    let mut state = pollster::block_on(State::new(&event_loop, backend, opt.low_req, opt.adapter));
+    let mut state = pollster::block_on(State::new(
+        &event_loop,
+        backend,
+        opt.low_req,
+        opt.adapter,
+        opt.disable_vsync,
+    ));
     let mut lens_ui: LensState = LensState::default(&state.device);
 
     // create scenes and push into state
@@ -220,7 +229,7 @@ fn main() {
                     Err(e) => eprintln!("{:?}", e),
                 }
 
-                let (update_ray_num, update_dot_num, render) =
+                let (update_lens, update_ray_num, update_dot_num, render) =
                     lens_ui.build_ui(&ui, &state.device, &state.queue);
 
                 if render {
@@ -304,14 +313,14 @@ fn main() {
                 poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
 
                 if lens_ui.triangulate {
-                    let mut encoder =
-                        state
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("Render Encoder"),
-                            });
-                    poly_tri.update_dots(&state.device, &mut encoder, update_dot_num, &lens_ui);
-                    state.queue.submit(Some(encoder.finish()));
+                    // let mut encoder =
+                    //     state
+                    //         .device
+                    //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    //             label: Some("Render Encoder"),
+                    //         });
+                    // poly_tri.update_dots(&state.device, &mut encoder, , &lens_ui);
+                    // state.queue.submit(Some(encoder.finish()));
                 } else {
                     poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
                 }
@@ -372,6 +381,7 @@ fn main() {
                                 &state.device,
                                 &state.queue,
                                 &lens_ui,
+                                update_dot_num | update_lens,
                             ) {
                                 Ok(_) => {}
                                 // Reconfigure the surface if lost
