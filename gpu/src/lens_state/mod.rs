@@ -854,7 +854,7 @@ impl LensState {
                                     .build(ui, &mut aperture.num_blades);
 
                                 if ui.button(format!("delete##{}", i)) {
-                                    delete_aperture = Some(i - 1);
+                                    delete_aperture = Some(i);
                                 }
 
                                 ui.separator();
