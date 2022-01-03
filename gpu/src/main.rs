@@ -269,15 +269,27 @@ fn main() {
                     };
                     let tex = state.device.create_texture(&desc);
 
-                    poly_res.resize(
-                        winit::dpi::PhysicalSize {
-                            width: size[0],
-                            height: size[1],
-                        },
-                        1.0,
-                        &state.device,
-                        &state.config,
-                    );
+                    if lens_ui.triangulate {
+                        poly_tri.resize(
+                            winit::dpi::PhysicalSize {
+                                width: size[0],
+                                height: size[1],
+                            },
+                            1.0,
+                            &state.device,
+                            &state.config,
+                        );
+                    } else {
+                        poly_res.resize(
+                            winit::dpi::PhysicalSize {
+                                width: size[0],
+                                height: size[1],
+                            },
+                            1.0,
+                            &state.device,
+                            &state.config,
+                        );
+                    }
 
                     let sim_params = lens_ui.sim_params;
 
@@ -289,27 +301,52 @@ fn main() {
                         1.0,
                     );
 
-                    poly_res
-                        .render_hires(
-                            &tex.create_view(&wgpu::TextureViewDescriptor::default()),
-                            &state.device,
-                            &state.queue,
-                            10.0_f64.powf(lens_ui.hi_dots_exponent) as u64,
-                            &mut lens_ui,
-                        )
-                        .unwrap();
+                    lens_ui.num_wavelengths *= 10;
+                    lens_ui.update(&state.device, &state.queue);
 
-                    poly_res.resize(
-                        winit::dpi::PhysicalSize {
-                            width: sim_params[9] as _,
-                            height: sim_params[10] as _,
-                        },
-                        state.scale_factor,
-                        &state.device,
-                        &state.config,
-                    );
+                    if lens_ui.triangulate {
+                        poly_tri
+                            .render_hires(
+                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                &state.device,
+                                &state.queue,
+                                &mut lens_ui,
+                            )
+                            .unwrap();
+
+                        poly_tri.resize(
+                            winit::dpi::PhysicalSize {
+                                width: sim_params[9] as _,
+                                height: sim_params[10] as _,
+                            },
+                            state.scale_factor,
+                            &state.device,
+                            &state.config,
+                        );
+                    } else {
+                        poly_res
+                            .render_hires(
+                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                &state.device,
+                                &state.queue,
+                                10.0_f64.powf(lens_ui.hi_dots_exponent) as u64,
+                                &mut lens_ui,
+                            )
+                            .unwrap();
+
+                        poly_res.resize(
+                            winit::dpi::PhysicalSize {
+                                width: sim_params[9] as _,
+                                height: sim_params[10] as _,
+                            },
+                            state.scale_factor,
+                            &state.device,
+                            &state.config,
+                        );
+                    }
                     lens_ui.sim_params = sim_params;
                     lens_ui.needs_update = true;
+                    lens_ui.num_wavelengths /= 10;
                     save_png::save_png(&tex, size, &state.device, &state.queue);
 
                     println!("Rendering and saving image took {:?}", now.elapsed());

@@ -605,7 +605,7 @@ impl LensState {
 
     /// update the buffers from the internal state
     pub fn update(&mut self, device: &Device, queue: &Queue) {
-        self.sim_params[0] = self.opacity * self.opacity;
+        self.sim_params[0] = self.opacity * self.opacity / self.num_wavelengths as f32;
 
         self.sim_params[5] = self.draw as f32;
         self.sim_params[6] = self.which_ghost as f32;

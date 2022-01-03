@@ -694,8 +694,8 @@ impl PolyRes {
             "opacity_mul: {}",
             (num_dots as f64 / num_rays as f64) as f32
         );
-        let opacity = lens_state.sim_params[0];
-        lens_state.opacity *= 2. * (num_dots as f64 / num_rays as f64) as f32;
+        let opacity = lens_state.opacity;
+        lens_state.opacity *= 10. * ((num_dots as f64 / num_rays as f64) as f32).sqrt();
 
         lens_state.update(device, queue);
 
