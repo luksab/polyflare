@@ -680,7 +680,7 @@ impl PolyRes {
         num_rays: u64,
         lens_state: &mut LensState,
     ) -> Result<(), wgpu::SurfaceError> {
-        let num_per_iter = 10_000_000;
+        let num_per_iter = 65535 * 64;
 
         let iters = ((num_rays / num_per_iter) as f32).sqrt() as u32;
         let width = lens_state.pos_params[9] / iters as f32;
