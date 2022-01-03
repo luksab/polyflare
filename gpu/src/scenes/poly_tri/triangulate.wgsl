@@ -99,9 +99,11 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   var num_areas = 0;
   let self = rays.rays[(x + y * dot_side_len) + offset].pos;
 
+  // basically irrelevant for 8 elements in terms of performance
+  // whether to use one or all if statements
   if (x < dot_side_len - u32(1) && y < dot_side_len - u32(1)){
-    let b = rays.rays[(x + u32(1) + y * dot_side_len)].pos;
-    let c = rays.rays[(x + (y + u32(1)) * dot_side_len)].pos;
+    let b = rays.rays[(x + u32(1) + y * dot_side_len) + offset].pos;
+    let c = rays.rays[(x + (y + u32(1)) * dot_side_len) + offset].pos;
 
     let s1 = self-b;
     let s2 = self-c;
@@ -113,8 +115,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   }
 
   if (x > u32(0) && y < dot_side_len - u32(1)){
-    let b = rays.rays[(x - u32(1) + y * dot_side_len)].pos;
-    let c = rays.rays[(x + (y + u32(1)) * dot_side_len)].pos;
+    let b = rays.rays[(x - u32(1) + y * dot_side_len) + offset].pos;
+    let c = rays.rays[(x + (y + u32(1)) * dot_side_len) + offset].pos;
 
     let s1 = self-b;
     let s2 = self-c;
@@ -126,8 +128,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   }
 
   if (x < dot_side_len - u32(1) && y > u32(0)){
-    let b = rays.rays[(x + u32(1) + y * dot_side_len)].pos;
-    let c = rays.rays[(x + (y - u32(1)) * dot_side_len)].pos;
+    let b = rays.rays[(x + u32(1) + y * dot_side_len) + offset].pos;
+    let c = rays.rays[(x + (y - u32(1)) * dot_side_len) + offset].pos;
 
     let s1 = self-b;
     let s2 = self-c;
@@ -139,8 +141,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   }
 
   if (x > u32(0) && y > u32(0)){
-    let b = rays.rays[(x - u32(1) + y * dot_side_len)].pos;
-    let c = rays.rays[(x + (y - u32(1)) * dot_side_len)].pos;
+    let b = rays.rays[(x - u32(1) + y * dot_side_len) + offset].pos;
+    let c = rays.rays[(x + (y - u32(1)) * dot_side_len) + offset].pos;
 
     let s1 = self-b;
     let s2 = self-c;

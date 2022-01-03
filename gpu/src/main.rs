@@ -233,7 +233,6 @@ fn main() {
                 }
 
                 // Render debug view
-                println!("update_lens: {}", update_lens);
                 if update_lens | update_ray_num {
                     poly_optics.update_rays(&state.device, &state.queue, true, &lens_ui);
                 }
