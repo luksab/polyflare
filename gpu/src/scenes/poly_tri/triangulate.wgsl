@@ -84,6 +84,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let ghost_num = global_invocation_id.x / (u32(params.side_len) * u32(params.side_len));
   let offset = ghost_num * (u32(params.side_len) * u32(params.side_len));
 
+  if (ghost_num >= arrayLength(&rays.rays)) {
+    return;
+  }
+
   let ray_num = index;
 
   // we need the sqrt to scale the movement in each direction by
