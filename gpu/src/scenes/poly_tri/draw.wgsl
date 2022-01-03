@@ -8,7 +8,7 @@ struct VertexInput {
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
     [[location(0)]] strength: f32;
-    [[location(1)]] wavelength: f32;
+    [[location(1)]] rgb: vec3<f32>;
     [[location(2)]] aperture_pos: vec2<f32>;
 };
 
@@ -76,12 +76,15 @@ fn lookup_rgb(wavelength: f32) -> vec3<f32> {
 fn mainv(
     in: VertexInput,
 ) -> VertexOutput {
+    var rgb = lookup_rgb(in.wavelength);
+    rgb.g = rgb.g * 0.6;
+
     var out: VertexOutput;
     // out.clip_position = vec4<f32>(pos, 0.,1.);
     out.clip_position = vec4<f32>(in.pos / 4.0, 0.,1.);
     // out.clip_position = vec4<f32>(0.5, 0.5, 0.,1.);
     out.strength = in.strength;
-    out.wavelength = in.wavelength;
+    out.rgb = rgb;
     out.aperture_pos = in.aperture_pos;
     return out;
 }
@@ -125,7 +128,6 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   }
 
   let s = strength * params.opacity;
-  var rgb = lookup_rgb(in.wavelength);
-  rgb.g = rgb.g * 0.6;
-  return vec4<f32>(rgb, s);
+  
+  return vec4<f32>(in.rgb, s);
 }
