@@ -73,6 +73,8 @@ pub struct LensState {
     pub which_ghost: u32,
     /// whether to draw using triangulation or direct raytracing
     pub triangulate: bool,
+    /// whether to draw the background
+    pub draw_background: bool,
 
     /// GUI representation of the lens
     lens: Vec<ElementState>,
@@ -421,6 +423,7 @@ impl LensState {
             hi_dots_exponent: 10.,
             draw: 1,
             triangulate: true,
+            draw_background: true,
             opacity: 0.75,
             which_ghost: 0,
             lens,
@@ -974,10 +977,16 @@ impl LensState {
                     || ui.radio_button("render normal", &mut self.draw, 2)
                     || ui.radio_button("render ghosts", &mut self.draw, 1);
 
+                
+                ui.text("render");
                 ui.same_line();
-                if ui.checkbox("render triangulated", &mut self.triangulate) {
+                if ui.checkbox("triangulated", &mut self.triangulate) {
                     update_lens = true;
                     update_dots = true;
+                }
+                ui.same_line();
+                if ui.checkbox("backgroud", &mut self.draw_background) {
+                    update_lens = true;
                 }
 
                 // ui.radio_button("num_rays", &mut lens_ui.1, true);

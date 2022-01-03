@@ -236,14 +236,16 @@ fn main() {
                 if update_lens | update_ray_num {
                     poly_optics.update_rays(&state.device, &state.queue, true, &lens_ui);
                 }
-                match poly_optics.render(&view, &state.device, &state.queue, &lens_ui) {
-                    Ok(_) => {}
-                    // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size, None),
-                    // The system is out of memory, we should probably quit
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{:?}", e),
+                if lens_ui.draw_background {
+                    match poly_optics.render(&view, &state.device, &state.queue, &lens_ui) {
+                        Ok(_) => {}
+                        // Reconfigure the surface if lost
+                        Err(wgpu::SurfaceError::Lost) => state.resize(state.size, None),
+                        // The system is out of memory, we should probably quit
+                        Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                        // All other errors (Outdated, Timeout) should be resolved by the next frame
+                        Err(e) => eprintln!("{:?}", e),
+                    }
                 }
 
                 if render {
