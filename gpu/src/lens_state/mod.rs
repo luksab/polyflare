@@ -743,7 +743,12 @@ impl LensState {
     /// create an imgui window from Self and return
     ///
     /// (update_lens, update_lens_size, update_ray_num, update_dot_num, render)
-    pub fn build_ui(&mut self, ui: &Ui, device: &Device, queue: &Queue) -> (bool, bool, bool, bool) {
+    pub fn build_ui(
+        &mut self,
+        ui: &Ui,
+        device: &Device,
+        queue: &Queue,
+    ) -> (bool, bool, bool, bool) {
         let mut update_lens = self.first_frame;
         let mut update_sensor = self.first_frame;
         imgui::Window::new("Lens")
@@ -954,8 +959,8 @@ impl LensState {
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([600.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
-                let num_ghosts = (self.lens.len() * self.lens.len()) as u32;
-                if Slider::new("which ghost", 0, num_ghosts + 1).build(ui, &mut self.which_ghost) {
+                let num_ghosts = (self.actual_lens.get_ghosts_indicies(1, 0).len()) as u32;
+                if Slider::new("which ghost", 0, num_ghosts).build(ui, &mut self.which_ghost) {
                     update_lens = true;
                 }
                 ui.text(format!("Framerate: {:.0}", self.fps));
@@ -977,7 +982,6 @@ impl LensState {
                     || ui.radio_button("render normal", &mut self.draw, 2)
                     || ui.radio_button("render ghosts", &mut self.draw, 1);
 
-                
                 ui.text("render");
                 ui.same_line();
                 if ui.checkbox("triangulated", &mut self.triangulate) {
