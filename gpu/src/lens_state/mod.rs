@@ -71,6 +71,8 @@ pub struct LensState {
     pub opacity: f32,
     /// which ghost to draw: 0 being all, 1 being the fist...
     pub which_ghost: u32,
+    /// number of wavelengths to render
+    pub num_wavelengths: u32,
     /// whether to draw using triangulation or direct raytracing
     pub triangulate: bool,
     /// whether to draw the background
@@ -95,7 +97,7 @@ pub struct LensState {
     /// buffer of the current sensor
     pub sensor_buffer: Buffer,
     /// positions of the rays and the sensor
-    pos_params_buffer: wgpu::Buffer,
+    pub pos_params_buffer: wgpu::Buffer,
     /// buffer for which ghost to draw
     pub ghost_indices: Vec<[u32; 2]>,
     pub ghost_indices_buffer: wgpu::Buffer,
@@ -426,6 +428,7 @@ impl LensState {
             draw_background: true,
             opacity: 0.75,
             which_ghost: 0,
+            num_wavelengths: 3,
             lens,
             last_frame_time: Instant::now(),
             fps: 0.,
@@ -602,7 +605,7 @@ impl LensState {
 
     /// update the buffers from the internal state
     pub fn update(&mut self, device: &Device, queue: &Queue) {
-        self.sim_params[0] = self.opacity;
+        self.sim_params[0] = self.opacity * self.opacity;
 
         self.sim_params[5] = self.draw as f32;
         self.sim_params[6] = self.which_ghost as f32;
@@ -945,6 +948,8 @@ impl LensState {
 
                 update_sensor |= Slider::new("sensor distance", 0., 20.)
                     .build(ui, &mut self.actual_lens.sensor_dist);
+                update_lens |=
+                    Slider::new("num_wavelengths", 1, 20).build(ui, &mut self.num_wavelengths);
                 update_lens |= update_sensor
             });
 
@@ -969,13 +974,14 @@ impl LensState {
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));
 
                 update_dots |=
-                    Slider::new("dots_exponent", 0., 7.8).build(ui, &mut self.dots_exponent);
+                    Slider::new("dots_exponent", 0., if self.triangulate { 3. } else { 7.8 })
+                        .build(ui, &mut self.dots_exponent);
                 ui.text(format!(
                     "dots: {}",
                     10.0_f64.powf(self.dots_exponent) as u32
                 ));
 
-                update_lens |= Slider::new("opacity", 0., 4.).build(ui, &mut self.opacity);
+                update_lens |= Slider::new("opacity", 0., 5.).build(ui, &mut self.opacity);
 
                 update_lens |= ui.radio_button("render nothing", &mut self.draw, 0)
                     || ui.radio_button("render both", &mut self.draw, 3)

@@ -454,8 +454,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
         dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
         dir = normalize(dir);
-        let wavelength = 0.5;
-        var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength), vec2<f32>(0., 0.));
+        var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.));
 
         for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
             let element = elements.el[ele];
@@ -496,8 +495,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
     dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
     dir = normalize(dir);
-    let wavelength = 0.5;
-    var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength), vec2<f32>(0., 0.));
+    var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.));
     // iterate through all Elements and propagate the Ray through
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];

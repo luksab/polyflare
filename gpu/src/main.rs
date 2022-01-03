@@ -384,7 +384,7 @@ fn main() {
                                 renderer.textures.get(res_window_texture_id).unwrap().view(),
                                 &state.device,
                                 &state.queue,
-                                &lens_ui,
+                                &mut lens_ui,
                                 update_dot_num | update_lens,
                             ) {
                                 Ok(_) => {}

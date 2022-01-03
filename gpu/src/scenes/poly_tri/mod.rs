@@ -519,7 +519,7 @@ impl PolyTri {
 
         let num_ghosts = lens_state.ghost_indices.len() as u32;
 
-        let work_group_count = (self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64; // round up
+        let work_group_count = std::cmp::min((self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64, 65535); // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -530,7 +530,7 @@ impl PolyTri {
             cpass.dispatch(work_group_count, 1, 1);
         }
 
-        let work_group_count = (self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64; // round up
+        let work_group_count = std::cmp::min((self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64, 65535); // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -706,23 +706,41 @@ impl PolyTri {
         view: &TextureView,
         device: &wgpu::Device,
         queue: &Queue,
-        lens_state: &LensState,
+        lens_state: &mut LensState,
         update: bool,
     ) -> Result<(), wgpu::SurfaceError> {
+        let mut first = true;
+        for wavelen in 0..lens_state.num_wavelengths {
+            let start_wavelen = 0.38;
+            let end_wavelen = 0.78;
+            let wavelength =
+                start_wavelen + wavelen as f64 * ((end_wavelen - start_wavelen) / lens_state.num_wavelengths as f64);
+            // let strength = polynomial_optics::Lens::str_from_wavelen(wavelength) / 10.;
+
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+            lens_state.pos_params[3] = wavelength as f32;
+            queue.write_buffer(&lens_state.pos_params_buffer, 0, bytemuck::cast_slice(&lens_state.pos_params));
+            // lens_state.pos_params[7] = strength as f32;
+
+            self.update_dots(device, &mut encoder, update, lens_state);
+
+            self.render_dots(
+                &self.high_color_tex.view,
+                &mut encoder,
+                lens_state,
+                first,
+                lens_state.ghost_indices.len() as u32,
+            );
+            queue.submit(iter::once(encoder.finish()));
+            first = false;
+        }
+
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
-
-        self.update_dots(device, &mut encoder, update, lens_state);
-
-        self.render_dots(
-            &self.high_color_tex.view,
-            &mut encoder,
-            lens_state,
-            true,
-            lens_state.ghost_indices.len() as u32,
-        );
-
         if cfg!(debug_assertions) {
             let output_buffer_size = (self.dot_side_len
                 * self.dot_side_len
