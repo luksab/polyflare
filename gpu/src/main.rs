@@ -218,7 +218,25 @@ fn main() {
                     poly_res.update(&state.device, &lens_ui);
                 }
 
+                let (update_lens, update_ray_num, update_dot_num, render) =
+                    lens_ui.build_ui(&ui, &state.device, &state.queue);
+
+                if update_dot_num {
+                    poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                    poly_tri.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                    lens_ui.sim_params[11] = poly_tri.dot_side_len as f32;
+                    lens_ui.needs_update = true;
+                }
+                // Dot/ray num
+                if update_ray_num {
+                    poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
+                }
+
                 // Render debug view
+                println!("update_lens: {}", update_lens);
+                if update_lens | update_ray_num {
+                    poly_optics.update_rays(&state.device, &state.queue, true, &lens_ui);
+                }
                 match poly_optics.render(&view, &state.device, &state.queue, &lens_ui) {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
@@ -228,9 +246,6 @@ fn main() {
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
                     Err(e) => eprintln!("{:?}", e),
                 }
-
-                let (update_lens, update_ray_num, update_dot_num, render) =
-                    lens_ui.build_ui(&ui, &state.device, &state.queue);
 
                 if render {
                     let now = Instant::now();
@@ -298,19 +313,7 @@ fn main() {
 
                     println!("Rendering and saving image took {:?}", now.elapsed());
                 }
-                // Dot/ray num
-                if update_ray_num {
-                    poly_optics.num_rays = 10.0_f64.powf(lens_ui.ray_exponent) as u32;
-                }
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
-                if update_dot_num {
-                    poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
-                    poly_tri.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
-                    lens_ui.sim_params[11] = poly_tri.dot_side_len as f32;
-                    lens_ui.needs_update = true;
-                }
-
-                poly_optics.update_rays(&state.device, &state.queue, update_ray_num, &lens_ui);
 
                 if lens_ui.triangulate {
                     // let mut encoder =
