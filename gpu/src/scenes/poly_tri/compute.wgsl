@@ -58,6 +58,7 @@ struct SimParams {
   window_width: f32;
   window_height: f32;
   side_len: f32;
+  zoom: f32;
 };
 
 

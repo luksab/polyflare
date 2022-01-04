@@ -13,8 +13,18 @@ struct VertexOutput {
 
 struct SimParams {
   opacity: f32;
+  width_scaled: f32;
+  height_scaled: f32;
   width: f32;
   height: f32;
+  draw_mode: f32;
+  which_ghost: f32;
+  window_width_scaled: f32;
+  window_height_scaled: f32;
+  window_width: f32;
+  window_height: f32;
+  side_len: f32;
+  zoom: f32;
 };
 
 struct SensorDatapoint {
@@ -40,7 +50,7 @@ fn lookup_rgb(wavelength: f32) -> vec3<f32> {
 fn mainv(
     in: VertexInput,
 ) -> VertexOutput {
-    let screenAspect = normalize(vec2<f32>(params.height, params.width));
+    let screenAspect = normalize(vec2<f32>(params.height_scaled, params.width_scaled));
 
     var out: VertexOutput;
     out.clip_position = vec4<f32>(vec2<f32>(in.o.z, in.o.y) / 4.0 * screenAspect, 0.,1.);

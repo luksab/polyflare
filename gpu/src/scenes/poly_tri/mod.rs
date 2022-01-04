@@ -330,7 +330,6 @@ impl PolyTri {
         dot_side_len: u32,
         num_ghosts: u32,
     ) -> (ComputePipeline, Buffer) {
-        println!("rendering {} ghosts", num_ghosts);
         let triangulate_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(

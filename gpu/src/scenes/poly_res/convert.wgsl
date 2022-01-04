@@ -19,6 +19,8 @@ struct SimParams {
   window_height_scaled: f32;
   window_width: f32;
   window_height: f32;
+  side_len: f32;
+  zoom: f32;
 };
 
 [[group(1), binding(2)]] var<uniform> params : SimParams;

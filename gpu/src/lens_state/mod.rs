@@ -137,9 +137,10 @@ pub struct LensState {
     ///   9:window_width: f32;
     ///  10:window_height: f32;
     ///  11:side_len: f32;
+    ///  12:zoom: f32;
     /// };
     /// ```
-    pub sim_params: [f32; 12],
+    pub sim_params: [f32; 13],
 
     /// buffer for the currently selected lens
     lens_buffer: Buffer,
@@ -341,7 +342,7 @@ impl LensState {
 
         // buffer for simulation parameters uniform
         let sim_params = [
-            0.1, 512., 512., 512., 512., 1.0, 1.0, 512., 512., 512., 512., 0.,
+            0.1, 512., 512., 512., 512., 1.0, 1.0, 512., 512., 512., 512., 0., 4.,
         ];
         let sim_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
@@ -829,10 +830,13 @@ impl LensState {
                                 update_lens |=
                                     ui.checkbox(format!("spherical##{}", i), &mut lens.spherical);
 
-                                update_lens |=
-                                    Slider::new(format!("d##{}", i), 0., 5.).build(ui, &mut lens.d);
+                                update_lens |= Drag::new(format!("d##{}", i))
+                                    .range(0., 500.)
+                                    .speed(0.1)
+                                    .build(ui, &mut lens.d);
                                 ui.same_line();
-                                update_lens |= Slider::new(format!("r##{}", i), -6., 3.)
+                                update_lens |= Drag::new(format!("r##{}", i))
+                                    .speed(0.01)
                                     .build(ui, &mut lens.r);
                                 // update_lens |=
                                 //     Slider::new(format!("d2##{}", i), -3., 6.).build(&ui, &mut lens.d2);
@@ -866,9 +870,13 @@ impl LensState {
                             if CollapsingHeader::new(format!("Aperture {:?}", aperture_counter))
                                 .build(ui)
                             {
-                                update_lens |= Slider::new(format!("d##{}", i), 0., 5.)
+                                update_lens |= Drag::new(format!("d##{}", i))
+                                    .range(0., 500.)
+                                    .speed(0.1)
                                     .build(ui, &mut aperture.d);
-                                update_lens |= Slider::new(format!("r1##{}", i), 0., 3.)
+                                update_lens |= Drag::new(format!("r1##{}", i))
+                                    .range(0., 100.)
+                                    .speed(0.01)
                                     .build(ui, &mut aperture.r);
                                 update_lens |= Slider::new(format!("num_blades##{}", i), 3, 16)
                                     .build(ui, &mut aperture.num_blades);
@@ -946,8 +954,11 @@ impl LensState {
                     }
                 });
 
-                update_sensor |= Slider::new("sensor distance", 0., 20.)
+                update_sensor |= Drag::new("sensor distance")
+                    .range(0., 469245.)
+                    .speed(0.01)
                     .build(ui, &mut self.actual_lens.sensor_dist);
+                update_lens |= Slider::new("zoom", 0., 10.).build(ui, &mut self.sim_params[12]);
                 update_lens |=
                     Slider::new("num_wavelengths", 1, 20).build(ui, &mut self.num_wavelengths);
                 update_lens |= update_sensor
@@ -974,17 +985,19 @@ impl LensState {
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));
 
                 update_dots |=
-                    Slider::new("dots_exponent", 0., if self.triangulate { 3. } else { 7.8 })
+                    Slider::new("dots_exponent", 0., if self.triangulate { 3. } else { 7.3 })
                         .build(ui, &mut self.dots_exponent);
                 ui.text(format!(
                     "dots: {}",
                     10.0_f64.powf(self.dots_exponent) as u32
                 ));
 
-                update_lens |= Slider::new("opacity", 0., 5.).build(ui, &mut self.opacity);
+                update_lens |= Drag::new("opacity")
+                    .range(0., 100.)
+                    .speed(0.001)
+                    .build(ui, &mut self.opacity);
 
-                update_lens |= ui.radio_button("render nothing", &mut self.draw, 0)
-                    || ui.radio_button("render both", &mut self.draw, 3)
+                update_lens |= ui.radio_button("render both", &mut self.draw, 3)
                     || ui.radio_button("render normal", &mut self.draw, 2)
                     || ui.radio_button("render ghosts", &mut self.draw, 1);
 
@@ -1001,20 +1014,25 @@ impl LensState {
 
                 // ui.radio_button("num_rays", &mut lens_ui.1, true);
                 update_lens |= Drag::new("ray origin")
-                    .speed(0.01)
+                    .speed(0.001)
                     .range(-10., 10.)
                     .build_array(ui, &mut self.pos_params[0..3]);
 
                 update_lens |= Drag::new("ray direction")
-                    .speed(0.01)
+                    .speed(0.001)
                     .range(-1., 1.)
                     .build_array(ui, &mut self.pos_params[4..7]);
 
-                update_lens |= Slider::new("ray width", 0., 1.).build(ui, &mut self.pos_params[9]);
+                update_lens |= Drag::new("ray width")
+                    .range(0., 10.)
+                    .speed(0.01)
+                    .build(ui, &mut self.pos_params[9]);
 
                 render = ui.button("hi-res render");
                 ui.same_line();
-                Slider::new("num_hi_rays", 0., 12.).build(ui, &mut self.hi_dots_exponent);
+                if !self.triangulate {
+                    Slider::new("num_hi_rays", 0., 12.).build(ui, &mut self.hi_dots_exponent);
+                }
             });
 
         if update_lens || self.needs_update {

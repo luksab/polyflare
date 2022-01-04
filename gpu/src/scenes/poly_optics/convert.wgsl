@@ -27,6 +27,14 @@ struct SimParams {
   height_scaled: f32;
   width: f32;
   height: f32;
+  draw_mode: f32;
+  which_ghost: f32;
+  window_width_scaled: f32;
+  window_height_scaled: f32;
+  window_width: f32;
+  window_height: f32;
+  side_len: f32;
+  zoom: f32;
 };
 
 

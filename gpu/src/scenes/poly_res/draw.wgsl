@@ -18,6 +18,14 @@ struct SimParams {
   height_scaled: f32;
   width: f32;
   height: f32;
+  draw_mode: f32;
+  which_ghost: f32;
+  window_width_scaled: f32;
+  window_height_scaled: f32;
+  window_width: f32;
+  window_height: f32;
+  side_len: f32;
+  zoom: f32;
 };
 
 struct SensorDatapoint {
@@ -47,7 +55,7 @@ fn mainv(
 ) -> VertexOutput {
     var out: VertexOutput;
     // out.clip_position = vec4<f32>(pos, 0.,1.);
-    out.clip_position = vec4<f32>(vec2<f32>(in.o.x, in.o.y) / 4.0, 0.,1.);
+    out.clip_position = vec4<f32>(vec2<f32>(in.o.x, in.o.y) / 16.0 * params.zoom, 0.,1.);
     // out.clip_position = vec4<f32>(0.5, 0.5, 0.,1.);
     out.strength = in.strength;
     out.wavelength = in.wavelength;

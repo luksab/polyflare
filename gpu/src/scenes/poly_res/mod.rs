@@ -383,7 +383,7 @@ impl PolyRes {
             label: Some("Render Encoder"),
         });
 
-        let work_group_count = (self.num_dots + 64 - 1) / 64; // round up
+        let work_group_count = std::cmp::min((self.num_dots + 64 - 1) / 64, 65535); // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
