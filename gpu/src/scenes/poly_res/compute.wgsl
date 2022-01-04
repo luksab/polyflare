@@ -388,8 +388,7 @@ fn intersect_ray(self: Ray, plane: f32) -> Ray {
 
     let intersect = self.o + self.d * num_z;
     var ray = self;
-    ray.o.x = intersect.x;
-    ray.o.y = intersect.y;
+    ray.o = vec3<f32>(intersect.x, intersect.y, ray.o.z);
     return ray;
 }
 
