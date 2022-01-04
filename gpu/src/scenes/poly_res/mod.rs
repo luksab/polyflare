@@ -508,7 +508,7 @@ impl PolyRes {
                     .modified()
                     .unwrap()
             {
-                print!("reloading convert shader! ");
+                print!("reloading convert shader ");
                 let now = Instant::now();
                 self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").ok();
                 let (pipeline, bind_group) = Self::convert_shader(
@@ -530,7 +530,7 @@ impl PolyRes {
                     .unwrap()
             {
                 self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl").ok();
-                print!("reloading draw shader! ");
+                print!("reloading draw shader ");
                 let now = Instant::now();
                 let pipeline =
                     Self::shader_draw(device, self.format, &lens_state.params_bind_group_layout);
@@ -546,7 +546,7 @@ impl PolyRes {
                     .unwrap()
             {
                 self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").ok();
-                print!("reloading compute shader! ");
+                print!("reloading compute shader ");
                 let now = Instant::now();
                 let (pipeline, bind_group, dots_buffer) = Self::raytrace_shader(
                     device,

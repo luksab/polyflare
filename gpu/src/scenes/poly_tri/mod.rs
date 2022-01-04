@@ -616,7 +616,7 @@ impl PolyTri {
                     .modified()
                     .unwrap()
             {
-                print!("reloading convert shader! ");
+                print!("reloading convert shader ");
                 let now = Instant::now();
                 self.convert_meta =
                     std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").ok();
@@ -639,7 +639,7 @@ impl PolyTri {
                     .unwrap()
             {
                 self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").ok();
-                print!("reloading draw shader! ");
+                print!("reloading draw shader ");
                 let now = Instant::now();
                 let pipeline = Self::shader_draw(
                     device,
@@ -659,7 +659,7 @@ impl PolyTri {
                     .unwrap()
             {
                 self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").ok();
-                print!("reloading compute shader!");
+                print!("reloading compute shader ");
                 let now = Instant::now();
                 let (pipeline, bind_group, compute_bind_group_layout, vertex_buffer) =
                     Self::raytrace_shader(
@@ -693,7 +693,7 @@ impl PolyTri {
             {
                 self.triangulate_meta =
                     std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").ok();
-                print!("reloading triangulate shader!");
+                print!("reloading triangulate shader ");
                 let now = Instant::now();
                 let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
                     device,

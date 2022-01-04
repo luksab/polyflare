@@ -598,7 +598,7 @@ impl PolyOptics {
                     .modified()
                     .unwrap()
             {
-                print!("reloading convert shader! ");
+                print!("reloading convert shader ");
                 let now = Instant::now();
                 self.convert_meta =
                     std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").ok();
@@ -623,7 +623,7 @@ impl PolyOptics {
                     .unwrap()
             {
                 self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl").ok();
-                print!("reloading draw shader! ");
+                print!("reloading draw shader ");
                 let now = Instant::now();
                 let pipeline =
                     Self::shader_draw(device, self.format, &lens_state.params_bind_group_layout);
@@ -641,7 +641,7 @@ impl PolyOptics {
             {
                 self.compute_meta =
                     std::fs::metadata("gpu/src/scenes/poly_optics/compute.wgsl").ok();
-                print!("reloading compute shader! ");
+                print!("reloading compute shader ");
                 let now = Instant::now();
                 let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
                     device,
