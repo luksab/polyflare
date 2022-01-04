@@ -18,9 +18,9 @@ pub struct PolyRes {
 
     pub num_dots: u32,
 
-    convert_meta: std::fs::Metadata,
-    draw_meta: std::fs::Metadata,
-    compute_meta: std::fs::Metadata,
+    convert_meta: Option<std::fs::Metadata>,
+    draw_meta: Option<std::fs::Metadata>,
+    compute_meta: Option<std::fs::Metadata>,
     format: TextureFormat,
     conf_format: TextureFormat,
 }
@@ -35,7 +35,7 @@ impl PolyRes {
             label: Some("polyOptics"),
             source: wgpu::ShaderSource::Wgsl(
                 read_to_string("gpu/src/scenes/poly_res/draw.wgsl")
-                    .expect("Shader could not be read.")
+                    .unwrap_or_else(|_| include_str!("draw.wgsl").to_string())
                     .into(),
             ),
         });
@@ -175,7 +175,7 @@ impl PolyRes {
                 label: Some("conversion"),
                 source: wgpu::ShaderSource::Wgsl(
                     read_to_string("gpu/src/scenes/poly_res/convert.wgsl")
-                        .expect("Shader could not be read.")
+                        .unwrap_or_else(|_| include_str!("convert.wgsl").to_string())
                         .into(),
                 ),
             });
@@ -244,7 +244,7 @@ impl PolyRes {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
                 read_to_string("gpu/src/scenes/poly_res/compute.wgsl")
-                    .expect("Shader could not be read.")
+                    .unwrap_or_else(|_| include_str!("compute.wgsl").to_string())
                     .into(),
             ),
         });
@@ -337,9 +337,9 @@ impl PolyRes {
             num_dots,
         );
 
-        let convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").unwrap();
-        let draw_meta = std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl").unwrap();
-        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").unwrap();
+        let convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").ok();
+        let draw_meta = std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl").ok();
+        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").ok();
 
         Self {
             boid_render_pipeline,
@@ -501,61 +501,64 @@ impl PolyRes {
         //     self.update_cells(device, queue);
         // }
         //self.update_rays(device);
-
-        if self.convert_meta.modified().unwrap()
-            != std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl")
-                .unwrap()
-                .modified()
-                .unwrap()
-        {
-            print!("reloading convert shader! ");
-            let now = Instant::now();
-            self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").unwrap();
-            let (pipeline, bind_group) = Self::convert_shader(
-                device,
-                &lens_state.params_bind_group_layout,
-                &self.conf_format,
-                &self.high_color_tex,
-            );
-            self.conversion_render_pipeline = pipeline;
-            self.conversion_bind_group = bind_group;
-            println!("took {:?}.", now.elapsed());
+        if let Some(convert_meta) = &self.convert_meta {
+            if convert_meta.modified().unwrap()
+                != std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl")
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            {
+                print!("reloading convert shader! ");
+                let now = Instant::now();
+                self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_res/convert.wgsl").ok();
+                let (pipeline, bind_group) = Self::convert_shader(
+                    device,
+                    &lens_state.params_bind_group_layout,
+                    &self.conf_format,
+                    &self.high_color_tex,
+                );
+                self.conversion_render_pipeline = pipeline;
+                self.conversion_bind_group = bind_group;
+                println!("took {:?}.", now.elapsed());
+            }
         }
-
-        if self.draw_meta.modified().unwrap()
-            != std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl")
-                .unwrap()
-                .modified()
-                .unwrap()
-        {
-            self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl").unwrap();
-            print!("reloading draw shader! ");
-            let now = Instant::now();
-            let pipeline =
-                Self::shader_draw(device, self.format, &lens_state.params_bind_group_layout);
-            self.boid_render_pipeline = pipeline;
-            println!("took {:?}.", now.elapsed());
+        if let Some(draw_meta) = &self.draw_meta {
+            if draw_meta.modified().unwrap()
+                != std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl")
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            {
+                self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_res/draw.wgsl").ok();
+                print!("reloading draw shader! ");
+                let now = Instant::now();
+                let pipeline =
+                    Self::shader_draw(device, self.format, &lens_state.params_bind_group_layout);
+                self.boid_render_pipeline = pipeline;
+                println!("took {:?}.", now.elapsed());
+            }
         }
-
-        if self.compute_meta.modified().unwrap()
-            != std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl")
-                .unwrap()
-                .modified()
-                .unwrap()
-        {
-            self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").unwrap();
-            print!("reloading compute shader! ");
-            let now = Instant::now();
-            let (pipeline, bind_group, dots_buffer) = Self::raytrace_shader(
-                device,
-                &lens_state.lens_bind_group_layout,
-                &lens_state.params_bind_group_layout,
-                self.num_dots,
-            );
-            self.compute_pipeline = pipeline;
-            self.compute_bind_group = bind_group;
-            self.dots_buffer = dots_buffer;
-            println!("took {:?}.", now.elapsed());
+        if let Some(compute_meta) = &self.compute_meta {
+            if compute_meta.modified().unwrap()
+                != std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl")
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            {
+                self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_res/compute.wgsl").ok();
+                print!("reloading compute shader! ");
+                let now = Instant::now();
+                let (pipeline, bind_group, dots_buffer) = Self::raytrace_shader(
+                    device,
+                    &lens_state.lens_bind_group_layout,
+                    &lens_state.params_bind_group_layout,
+                    self.num_dots,
+                );
+                self.compute_pipeline = pipeline;
+                self.compute_bind_group = bind_group;
+                self.dots_buffer = dots_buffer;
+                println!("took {:?}.", now.elapsed());
+            }
         }
     }
 

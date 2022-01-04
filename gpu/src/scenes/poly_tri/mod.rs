@@ -21,10 +21,10 @@ pub struct PolyTri {
 
     pub dot_side_len: u32,
 
-    convert_meta: std::fs::Metadata,
-    draw_meta: std::fs::Metadata,
-    compute_meta: std::fs::Metadata,
-    triangulate_meta: std::fs::Metadata,
+    convert_meta: Option<std::fs::Metadata>,
+    draw_meta: Option<std::fs::Metadata>,
+    compute_meta: Option<std::fs::Metadata>,
+    triangulate_meta: Option<std::fs::Metadata>,
     format: TextureFormat,
     conf_format: TextureFormat,
 }
@@ -40,7 +40,7 @@ impl PolyTri {
             label: Some("polyOptics"),
             source: wgpu::ShaderSource::Wgsl(
                 read_to_string("gpu/src/scenes/poly_tri/draw.wgsl")
-                    .expect("Shader could not be read.")
+                    .unwrap_or_else(|_| include_str!("draw.wgsl").to_string())
                     .into(),
             ),
         });
@@ -181,7 +181,7 @@ impl PolyTri {
                 label: Some("conversion"),
                 source: wgpu::ShaderSource::Wgsl(
                     read_to_string("gpu/src/scenes/poly_tri/convert.wgsl")
-                        .expect("Shader could not be read.")
+                        .unwrap_or_else(|_| include_str!("convert.wgsl").to_string())
                         .into(),
                 ),
             });
@@ -251,7 +251,7 @@ impl PolyTri {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
                 read_to_string("gpu/src/scenes/poly_tri/compute.wgsl")
-                    .expect("Shader could not be read.")
+                    .unwrap_or_else(|_| include_str!("compute.wgsl").to_string())
                     .into(),
             ),
         });
@@ -334,7 +334,7 @@ impl PolyTri {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
                 read_to_string("gpu/src/scenes/poly_tri/triangulate.wgsl")
-                    .expect("Shader could not be read.")
+                    .unwrap_or_else(|_| include_str!("triangulate.wgsl").to_string())
                     .into(),
             ),
         });
@@ -457,11 +457,10 @@ impl PolyTri {
             lens_state.ghost_indices.len() as u32,
         );
 
-        let convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").unwrap();
-        let draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").unwrap();
-        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").unwrap();
-        let triangulate_meta =
-            std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").unwrap();
+        let convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").ok();
+        let draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").ok();
+        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").ok();
+        let triangulate_meta = std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").ok();
 
         Self {
             tri_render_pipeline,
@@ -610,98 +609,103 @@ impl PolyTri {
         //     self.update_cells(device, queue);
         // }
         //self.update_rays(device);
-
-        if self.convert_meta.modified().unwrap()
-            != std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl")
-                .unwrap()
-                .modified()
-                .unwrap()
-        {
-            print!("reloading convert shader! ");
-            let now = Instant::now();
-            self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").unwrap();
-            let (pipeline, bind_group) = Self::convert_shader(
-                device,
-                &lens_state.params_bind_group_layout,
-                &self.conf_format,
-                &self.high_color_tex,
-            );
-            self.conversion_render_pipeline = pipeline;
-            self.conversion_bind_group = bind_group;
-            println!("took {:?}.", now.elapsed());
-        }
-
-        if self.draw_meta.modified().unwrap()
-            != std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl")
-                .unwrap()
-                .modified()
-                .unwrap()
-        {
-            self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").unwrap();
-            print!("reloading draw shader! ");
-            let now = Instant::now();
-            let pipeline = Self::shader_draw(
-                device,
-                self.format,
-                &lens_state.params_bind_group_layout,
-                &lens_state.lens_bind_group_layout,
-            );
-            self.tri_render_pipeline = pipeline;
-            println!("took {:?}.", now.elapsed());
-        }
-
-        if self.compute_meta.modified().unwrap()
-            != std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl")
-                .unwrap()
-                .modified()
-                .unwrap()
-        {
-            self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").unwrap();
-            print!("reloading compute shader!");
-            let now = Instant::now();
-            let (pipeline, bind_group, compute_bind_group_layout, vertex_buffer) =
-                Self::raytrace_shader(
+        if let Some(convert_meta) = &self.convert_meta {
+            if convert_meta.modified().unwrap()
+                != std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl")
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            {
+                print!("reloading convert shader! ");
+                let now = Instant::now();
+                self.convert_meta =
+                    std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").ok();
+                let (pipeline, bind_group) = Self::convert_shader(
                     device,
+                    &lens_state.params_bind_group_layout,
+                    &self.conf_format,
+                    &self.high_color_tex,
+                );
+                self.conversion_render_pipeline = pipeline;
+                self.conversion_bind_group = bind_group;
+                println!("took {:?}.", now.elapsed());
+            }
+        }
+        if let Some(draw_meta) = &self.draw_meta {
+            if draw_meta.modified().unwrap()
+                != std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl")
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            {
+                self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").ok();
+                print!("reloading draw shader! ");
+                let now = Instant::now();
+                let pipeline = Self::shader_draw(
+                    device,
+                    self.format,
+                    &lens_state.params_bind_group_layout,
                     &lens_state.lens_bind_group_layout,
+                );
+                self.tri_render_pipeline = pipeline;
+                println!("took {:?}.", now.elapsed());
+            }
+        }
+        if let Some(compute_meta) = &self.compute_meta {
+            if compute_meta.modified().unwrap()
+                != std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl")
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            {
+                self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").ok();
+                print!("reloading compute shader!");
+                let now = Instant::now();
+                let (pipeline, bind_group, compute_bind_group_layout, vertex_buffer) =
+                    Self::raytrace_shader(
+                        device,
+                        &lens_state.lens_bind_group_layout,
+                        &lens_state.params_bind_group_layout,
+                        self.dot_side_len,
+                        lens_state.ghost_indices.len() as u32,
+                    );
+                self.compute_pipeline = pipeline;
+                self.compute_bind_group = bind_group;
+                self.vertex_buffer = vertex_buffer;
+                let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
+                    device,
+                    &compute_bind_group_layout,
                     &lens_state.params_bind_group_layout,
                     self.dot_side_len,
                     lens_state.ghost_indices.len() as u32,
                 );
-            self.compute_pipeline = pipeline;
-            self.compute_bind_group = bind_group;
-            self.vertex_buffer = vertex_buffer;
-            let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
-                device,
-                &compute_bind_group_layout,
-                &lens_state.params_bind_group_layout,
-                self.dot_side_len,
-                lens_state.ghost_indices.len() as u32,
-            );
-            self.triangulate_pipeline = triangulate_pipeline;
-            self.tri_index_buffer = tri_index_buffer;
-            println!("took {:?}.", now.elapsed());
+                self.triangulate_pipeline = triangulate_pipeline;
+                self.tri_index_buffer = tri_index_buffer;
+                println!("took {:?}.", now.elapsed());
+            }
         }
-
-        if self.triangulate_meta.modified().unwrap()
-            != std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl")
-                .unwrap()
-                .modified()
-                .unwrap()
-        {
-            self.triangulate_meta =
-                std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").unwrap();
-            print!("reloading triangulate shader!");
-            let now = Instant::now();
-            let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
-                device,
-                &self.compute_bind_group_layout,
-                &lens_state.params_bind_group_layout,
-                self.dot_side_len,
-                lens_state.ghost_indices.len() as u32,
-            );
-            self.triangulate_pipeline = triangulate_pipeline;
-            self.tri_index_buffer = tri_index_buffer;
-            println!("took {:?}.", now.elapsed());
+        if let Some(triangulate_meta) = &self.triangulate_meta {
+            if triangulate_meta.modified().unwrap()
+                != std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl")
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            {
+                self.triangulate_meta =
+                    std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").ok();
+                print!("reloading triangulate shader!");
+                let now = Instant::now();
+                let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
+                    device,
+                    &self.compute_bind_group_layout,
+                    &lens_state.params_bind_group_layout,
+                    self.dot_side_len,
+                    lens_state.ghost_indices.len() as u32,
+                );
+                self.triangulate_pipeline = triangulate_pipeline;
+                self.tri_index_buffer = tri_index_buffer;
+                println!("took {:?}.", now.elapsed());
+            }
         }
     }
 
