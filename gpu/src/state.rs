@@ -104,8 +104,8 @@ impl State {
                         label: None,
                         features: wgpu::Features::empty(),
                         limits: wgpu::Limits {
-                            max_texture_dimension_1d: 4096,
-                            max_texture_dimension_2d: 4096,
+                            max_texture_dimension_1d: 16384,
+                            max_texture_dimension_2d: 16384,
                             max_texture_dimension_3d: 2048,
                             max_texture_array_layers: 256, // default
                             max_bind_groups: 4,             // default

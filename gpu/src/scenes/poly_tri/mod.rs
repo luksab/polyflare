@@ -518,7 +518,10 @@ impl PolyTri {
 
         let num_ghosts = lens_state.ghost_indices.len() as u32;
 
-        let work_group_count = std::cmp::min((self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64, 65535); // round up
+        let work_group_count = std::cmp::min(
+            (self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64,
+            65535,
+        ); // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -529,7 +532,10 @@ impl PolyTri {
             cpass.dispatch(work_group_count, 1, 1);
         }
 
-        let work_group_count = std::cmp::min((self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64, 65535); // round up
+        let work_group_count = std::cmp::min(
+            (self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64,
+            65535,
+        ); // round up
         {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -712,8 +718,9 @@ impl PolyTri {
         for wavelen in 0..lens_state.num_wavelengths {
             let start_wavelen = 0.38;
             let end_wavelen = 0.78;
-            let wavelength =
-                start_wavelen + wavelen as f64 * ((end_wavelen - start_wavelen) / lens_state.num_wavelengths as f64);
+            let wavelength = start_wavelen
+                + wavelen as f64
+                    * ((end_wavelen - start_wavelen) / lens_state.num_wavelengths as f64);
             // let strength = polynomial_optics::Lens::str_from_wavelen(wavelength) / 10.;
 
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -721,7 +728,11 @@ impl PolyTri {
             });
 
             lens_state.pos_params[3] = wavelength as f32;
-            queue.write_buffer(&lens_state.pos_params_buffer, 0, bytemuck::cast_slice(&lens_state.pos_params));
+            queue.write_buffer(
+                &lens_state.pos_params_buffer,
+                0,
+                bytemuck::cast_slice(&lens_state.pos_params),
+            );
             // lens_state.pos_params[7] = strength as f32;
 
             self.update_dots(device, &mut encoder, update, lens_state);
@@ -816,8 +827,9 @@ impl PolyTri {
         for wavelen in 0..lens_state.num_wavelengths {
             let start_wavelen = 0.38;
             let end_wavelen = 0.78;
-            let wavelength =
-                start_wavelen + wavelen as f64 * ((end_wavelen - start_wavelen) / lens_state.num_wavelengths as f64);
+            let wavelength = start_wavelen
+                + wavelen as f64
+                    * ((end_wavelen - start_wavelen) / lens_state.num_wavelengths as f64);
             // let strength = polynomial_optics::Lens::str_from_wavelen(wavelength) / 10.;
 
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -825,7 +837,11 @@ impl PolyTri {
             });
 
             lens_state.pos_params[3] = wavelength as f32;
-            queue.write_buffer(&lens_state.pos_params_buffer, 0, bytemuck::cast_slice(&lens_state.pos_params));
+            queue.write_buffer(
+                &lens_state.pos_params_buffer,
+                0,
+                bytemuck::cast_slice(&lens_state.pos_params),
+            );
             // lens_state.pos_params[7] = strength as f32;
 
             self.update_dots(device, &mut encoder, true, lens_state);
@@ -838,68 +854,16 @@ impl PolyTri {
                 lens_state.ghost_indices.len() as u32,
             );
             queue.submit(iter::once(encoder.finish()));
+            device.poll(wgpu::Maintain::Wait);
             first = false;
         }
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
-        if cfg!(debug_assertions) {
-            let output_buffer_size = (self.dot_side_len
-                * self.dot_side_len
-                * 24
-                * lens_state.ghost_indices.len() as u32)
-                as wgpu::BufferAddress;
-            let output_buffer_desc = wgpu::BufferDescriptor {
-                size: output_buffer_size,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                label: Some("Ray DST"),
-                mapped_at_creation: false,
-            };
-            let output_buffer = device.create_buffer(&output_buffer_desc);
-            encoder.copy_buffer_to_buffer(
-                &self.vertex_buffer,
-                0,
-                &output_buffer,
-                0,
-                (self.dot_side_len
-                    * self.dot_side_len
-                    * 24
-                    * lens_state.ghost_indices.len() as u32)
-                    .into(),
-            );
 
-            self.convert(device, &mut encoder, view, lens_state);
-
-            queue.submit(Some(encoder.finish()));
-
-            let buffer_slice = output_buffer.slice(..);
-            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-            device.poll(wgpu::Maintain::Wait);
-
-            if let Ok(()) = pollster::block_on(buffer_future) {
-                let data = buffer_slice.get_mapped_range();
-
-                let vertices = unsafe { data.align_to::<f32>().1 };
-                let vec_vertices = vertices.to_vec();
-                let data = vec_vertices;
-
-                println!("----------------------------------------------------------------------------------");
-                for (i, elements) in data.chunks(6).enumerate() {
-                    print!("{:03}:", i);
-                    print!("pos: {}, {}  ", elements[0], elements[1]);
-                    print!("aper: {}, {}  ", elements[2], elements[3]);
-                    print!("s: {}", elements[4]);
-                    println!("w: {}", elements[5]);
-                }
-                // println!("{:?}", data);
-            } else {
-                panic!("Failed to copy ray buffer!")
-            }
-        } else {
-            self.convert(device, &mut encoder, view, lens_state);
-            queue.submit(iter::once(encoder.finish()));
-        }
+        self.convert(device, &mut encoder, view, lens_state);
+        queue.submit(iter::once(encoder.finish()));
 
         // lens_state.opacity = opacity;
         // lens_state.update(device, queue);

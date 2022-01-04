@@ -181,8 +181,18 @@ fn main() {
                     } => {
                         state.resize(**new_inner_size, Some(scale_factor));
                         poly_optics.resize(&state.device, &state.config, &lens_ui);
-                        poly_res.resize(state.size, *scale_factor, &state.device, &state.config);
-                        poly_tri.resize(state.size, *scale_factor, &state.device, &state.config);
+                        poly_res.resize(
+                            state.size,
+                            *scale_factor * lens_ui.scale_fact,
+                            &state.device,
+                            &state.config,
+                        );
+                        poly_tri.resize(
+                            state.size,
+                            *scale_factor * lens_ui.scale_fact,
+                            &state.device,
+                            &state.config,
+                        );
                     }
                     _ => {}
                 }
@@ -218,8 +228,24 @@ fn main() {
                     poly_res.update(&state.device, &lens_ui);
                 }
 
-                let (update_lens, update_ray_num, update_dot_num, render) =
+                let (update_lens, update_ray_num, update_dot_num, render, update_res) =
                     lens_ui.build_ui(&ui, &state.device, &state.queue);
+
+                if update_res {
+                    poly_res.resize(
+                        state.size,
+                        state.scale_factor * lens_ui.scale_fact,
+                        &state.device,
+                        &state.config,
+                    );
+
+                    poly_tri.resize(
+                        state.size,
+                        state.scale_factor * lens_ui.scale_fact,
+                        &state.device,
+                        &state.config,
+                    );
+                }
 
                 if update_dot_num {
                     poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
@@ -275,7 +301,7 @@ fn main() {
                                 width: size[0],
                                 height: size[1],
                             },
-                            1.0,
+                            2.0,
                             &state.device,
                             &state.config,
                         );
@@ -401,14 +427,14 @@ fn main() {
 
                             poly_res.resize(
                                 size.into(),
-                                state.scale_factor,
+                                state.scale_factor * lens_ui.scale_fact,
                                 &state.device,
                                 &state.config,
                             );
 
                             poly_tri.resize(
                                 size.into(),
-                                state.scale_factor,
+                                state.scale_factor * lens_ui.scale_fact,
                                 &state.device,
                                 &state.config,
                             );

@@ -69,6 +69,8 @@ pub struct LensState {
     pub draw: u32,
     /// multiplier for alpha of rays/dots
     pub opacity: f32,
+    /// over or under-sample dot/tri texture
+    pub scale_fact: f64,
     /// which ghost to draw: 0 being all, 1 being the fist...
     pub which_ghost: u32,
     /// number of wavelengths to render
@@ -428,6 +430,7 @@ impl LensState {
             triangulate: true,
             draw_background: true,
             opacity: 0.75,
+            scale_fact: 1.,
             which_ghost: 0,
             num_wavelengths: 3,
             lens,
@@ -752,7 +755,7 @@ impl LensState {
         ui: &Ui,
         device: &Device,
         queue: &Queue,
-    ) -> (bool, bool, bool, bool) {
+    ) -> (bool, bool, bool, bool, bool) {
         let mut update_lens = self.first_frame;
         let mut update_sensor = self.first_frame;
         imgui::Window::new("Lens")
@@ -966,6 +969,7 @@ impl LensState {
 
         let mut update_rays = self.first_frame;
         let mut update_dots = self.first_frame;
+        let mut update_res = false;
         let mut render = false;
 
         let sample = 1. / (Instant::now() - self.last_frame_time).as_secs_f64();
@@ -996,6 +1000,7 @@ impl LensState {
                     .range(0., 100.)
                     .speed(0.001)
                     .build(ui, &mut self.opacity);
+                update_res |= Slider::new("scale_fact", 0.001, 1.).build(ui, &mut self.scale_fact);
 
                 update_lens |= ui.radio_button("render both", &mut self.draw, 3)
                     || ui.radio_button("render normal", &mut self.draw, 2)
@@ -1043,6 +1048,6 @@ impl LensState {
         self.last_frame_time = Instant::now();
 
         self.first_frame = false;
-        (update_lens, update_rays, update_dots, render)
+        (update_lens, update_rays, update_dots, render, update_res)
     }
 }
