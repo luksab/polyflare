@@ -99,50 +99,17 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   var averageArea = 0.;
   var num_areas = 0;
   let self = rays.rays[(x + y * dot_side_len) + offset].pos;
+  // 1:(x  ,y  ),(x-1,y-1),(x  ,y-1)
+  // 2:(x  ,y  ),(x  ,y-1),(x+1,y  )
+  // 3:(x  ,y  ),(x+1,y  ),(x+1,y+1)
+  // 4:(x  ,y  ),(x+1,y+1),(x  ,y+1)
+  // 5:(x  ,y  ),(x  ,y+1),(x-1,y  )
+  // 7:(x  ,y  ),(x-1,y  ),(x-1,y-1)
 
   // basically irrelevant for 8 elements in terms of performance
   // whether to use one or all if statements
-  if (x < dot_side_len - u32(1) && y < dot_side_len - u32(1)){
-    let b = rays.rays[(x + u32(1) + y * dot_side_len) + offset].pos;
-    let c = rays.rays[(x + (y + u32(1)) * dot_side_len) + offset].pos;
-
-    let s1 = self-b;
-    let s2 = self-c;
-    let area = abs(s1.x * s2.y - s1.y * s2.x);
-    if (area > 0.){
-      averageArea = averageArea + area;
-      num_areas = num_areas + 1;  
-    }
-  }
-
-  if (x > u32(0) && y < dot_side_len - u32(1)){
-    let b = rays.rays[(x - u32(1) + y * dot_side_len) + offset].pos;
-    let c = rays.rays[(x + (y + u32(1)) * dot_side_len) + offset].pos;
-
-    let s1 = self-b;
-    let s2 = self-c;
-    let area = abs(s1.x * s2.y - s1.y * s2.x);
-    if (area > 0.){
-      averageArea = averageArea + area;
-      num_areas = num_areas + 1;  
-    }
-  }
-
-  if (x < dot_side_len - u32(1) && y > u32(0)){
-    let b = rays.rays[(x + u32(1) + y * dot_side_len) + offset].pos;
-    let c = rays.rays[(x + (y - u32(1)) * dot_side_len) + offset].pos;
-
-    let s1 = self-b;
-    let s2 = self-c;
-    let area = abs(s1.x * s2.y - s1.y * s2.x);
-    if (area > 0.){
-      averageArea = averageArea + area;
-      num_areas = num_areas + 1;  
-    }
-  }
-
-  if (x > u32(0) && y > u32(0)){
-    let b = rays.rays[(x - u32(1) + y * dot_side_len) + offset].pos;
+  if (x > u32(0) && y > u32(0)){// 1
+    let b = rays.rays[(x - u32(1) + (y - u32(1)) * dot_side_len) + offset].pos;
     let c = rays.rays[(x + (y - u32(1)) * dot_side_len) + offset].pos;
 
     let s1 = self-b;
@@ -152,6 +119,71 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
       averageArea = averageArea + area;
       num_areas = num_areas + 1;  
     }   
+  }
+
+  if (x < dot_side_len - u32(1) && y > u32(0)){// 2
+    let b = rays.rays[(x + (y - u32(1)) * dot_side_len) + offset].pos;
+    let c = rays.rays[(x + u32(1) + y * dot_side_len) + offset].pos;
+
+    let s1 = self-b;
+    let s2 = self-c;
+    let area = abs(s1.x * s2.y - s1.y * s2.x);
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }   
+  }
+
+  if (x < dot_side_len - u32(1) && y < dot_side_len - u32(1)){// 3
+    let b = rays.rays[(x + u32(1) + y * dot_side_len) + offset].pos;
+    let c = rays.rays[(x + u32(1) + (y + u32(1)) * dot_side_len) + offset].pos;
+
+    let s1 = self-b;
+    let s2 = self-c;
+    let area = abs(s1.x * s2.y - s1.y * s2.x);
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }
+  }
+
+  if (x < dot_side_len - u32(1) && y < dot_side_len - u32(1)){// 4
+    let b = rays.rays[(x + u32(1) + (y + u32(1)) * dot_side_len) + offset].pos;
+    let c = rays.rays[(x + (y + u32(1)) * dot_side_len) + offset].pos;
+
+    let s1 = self-b;
+    let s2 = self-c;
+    let area = abs(s1.x * s2.y - s1.y * s2.x);
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }
+  }
+
+  if (x > u32(0) && y < dot_side_len - u32(1)){// 5
+    let b = rays.rays[(x + (y + u32(1)) * dot_side_len) + offset].pos;
+    let c = rays.rays[(x - u32(1) + y * dot_side_len) + offset].pos;
+
+    let s1 = self-b;
+    let s2 = self-c;
+    let area = abs(s1.x * s2.y - s1.y * s2.x);
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }
+  }
+
+  if (x > u32(0) && y > u32(0)){// 6
+    let b = rays.rays[(x - u32(1) + y * dot_side_len) + offset].pos;
+    let c = rays.rays[(x - u32(1) + (y - u32(1)) * dot_side_len) + offset].pos;
+
+    let s1 = self-b;
+    let s2 = self-c;
+    let area = abs(s1.x * s2.y - s1.y * s2.x);
+    if (area > 0.){
+      averageArea = averageArea + area;
+      num_areas = num_areas + 1;  
+    }
   }
 
   averageArea = averageArea / f32(num_areas);
