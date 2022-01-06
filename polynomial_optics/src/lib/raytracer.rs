@@ -256,6 +256,7 @@ impl Sellmeier {
             let glass = Sellmeier { b, c };
             glasses.push((result[0].trim().to_string(), glass));
         }
+        glasses.sort_by_key(|(name, _glass)| name.clone());
         glasses
     }
 }

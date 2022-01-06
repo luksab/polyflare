@@ -12,11 +12,13 @@ struct Ray {
   d: vec3<f32>;
   strength: f32;
   aperture_pos: vec2<f32>;
+  entry_pos: vec2<f32>;
 };
 
 struct DrawRay {
     pos: vec2<f32>;
     aperture_pos: vec2<f32>;
+    entry_pos: vec2<f32>;
     strength: f32;
     wavelength: f32;
 };
@@ -79,7 +81,7 @@ struct PosParams {
 
 
 struct Rays {
-  rays: [[stride(24)]] array<DrawRay>;
+  rays: [[stride(32)]] array<DrawRay>;
 };
 
 
@@ -409,8 +411,18 @@ fn intersect_ray(self: Ray, plane: f32) -> Ray {
     return ray;
 }
 
+// intersect a ray with the sensor / any plane on the optical axis
+fn intersect_ray_to_xy(self: Ray, plane: f32) -> vec2<f32> {
+    let diff = plane - self.o.z;
+    let num_z = diff / self.d.z;
+
+    let intersect = self.o + self.d * num_z;
+    var ray = self;
+    return vec2<f32>(intersect.x, intersect.y);
+}
+
 fn drawRay_from_Ray(self: Ray) -> DrawRay {
-    return DrawRay(self.o.xy, self.aperture_pos.xy, self.strength, self.wavelength);
+    return DrawRay(self.o.xy, self.aperture_pos.xy, self.entry_pos, self.strength, self.wavelength);
 }
 
 [[stage(compute), workgroup_size(64)]]
@@ -451,7 +463,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
         dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
         dir = normalize(dir);
-        var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.));
+        var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
+        ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
 
         for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
             let element = elements.el[ele];
@@ -492,7 +505,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
     dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
     dir = normalize(dir);
-    var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.));
+    var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
+    ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
     // iterate through all Elements and propagate the Ray through
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];

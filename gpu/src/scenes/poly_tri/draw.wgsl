@@ -1,8 +1,9 @@
 struct VertexInput {
     [[location(0)]] pos: vec2<f32>;
     [[location(1)]] aperture_pos: vec2<f32>;
-    [[location(2)]] strength: f32;
-    [[location(3)]] wavelength: f32;
+    [[location(2)]] entry_pos: vec2<f32>;
+    [[location(3)]] strength: f32;
+    [[location(4)]] wavelength: f32;
 };
 
 struct VertexOutput {
@@ -10,6 +11,7 @@ struct VertexOutput {
     [[location(0)]] strength: f32;
     [[location(1)]] rgb: vec3<f32>;
     [[location(2)]] aperture_pos: vec2<f32>;
+    [[location(3)]] entry_pos: vec2<f32>;
 };
 
 /// one Lens Element 
@@ -35,7 +37,6 @@ struct Element {
   spherical: f32;// 0: false, 1: true
 };
 
-
 struct SimParams {
   opacity: f32;
   width_scaled: f32;
@@ -57,11 +58,9 @@ struct SensorDatapoint {
     wavelength: f32;
 };
 
-
 struct Sensor {
     measuremens: [[stride(16)]] array<SensorDatapoint>;
 };
-
 
 /// all the Elements of the Lens under test
 struct Elements {
@@ -94,6 +93,7 @@ fn mainv(
     out.strength = in.strength;
     out.rgb = rgb;
     out.aperture_pos = in.aperture_pos;
+    out.entry_pos = in.entry_pos;
     return out;
 }
 
@@ -131,7 +131,7 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 
   let strength = in.strength;
 
-  if (isNan(strength)) {
+  if (isNan(strength) || length(in.entry_pos) > 1.) {
     return vec4<f32>(0., 0., 0., 0.);
   }
 

@@ -59,7 +59,7 @@ impl PolyTri {
                 module: &draw_shader,
                 entry_point: "mainv",
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 6 * 4,
+                    array_stride: 8 * 4,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
                         // position
@@ -74,16 +74,22 @@ impl PolyTri {
                             shader_location: 1,
                             format: wgpu::VertexFormat::Float32x2,
                         },
-                        // strength
+                        // entry aperture position
                         wgpu::VertexAttribute {
                             offset: 4 * 4,
                             shader_location: 2,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                        // strength
+                        wgpu::VertexAttribute {
+                            offset: 6 * 4,
+                            shader_location: 3,
                             format: wgpu::VertexFormat::Float32,
                         },
                         // wavelength
                         wgpu::VertexAttribute {
-                            offset: 5 * 4,
-                            shader_location: 3,
+                            offset: 7 * 4,
+                            shader_location: 4,
                             format: wgpu::VertexFormat::Float32,
                         },
                     ],
@@ -556,6 +562,7 @@ impl PolyTri {
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
     ) {
+        // println!("size: {:?}, scale: {}", new_size.height * new_size.width * (scale_factor as u32) * (scale_factor as u32), scale_factor);
         let format = wgpu::TextureFormat::Rgba16Float;
         let mut config = config.clone();
         let scale_fact = 1.;

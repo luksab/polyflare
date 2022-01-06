@@ -53,7 +53,7 @@ fn mainv(
     let screenAspect = normalize(vec2<f32>(params.height_scaled, params.width_scaled));
 
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(vec2<f32>(in.o.z, in.o.y) / 4.0 * screenAspect, 0.,1.);
+    out.clip_position = vec4<f32>(vec2<f32>(in.o.z, in.o.y) / 4.0 * screenAspect * params.zoom, 0.,1.);
     out.strength = in.strength;
     out.wavelength = in.wavelength;
     return out;
