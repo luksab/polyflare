@@ -764,9 +764,9 @@ impl Lens {
                 }
             }
         }
-        // if draw_mode & 2 > 0 {
-        //     rays.push(0);
-        // }
+        if draw_mode & 2 > 0 {
+            rays.push([0, 0]);
+        }
         rays
     }
 

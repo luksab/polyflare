@@ -979,7 +979,7 @@ impl LensState {
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([600.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
-                let num_ghosts = (self.actual_lens.get_ghosts_indicies(1, 0).len()) as u32;
+                let num_ghosts = (self.actual_lens.get_ghosts_indicies(self.draw as usize, 0).len()) as u32;
                 if Slider::new("which ghost", 0, num_ghosts).build(ui, &mut self.which_ghost) {
                     update_lens = true;
                 }

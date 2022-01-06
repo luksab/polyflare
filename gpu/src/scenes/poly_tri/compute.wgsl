@@ -442,12 +442,9 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
   // how many dots have we added to the buffer
   var counter = u32(0);
-  if ((draw_mode & u32(1)) > u32(0)) {
-    let i = whichGhost.el[ghost_num].i;
-    let j = whichGhost.el[ghost_num].j;
-    if(i == u32(0) && j == u32(0)) {
-        return;
-    }
+  let i = whichGhost.el[ghost_num].i;
+  let j = whichGhost.el[ghost_num].j;
+  if ((draw_mode & u32(1)) > u32(0) && !(i == u32(0) && j == u32(0))) {  
         // make new ray
         var dir = posParams.init.d;
         // modify both directions according to our index
@@ -488,7 +485,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         // counter = counter + u32(1);
   }
   // if we want to draw normally
-  if ((draw_mode & u32(2)) > u32(0)) {
+  if ((draw_mode & u32(2)) > u32(0) && (i == u32(0) && j == u32(0))) {
     // make new ray
     var dir = posParams.init.d;
     // modify both directions according to our index
