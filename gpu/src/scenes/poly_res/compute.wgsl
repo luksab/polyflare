@@ -445,8 +445,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 // make new ray
                 var dir = posParams.init.d;
                 // modify both directions according to our index
-                dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
-                dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+                dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
+                dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
                 dir = normalize(dir);
                 // pos.y = pos.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
                 let wavelen = f32(ray_num % wave_num);
@@ -500,8 +500,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // make new ray
     var dir = posParams.init.d;
     // modify both directions according to our index
-    dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
-    dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+    dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
+    dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
     dir = normalize(dir);
     let wavelen = f32(ray_num % wave_num);
     let start_wavelen = 0.38;
