@@ -37,4 +37,4 @@ cargo run --release -p gpu -- [arguments]
 ```
 
 ## Example output
-![example](./images/chromatic.png)
+![example](./images/triangulation.png)
