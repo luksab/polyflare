@@ -7,6 +7,24 @@ use wgpu::{
 
 use crate::{lens_state::LensState, texture::Texture};
 
+///struct DrawRay {
+///  pos: vec2<f32>;
+///  aperture_pos: vec2<f32>;
+///  entry_pos: vec2<f32>;
+///  strength: f32;
+///  wavelength: f32;
+///};
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct DrawRay {
+    pub ghost_num: u32,
+    pub init_pos: [f32; 2],
+    pub pos: [f32; 2],
+    pub aperture_pos: [f32; 2],
+    pub entry_pos: [f32; 2],
+    pub strength: f32,
+    pub wavelength: f32,
+}
+
 pub struct PolyTri {
     tri_render_pipeline: wgpu::RenderPipeline,
     triangulate_pipeline: wgpu::ComputePipeline,
@@ -100,6 +118,7 @@ impl PolyTri {
                 entry_point: "mainf",
                 targets: &[wgpu::ColorTargetState {
                     format,
+                    // blend: None,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -122,7 +141,7 @@ impl PolyTri {
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: None,
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
+                polygon_mode: wgpu::PolygonMode::Line,
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
                 unclipped_depth: false,
@@ -490,6 +509,123 @@ impl PolyTri {
         }
     }
 
+    pub fn get_dots(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        update_size: bool,
+        lens_state: &LensState,
+    ) -> Vec<DrawRay> {
+        if update_size {
+            // println!("update: {}", self.num_dots);
+            let (compute_pipeline, compute_bind_group, compute_bind_group_layout, vertex_buffer) =
+                Self::raytrace_shader(
+                    device,
+                    &lens_state.lens_bind_group_layout,
+                    &lens_state.params_bind_group_layout,
+                    self.dot_side_len,
+                    lens_state.ghost_indices.len() as u32,
+                );
+            self.compute_pipeline = compute_pipeline;
+            self.compute_bind_group = compute_bind_group;
+            self.vertex_buffer = vertex_buffer;
+            let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(
+                device,
+                &compute_bind_group_layout,
+                &lens_state.params_bind_group_layout,
+                self.dot_side_len,
+                lens_state.ghost_indices.len() as u32,
+            );
+            self.triangulate_pipeline = triangulate_pipeline;
+            self.tri_index_buffer = tri_index_buffer;
+        }
+
+        let num_ghosts = lens_state.ghost_indices.len() as u32;
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Get dots Encoder"),
+        });
+
+        let work_group_count = std::cmp::min(
+            (self.dot_side_len * self.dot_side_len * num_ghosts + 64 - 1) / 64,
+            65535,
+        ); // round up
+        {
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.compute_pipeline);
+            cpass.set_bind_group(0, &self.compute_bind_group, &[]);
+            cpass.set_bind_group(1, &lens_state.lens_bind_group, &[]);
+            cpass.set_bind_group(2, &lens_state.params_bind_group, &[]);
+            cpass.dispatch(work_group_count, 1, 1);
+        }
+        {
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.triangulate_pipeline);
+            cpass.set_bind_group(0, &self.compute_bind_group, &[]);
+            cpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
+            cpass.dispatch(work_group_count, 1, 1);
+        }
+
+        let output_buffer_size =
+            (self.dot_side_len * self.dot_side_len * 32 * lens_state.ghost_indices.len() as u32)
+                as wgpu::BufferAddress;
+        let output_buffer_desc = wgpu::BufferDescriptor {
+            size: output_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            label: Some("Ray DST"),
+            mapped_at_creation: false,
+        };
+        let output_buffer = device.create_buffer(&output_buffer_desc);
+        encoder.copy_buffer_to_buffer(
+            &self.vertex_buffer,
+            0,
+            &output_buffer,
+            0,
+            (self.dot_side_len * self.dot_side_len * 32 * lens_state.ghost_indices.len() as u32)
+                .into(),
+        );
+
+        queue.submit(Some(encoder.finish()));
+
+        let buffer_slice = output_buffer.slice(..);
+        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+
+        let mut out = vec![];
+        device.poll(wgpu::Maintain::Wait);
+
+        if let Ok(()) = pollster::block_on(buffer_future) {
+            let data = buffer_slice.get_mapped_range();
+
+            let vertices = unsafe { data.align_to::<f32>().1 };
+            let vec_vertices = vertices.to_vec();
+            let data = vec_vertices;
+
+            for (i, elements) in data.chunks(8).enumerate() {
+                let ray_num = i as u32 % (self.dot_side_len * self.dot_side_len);
+                let ghost_num = i as u32 / (self.dot_side_len * self.dot_side_len);
+                let ray_num_x = (ray_num / (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
+                let ray_num_y = (ray_num % (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
+                print!("{:03}: ", i);
+                out.push(DrawRay {
+                    ghost_num,
+                    init_pos: [ray_num_x, ray_num_y],
+                    pos: [elements[0], elements[1]],
+                    aperture_pos: [elements[2], elements[3]],
+                    entry_pos: [elements[4], elements[5]],
+                    strength: elements[6],
+                    wavelength: elements[7],
+                });
+                println!("{:?}", out.last().unwrap());
+            }
+            // println!("{:?}", data);
+            out
+        } else {
+            panic!("Failed to copy ray buffer!")
+        }
+    }
+
     pub fn update_dots(
         &mut self,
         device: &wgpu::Device,
@@ -625,8 +761,7 @@ impl PolyTri {
             {
                 print!("reloading convert shader ");
                 let now = Instant::now();
-                self.convert_meta =
-                    std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").ok();
+                self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").ok();
                 let (pipeline, bind_group) = Self::convert_shader(
                     device,
                     &lens_state.params_bind_group_layout,

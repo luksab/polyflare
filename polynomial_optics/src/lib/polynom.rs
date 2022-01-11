@@ -104,7 +104,7 @@ impl<
     /// println!("{:?}", res);
     /// assert!(f == res);
     /// ```
-    pub fn fit(points: Vec<(N, N, N)>) -> Polynom2d<N, DEGREE> {
+    pub fn fit(points: &[(N, N, N)]) -> Polynom2d<N, DEGREE> {
         let mut m = Matrix::<N>::zero(DEGREE * DEGREE, DEGREE * DEGREE);
         let mut k = Vector::<N>::zero(DEGREE * DEGREE);
         for (iter, element) in m.iter_mut().enumerate() {
@@ -494,12 +494,15 @@ impl<
     /// println!("{:?}", res);
     /// assert!(f == res);
     /// ```
-    pub fn fit(points: Vec<(N, N, N, N, N)>) -> Polynom4d<N, DEGREE> {
+    pub fn fit(points: &[(N, N, N, N, N)]) -> Polynom4d<N, DEGREE> {
+        let mut now = std::time::Instant::now();
         let mut m = Matrix::<N>::zero(
             DEGREE * DEGREE * DEGREE * DEGREE,
             DEGREE * DEGREE * DEGREE * DEGREE,
         );
         let mut k = Vector::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE);
+        println!("init: {:?}", now.elapsed());
+        now = std::time::Instant::now();
         for (iter, element) in m.iter_mut().enumerate() {
             let (i, j) = (
                 iter / (DEGREE * DEGREE * DEGREE * DEGREE),
@@ -520,6 +523,8 @@ impl<
                 })
                 .sum::<N>()
         }
+        println!("set Matrix: {:?}", now.elapsed());
+        now = std::time::Instant::now();
         for (i, element) in k.iter_mut().enumerate() {
             let (k_i, l_i) = (i / DEGREE, i % DEGREE);
             let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
@@ -530,9 +535,13 @@ impl<
                 })
                 .sum::<N>()
         }
+        println!("set Vec: {:?}", now.elapsed());
+        now = std::time::Instant::now();
         // println!("m: {:?}", m);
         // println!("k: {:?}", k);
         let c = m.solve(&k).unwrap();
+        println!("solve: {:?}", now.elapsed());
+        now = std::time::Instant::now();
         let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
         for (i, element) in c.iter().enumerate() {
             let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
@@ -540,6 +549,8 @@ impl<
             // println!("{:?}", a);
             coefficients[a.0][a.1][a.2][a.3] = *element;
         }
+        println!("coefficients: {:?}", now.elapsed());
+        now = std::time::Instant::now();
         for i in 0..DEGREE {
             for j in 0..DEGREE {
                 for k in 0..DEGREE {
@@ -563,6 +574,8 @@ impl<
                 }
             }
         }
+        println!("res: {:?}", now.elapsed());
+        now = std::time::Instant::now();
         Polynom4d {
             coefficients,
         }

@@ -2,6 +2,7 @@
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use lens_state::LensState;
+use polynomial_optics::{Polynom2d, Polynom4d};
 use std::time::Instant;
 use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -219,6 +220,9 @@ fn main() {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
+                let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) =
+                    lens_ui.build_ui(&ui, &state.device, &state.queue);
+
                 // Render normally at background
                 poly_optics.update(&state.device, &lens_ui);
 
@@ -227,9 +231,6 @@ fn main() {
                 } else {
                     poly_res.update(&state.device, &lens_ui);
                 }
-
-                let (update_lens, update_ray_num, update_dot_num, render, update_res) =
-                    lens_ui.build_ui(&ui, &state.device, &state.queue);
 
                 if update_res {
                     poly_res.resize(
@@ -276,7 +277,7 @@ fn main() {
 
                 if render {
                     let now = Instant::now();
-                    let size = [2048, 2048];
+                    let size = [2048*4, 2048*4];
                     let extend = wgpu::Extent3d {
                         width: size[0],
                         height: size[1],
@@ -378,6 +379,49 @@ fn main() {
                     println!("Rendering and saving image took {:?}", now.elapsed());
                 }
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
+
+                if compute {
+                    let num_dots = 8;
+                    let width = 2.;
+                    let mut points = vec![];
+                    for i in 0..num_dots {
+                        for j in 0..num_dots {
+                            lens_ui.pos_params[0] = i as f32 / (num_dots - 1) as f32 * width - width / 2.;
+                            lens_ui.pos_params[1] = j as f32 / (num_dots - 1) as f32 * width - width / 2.;
+                            lens_ui.update(&state.device, &state.queue);
+                            let dots =
+                                poly_tri.get_dots(&state.device, &state.queue, true, &lens_ui);
+                            let ghost = dots
+                                .chunks((poly_tri.dot_side_len * poly_tri.dot_side_len) as usize)
+                                .last()
+                                .unwrap();
+                            for dot in ghost.iter() {
+                                let point = (
+                                    lens_ui.pos_params[0],
+                                    lens_ui.pos_params[1],
+                                    dot.init_pos[0],
+                                    dot.init_pos[1],
+                                    dot.strength,
+                                );
+                                points.push(point);
+                            }
+                        }
+                    }
+                    let now = Instant::now();
+                    let polynom = Polynom4d::<_, 8>::fit(&points);
+                    println!("Fitting took {:?}", now.elapsed());
+                    println!("{:?}", polynom);
+                    let mut difference = 0.0;
+                    for point in points.iter() {
+                        let strength = polynom.eval(point.0, point.1, point.2, point.3);
+                        difference += (strength - point.4).abs() * (strength - point.4).abs();
+                        // println!(
+                        //     "xyzw:{:?}: real: {}, {}",
+                        //     (point.0, point.1, point.2, point.3), point.4, strength
+                        // );
+                    }
+                    println!("average difference: {}", (difference / points.len() as f32).sqrt());
+                }
 
                 if lens_ui.triangulate {
                     // let mut encoder =
