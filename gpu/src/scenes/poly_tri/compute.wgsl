@@ -460,8 +460,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         // make new ray
         var dir = posParams.init.d;
         // modify both directions according to our index
-        dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
-        dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+        dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
+        dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
         dir = normalize(dir);
         var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
         ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
@@ -502,8 +502,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     // make new ray
     var dir = posParams.init.d;
     // modify both directions according to our index
-    dir.x = dir.x + (ray_num_x / f32(sqrt_num) * width - width / 2.);
-    dir.y = dir.y + (ray_num_y / f32(sqrt_num) * width - width / 2.);
+    dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
+    dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
     dir = normalize(dir);
     var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
     ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
