@@ -41,12 +41,18 @@ impl State {
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(backend);
-        instance.enumerate_adapters(backend).enumerate().for_each(|adapter| {
-            println!("{:?}", adapter);
-        });
+        instance
+            .enumerate_adapters(backend)
+            .enumerate()
+            .for_each(|adapter| {
+                println!("{:?}", adapter);
+            });
         let surface = unsafe { instance.create_surface(&window) };
         let adapter = match adapter {
-            Some(adapter_num) => instance.enumerate_adapters(backend).nth(adapter_num).unwrap(),
+            Some(adapter_num) => instance
+                .enumerate_adapters(backend)
+                .nth(adapter_num)
+                .unwrap(),
             None => instance
                 .request_adapter(&wgpu::RequestAdapterOptions {
                     power_preference: wgpu::PowerPreference::HighPerformance,
@@ -58,46 +64,20 @@ impl State {
         };
         println!("\nadapter: {:?}", adapter.get_info());
         println!("limits: {:#?}", adapter.limits());
-        let (device, queue) = match low_req {
-            true => adapter
-                .request_device(
-                    &wgpu::DeviceDescriptor {
-                        label: None,
-                        features: wgpu::Features::empty(),
-                        limits: wgpu::Limits {
-                            max_texture_dimension_1d: 4096,
-                            max_texture_dimension_2d: 4096,
-                            max_texture_dimension_3d: 2048,
-                            max_texture_array_layers: 256, // default
-                            max_bind_groups: 4,             // default
-                            max_dynamic_uniform_buffers_per_pipeline_layout: 8, // default
-                            max_dynamic_storage_buffers_per_pipeline_layout: 4, // default
-                            max_sampled_textures_per_shader_stage: 16, // default
-                            max_samplers_per_shader_stage: 16, // default
-                            max_storage_buffers_per_shader_stage: 4, // default
-                            max_storage_textures_per_shader_stage: 4, // default
-                            max_uniform_buffers_per_shader_stage: 12, // default
-                            max_uniform_buffer_binding_size: 16384, // default
-                            max_storage_buffer_binding_size: 128 << 20, // 128 << 20, // default
-                            max_vertex_buffers: 8,          // default
-                            max_vertex_attributes: 16,      // default
-                            max_vertex_buffer_array_stride: 2048, // default
-                            max_push_constant_size: 0,      // default
-                            min_uniform_buffer_offset_alignment: 256, // default
-                            min_storage_buffer_offset_alignment: 256, // default
-                            max_inter_stage_shader_components: 60, // default
-                            max_compute_workgroup_storage_size: 16352, // default
-                            max_compute_invocations_per_workgroup: 256, // default
-                            max_compute_workgroup_size_x: 256, // default
-                            max_compute_workgroup_size_y: 256, // default
-                            max_compute_workgroup_size_z: 64, // default
-                            max_compute_workgroups_per_dimension: 65535, // default
-                        },
-                    },
-                    None, // Trace path
-                )
-                .await
-                .expect("even the lowest requirements device is not available"),
+        let limits = adapter.limits();
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    features: wgpu::Features::empty(),
+                    limits,
+                },
+                None, // Trace path
+            )
+            .await
+            .expect("even the lowest requirements device is not available");
+        /*match low_req {
+            true => ,
             false => adapter
                 .request_device(
                     &wgpu::DeviceDescriptor {
@@ -137,14 +117,20 @@ impl State {
                 )
                 .await
                 .expect("failed to create device with high requirement"),
-        };
+        };*/
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_preferred_format(&adapter).expect("surface not compatible with gpu"),
+            format: surface
+                .get_preferred_format(&adapter)
+                .expect("surface not compatible with gpu"),
             width: size.width,
             height: size.height,
-            present_mode: if disable_vsync {wgpu::PresentMode::Immediate } else {wgpu::PresentMode::Fifo},
+            present_mode: if disable_vsync {
+                wgpu::PresentMode::Immediate
+            } else {
+                wgpu::PresentMode::Fifo
+            },
         };
 
         surface.configure(&device, &config);
