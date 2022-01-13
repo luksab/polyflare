@@ -277,7 +277,7 @@ fn main() {
 
                 if render {
                     let now = Instant::now();
-                    let size = [2048*4, 2048*4];
+                    let size = [2048 * 4, 2048 * 4];
                     let extend = wgpu::Extent3d {
                         width: size[0],
                         height: size[1],
@@ -386,8 +386,10 @@ fn main() {
                     let mut points = vec![];
                     for i in 0..num_dots {
                         for j in 0..num_dots {
-                            lens_ui.pos_params[0] = i as f32 / (num_dots - 1) as f32 * width - width / 2.;
-                            lens_ui.pos_params[1] = j as f32 / (num_dots - 1) as f32 * width - width / 2.;
+                            lens_ui.pos_params[0] =
+                                i as f32 / (num_dots - 1) as f32 * width - width / 2.;
+                            lens_ui.pos_params[1] =
+                                j as f32 / (num_dots - 1) as f32 * width - width / 2.;
                             lens_ui.update(&state.device, &state.queue);
                             let dots =
                                 poly_tri.get_dots(&state.device, &state.queue, true, &lens_ui);
@@ -395,7 +397,7 @@ fn main() {
                                 .chunks((poly_tri.dot_side_len * poly_tri.dot_side_len) as usize)
                                 .last()
                                 .unwrap();
-                            for dot in ghost.iter() {
+                            for dot in ghost.iter().filter(|point| point.strength > 0.0) {
                                 let point = (
                                     lens_ui.pos_params[0],
                                     lens_ui.pos_params[1],
@@ -408,19 +410,32 @@ fn main() {
                         }
                     }
                     let now = Instant::now();
-                    let polynom = Polynom4d::<_, 8>::fit(&points);
+                    let polynom = Polynom4d::<_, 4>::fit(&points);
                     println!("Fitting took {:?}", now.elapsed());
                     println!("{:?}", polynom);
+                    let sparse_poly = polynom.get_sparse(&points, 10);
                     let mut difference = 0.0;
+                    let mut difference_sparse = 0.0;
                     for point in points.iter() {
                         let strength = polynom.eval(point.0, point.1, point.2, point.3);
                         difference += (strength - point.4).abs() * (strength - point.4).abs();
+                        difference_sparse +=
+                            (sparse_poly.eval([point.0, point.1, point.2, point.3]) - point.4)
+                                .abs()
+                                .powf(2.);
                         // println!(
                         //     "xyzw:{:?}: real: {}, {}",
                         //     (point.0, point.1, point.2, point.3), point.4, strength
                         // );
                     }
-                    println!("average difference: {}", (difference / points.len() as f32).sqrt());
+                    println!(
+                        "average difference: {}",
+                        (difference / points.len() as f32).sqrt()
+                    );
+                    println!(
+                        "average difference sparse: {}",
+                        (difference_sparse / points.len() as f32).sqrt()
+                    );
                 }
 
                 if lens_ui.triangulate {

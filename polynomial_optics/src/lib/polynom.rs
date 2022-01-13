@@ -1,6 +1,7 @@
 use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
 use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
 use num::traits::Zero;
+use std::time::Instant;
 use std::vec;
 use std::{
     fmt::Display,
@@ -392,15 +393,20 @@ impl<
     /// ```
     pub fn get_sparse(
         &self,
-        points: Vec<(N, N, N, N, N)>,
+        points: &[(N, N, N, N, N)],
         terms: usize,
     ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut cp = Default::default();
+        let now = Instant::now();
+        let mut counter = 0;
         for i in 0..DEGREE {
             for j in 0..DEGREE {
                 for k in 0..DEGREE {
                     for l in 0..DEGREE {
+                        println!("{}: took {:?}", counter, now.elapsed());
+                        counter += 1;
+
                         phi.terms.push(self.get_monomial(i, j, k, l));
                         let mut min = Self::dist(&phi, cp, &points);
                         let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
