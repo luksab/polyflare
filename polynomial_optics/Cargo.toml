@@ -22,6 +22,7 @@ mathru = "0.10"
 serde = "1.0"
 ron = "0.7"
 csv = "1.1"
+autodiff = {version = "0.4.0", features = ["cgmath"]}
 
 [dev-dependencies]
 approx = "0.5.0"

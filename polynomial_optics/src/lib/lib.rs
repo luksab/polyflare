@@ -6,3 +6,6 @@ pub use polynom::*;
 
 pub mod raytracer;
 pub use raytracer::*;
+
+pub mod raytracer_autodiff;
+pub use raytracer_autodiff::*;

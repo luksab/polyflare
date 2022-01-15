@@ -117,6 +117,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "autodiff"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d903ee7af9ee65c47446ec0963803aaaadc5795b5729d77d75155fdf4e273197"
+dependencies = [
+ "cgmath",
+ "num-traits",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1633,6 +1643,7 @@ name = "polynomial_optics"
 version = "0.1.0"
 dependencies = [
  "approx 0.5.0",
+ "autodiff",
  "cgmath",
  "csv",
  "mathru",
