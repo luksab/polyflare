@@ -26,5 +26,6 @@ directories = "4.0"
 serde = "1.0"
 ron = "0.7"
 structopt = "0.3"
+itertools = "0.10.3"
 
 polynomial_optics = { path = "../polynomial_optics" }

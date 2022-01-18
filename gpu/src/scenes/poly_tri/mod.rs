@@ -607,17 +607,29 @@ impl PolyTri {
             for (i, elements) in data.chunks(8).enumerate() {
                 let ray_num = i as u32 % (self.dot_side_len * self.dot_side_len);
                 let ghost_num = i as u32 / (self.dot_side_len * self.dot_side_len);
+
                 let ray_num_x =
                     (ray_num / (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
                 let ray_num_y =
                     (ray_num % (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
+
                 // print!("{:03}: ", i);
                 let width = lens_state.pos_params[9];
+
+                // println!(
+                //     "ghost: {} num: {}, {:?}",
+                //     ghost_num,
+                //     ray_num,
+                //     [
+                //         ray_num_x as f32 * width - width / 2.,
+                //         ray_num_y as f32 * width - width / 2.,
+                //     ]
+                // );
                 out.push(DrawRay {
                     ghost_num,
                     init_pos: [
-                        ray_num_x / (self.dot_side_len - 1) as f32 * width - width / 2.,
-                        ray_num_y / (self.dot_side_len - 1) as f32 * width - width / 2.,
+                        ray_num_x as f32 * width - width / 2.,
+                        ray_num_y as f32 * width - width / 2.,
                     ],
                     pos: [elements[0], elements[1]],
                     aperture_pos: [elements[2], elements[3]],

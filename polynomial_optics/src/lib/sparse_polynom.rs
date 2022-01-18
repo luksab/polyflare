@@ -205,7 +205,9 @@ where
     N: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.terms.iter();
+        let mut terms = self.terms.clone();
+        terms.sort_by_key(|m| m.exponents);
+        let mut iter = terms.iter();
         write!(f, "{}", iter.next().unwrap())?;
         for term in iter {
             write!(f, " + {}", term)?;

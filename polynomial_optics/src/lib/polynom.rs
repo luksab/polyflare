@@ -154,7 +154,7 @@ impl<
         const DEGREE: usize,
     > Polynom2d<N, DEGREE>
 {
-    fn dist(phi: &crate::Polynomial<N, 2>, cp: (), points: &[(N, N, N)]) -> N {
+    fn dist(phi: &crate::Polynomial<N, 2>, points: &[(N, N, N)]) -> N {
         let mut result = num::Zero::zero();
         for point in points {
             let input = [point.0, point.1];
@@ -173,24 +173,34 @@ impl<
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
-    pub fn get_sparse(&self, points: Vec<(N, N, N)>, terms: usize) -> crate::Polynomial<N, 2> {
-        let mut phi = crate::Polynomial::new(vec![]);
-        let mut cp = Default::default();
+    pub fn get_sparse(&self, points: &[(N, N, N)], terms: usize) -> crate::Polynomial<N, 2> {
+        let mut phi = crate::Polynomial::<_, 2>::new(vec![]);
+        let mut now = Instant::now();
+        let mut counter = 0;
+
         for i in 0..DEGREE {
             for j in 0..DEGREE {
+                if now.elapsed().as_secs() > 0 {
+                    println!("{}: took {:?}", counter, now.elapsed());
+                    now = Instant::now();
+                }
+                counter += 1;
+
                 phi.terms.push(self.get_monomial(i, j));
-                let mut min = Self::dist(&phi, cp, &points);
-                let (mut min_i, mut min_j) = (0, 0);
+                let mut min = Self::dist(&phi, points);
+                let (mut min_i, mut min_j) = (i, j);
                 phi.terms.pop();
                 for k in 0..DEGREE {
                     for l in 0..DEGREE {
-                        phi.terms.push(self.get_monomial(k, l));
-                        let new_min = Self::dist(&phi, cp, &points);
-                        phi.terms.pop();
-                        if new_min < min {
-                            min = new_min;
-                            min_i = k;
-                            min_j = l;
+                        if !phi.terms.iter().any(|&mon| mon.exponents == [k, l]) {
+                            phi.terms.push(self.get_monomial(k, l));
+                            let new_min = Self::dist(&phi, points);
+                            phi.terms.pop();
+                            if new_min < min {
+                                min = new_min;
+                                min_i = k;
+                                min_j = l;
+                            }
                         }
                     }
                 }
@@ -200,13 +210,13 @@ impl<
                     let mut term = self.get_monomial(min_i, min_j);
                     for k in 0..phi.terms.len() {
                         term = std::mem::replace(&mut phi.terms[k], term);
-                        let new_min = Self::dist(&phi, cp, &points);
+                        let new_min = Self::dist(&phi, points);
                         if new_min < min {
                             break;
                         }
                     }
                 }
-                phi.fit(&points)
+                phi.fit(points)
             }
         }
         phi
@@ -226,6 +236,17 @@ impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usiz
         }
         sum
     }
+
+    pub fn eval_grid(&self, x: &[N], y: &[N]) -> Vec<Vec<N>> {
+        let mut result = vec![vec![N::zero(); x.len()]; y.len()];
+        for i in 0..x.len() {
+            for j in 0..y.len() {
+                result[j][i] = self.eval(x[i], y[j]);
+            }
+        }
+        result
+    }
+
 }
 
 impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom2d<N, DEGREE>>
@@ -397,7 +418,6 @@ impl<
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut now = Instant::now();
         let mut counter = 0;
-        let mut used_monomials = std::collections::HashSet::new();
 
         // for (counter, (((i, j), k), l)) in (0..DEGREE)
         //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
@@ -417,40 +437,39 @@ impl<
 
                         phi.terms.push(self.get_monomial(i, j, k, l));
                         let mut min = Self::dist(&phi, points);
-                        let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
+                        let (mut min_i, mut min_j, mut min_k, mut min_l) = (i, j, k, l);
                         phi.terms.pop();
-                        'inner: for m in 0..DEGREE {
+                        for m in 0..DEGREE {
                             for n in 0..DEGREE {
                                 for o in 0..DEGREE {
                                     for p in 0..DEGREE {
-                                        if used_monomials.contains(&[m, n, o, p]) {
-                                            continue 'inner;
-                                        }
-                                        phi.terms.push(self.get_monomial(m, n, o, p));
-                                        let new_min = Self::dist(&phi, points);
-                                        phi.terms.pop();
-                                        if new_min < min {
-                                            min = new_min;
-                                            min_i = m;
-                                            min_j = n;
-                                            min_k = o;
-                                            min_l = p;
+                                        if !phi
+                                            .terms
+                                            .iter()
+                                            .any(|&mon| mon.exponents == [m, n, o, p])
+                                        {
+                                            phi.terms.push(self.get_monomial(m, n, o, p));
+                                            let new_min = Self::dist(&phi, points);
+                                            phi.terms.pop();
+                                            if new_min < min {
+                                                min = new_min;
+                                                min_i = m;
+                                                min_j = n;
+                                                min_k = o;
+                                                min_l = p;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                         if phi.terms.len() < terms {
-                            used_monomials.insert([min_i, min_j, min_k, min_l]);
                             phi.terms
                                 .push(self.get_monomial(min_i, min_j, min_k, min_l));
                         } else {
                             let mut term = self.get_monomial(min_i, min_j, min_k, min_l);
-                            // TODO: this is not working as intended, only results in 0s
                             for k in 0..phi.terms.len() {
-                                used_monomials.insert(term.exponents);
                                 term = std::mem::replace(&mut phi.terms[k], term);
-                                used_monomials.remove(&term.exponents);
                                 let new_min = Self::dist(&phi, points);
                                 if new_min < min {
                                     break;
@@ -463,7 +482,6 @@ impl<
             }
         }
 
-        println!("used monomials: {:?}", used_monomials);
         println!("resulting polynomial: {:?}", phi);
         println!("total time: {:?}", now.elapsed());
         phi
