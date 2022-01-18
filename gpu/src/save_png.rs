@@ -2,7 +2,7 @@ use std::{fs::File, io::BufWriter, iter, path::Path};
 
 use wgpu::{Device, Queue, Texture};
 
-pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue) {
+pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue, path: &str) {
     let output_buffer_size = (size[0] * size[1] * 4) as wgpu::BufferAddress;
     let output_buffer_desc = wgpu::BufferDescriptor {
         size: output_buffer_size,
@@ -46,7 +46,7 @@ pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue) {
             chunk.swap(0, 2);
         }
 
-        let path = Path::new(r"./screenshot2.png");
+        let path = Path::new(path);
         let file = File::create(path).unwrap();
         let w = &mut BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, size[0], size[1]);

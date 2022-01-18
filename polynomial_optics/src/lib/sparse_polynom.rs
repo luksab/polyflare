@@ -414,15 +414,16 @@ impl<
             + AbsDiffEq,
     > Polynomial<N, 4>
 {
-    pub fn fit(&mut self, points: Vec<(N, N, N, N, N)>) {
-        let mut m: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4_u32).pow(2_u32)];
-        let mut k: Vec<N> = vec![num::Zero::zero(); self.terms.len().pow(4_u32)];
+    pub fn fit(&mut self, points: &[(N, N, N, N, N)]) {
+        let tems_num = self.terms.len();
+        let mut m = vec![num::Zero::zero(); tems_num.pow(2_u32)];
+        let mut k = vec![num::Zero::zero(); tems_num];
         for (i, a) in self.terms.iter().enumerate() {
             for (j, b) in self.terms.iter().enumerate() {
                 m[i * self.terms.len() + j] = points
                     .iter()
                     .map(|(x, y, z, w, _d)| a.combine_res(b, [*x, *y, *z, *w]))
-                    .sum::<N>()
+                    .sum::<N>();
             }
         }
         for (i, a) in self.terms.iter().enumerate() {
@@ -431,12 +432,8 @@ impl<
                 .map(|(x, y, z, w, d)| *d * a.res([*x, *y, *z, *w]))
                 .sum::<N>()
         }
-        let m = Matrix::new(
-            self.terms.len().pow(4_u32),
-            self.terms.len().pow(4_u32),
-            m,
-        );
-        let k = Vector::new_row(self.terms.len().pow(4_u32), k);
+        let m = Matrix::new(tems_num, tems_num, m);
+        let k = Vector::new_column(tems_num, k);
         let c = m.solve(&k).unwrap();
         for (i, term) in self.terms.iter_mut().enumerate() {
             term.coefficient = *c.get(i);

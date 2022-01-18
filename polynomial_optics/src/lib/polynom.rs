@@ -1,3 +1,4 @@
+use itertools::iproduct;
 use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
 use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
 use num::traits::Zero;
@@ -252,9 +253,7 @@ impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom2d<N, DEGRE
                 coefficients[i][j] = self.coefficients[i][j] + _rhs.coefficients[i][j];
             }
         }
-        Polynom2d {
-            coefficients,
-        }
+        Polynom2d { coefficients }
     }
 }
 
@@ -284,9 +283,7 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
                 coefficients[i][j] = self.coefficients[i][j] - _rhs.coefficients[i][j];
             }
         }
-        Polynom2d {
-            coefficients,
-        }
+        Polynom2d { coefficients }
     }
 }
 
@@ -361,19 +358,24 @@ where
 }
 
 impl<
-        N: Zero
+        N: num::Zero
+            + num::One
+            + Sum
             + AddAssign
             + MulAssign
             + std::ops::Mul<Output = N>
             + crate::sparse_polynom::PowUsize
             + std::cmp::PartialOrd
             + std::ops::Sub<Output = N>
+            + Field
+            + Scalar
+            + mathru::algebra::abstr::AbsDiffEq
             + Copy,
         const DEGREE: usize,
     > Polynom4d<N, DEGREE>
 {
-    fn dist(phi: &crate::Polynomial<N, 4>, cp: (), points: &[(N, N, N, N, N)]) -> N {
-        let mut result = N::zero();
+    fn dist(phi: &crate::Polynomial<N, 4>, points: &[(N, N, N, N, N)]) -> N {
+        let mut result = <N as num::Zero>::zero();
         for point in points {
             let input = [point.0, point.1, point.2, point.3];
             result += phi.eval(input) - point.4;
@@ -391,32 +393,41 @@ impl<
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
-    pub fn get_sparse(
-        &self,
-        points: &[(N, N, N, N, N)],
-        terms: usize,
-    ) -> crate::Polynomial<N, 4> {
+    pub fn get_sparse(&self, points: &[(N, N, N, N, N)], terms: usize) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
-        let mut cp = Default::default();
-        let now = Instant::now();
+        let mut now = Instant::now();
         let mut counter = 0;
+        let mut used_monomials = std::collections::HashSet::new();
+
+        // for (counter, (((i, j), k), l)) in (0..DEGREE)
+        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
+        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
+        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
+        //     .enumerate()
+        // {
         for i in 0..DEGREE {
             for j in 0..DEGREE {
                 for k in 0..DEGREE {
                     for l in 0..DEGREE {
-                        println!("{}: took {:?}", counter, now.elapsed());
+                        if now.elapsed().as_secs() > 0 {
+                            println!("{}: took {:?}", counter, now.elapsed());
+                            now = Instant::now();
+                        }
                         counter += 1;
 
                         phi.terms.push(self.get_monomial(i, j, k, l));
-                        let mut min = Self::dist(&phi, cp, &points);
+                        let mut min = Self::dist(&phi, points);
                         let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
                         phi.terms.pop();
-                        for m in 0..DEGREE {
+                        'inner: for m in 0..DEGREE {
                             for n in 0..DEGREE {
                                 for o in 0..DEGREE {
                                     for p in 0..DEGREE {
+                                        if used_monomials.contains(&[m, n, o, p]) {
+                                            continue 'inner;
+                                        }
                                         phi.terms.push(self.get_monomial(m, n, o, p));
-                                        let new_min = Self::dist(&phi, cp, &points);
+                                        let new_min = Self::dist(&phi, points);
                                         phi.terms.pop();
                                         if new_min < min {
                                             min = new_min;
@@ -430,23 +441,31 @@ impl<
                             }
                         }
                         if phi.terms.len() < terms {
+                            used_monomials.insert([min_i, min_j, min_k, min_l]);
                             phi.terms
                                 .push(self.get_monomial(min_i, min_j, min_k, min_l));
                         } else {
                             let mut term = self.get_monomial(min_i, min_j, min_k, min_l);
+                            // TODO: this is not working as intended, only results in 0s
                             for k in 0..phi.terms.len() {
+                                used_monomials.insert(term.exponents);
                                 term = std::mem::replace(&mut phi.terms[k], term);
-                                let new_min = Self::dist(&phi, cp, &points);
+                                used_monomials.remove(&term.exponents);
+                                let new_min = Self::dist(&phi, points);
                                 if new_min < min {
                                     break;
                                 }
                             }
                         }
-                        // TODO: implement linear least sqares here
+                        phi.fit(points);
                     }
                 }
             }
         }
+
+        println!("used monomials: {:?}", used_monomials);
+        println!("resulting polynomial: {:?}", phi);
+        println!("total time: {:?}", now.elapsed());
         phi
     }
 }
@@ -509,16 +528,39 @@ impl<
         let mut k = Vector::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE);
         println!("init: {:?}", now.elapsed());
         now = std::time::Instant::now();
+
+        // this is slower than the direct matrix version
+        // let mut m =
+        //     vec![N::zero(); DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE];
+        // for (i, a) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE).enumerate() {
+        //     for (j, b) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE).enumerate() {
+        //         // println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
+        //         m[i * DEGREE * DEGREE * DEGREE * DEGREE + j] = points
+        //             .iter()
+        //             .map(|(x, y, z, w, _d)| {
+        //                 (*x).upow(a.0 + b.0)
+        //                     * (*y).upow(a.1 + b.1)
+        //                     * (*z).upow(a.2 + b.2)
+        //                     * (*w).upow(a.3 + b.3)
+        //             })
+        //             .sum::<N>()
+        //     }
+        // }
+        // let m = Matrix::new(
+        //     DEGREE * DEGREE * DEGREE * DEGREE,
+        //     DEGREE * DEGREE * DEGREE * DEGREE,
+        //     m,
+        // );
         for (iter, element) in m.iter_mut().enumerate() {
             let (i, j) = (
                 iter / (DEGREE * DEGREE * DEGREE * DEGREE),
                 iter % (DEGREE * DEGREE * DEGREE * DEGREE),
             );
-            let (k_i, l_i) = (i / DEGREE, i % DEGREE);
-            let (k_j, l_j) = (j / DEGREE, j % DEGREE);
+            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
+            let (k_j, l_j) = (j / (DEGREE * DEGREE), j % (DEGREE * DEGREE));
             let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
             let b = (k_j / DEGREE, k_j % DEGREE, l_j / DEGREE, l_j % DEGREE);
-            // println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
+            // println!("j:{}, b:{:?}, k_j:{}, l_j:{}", j, b, k_j, l_j);
             *element = points
                 .iter()
                 .map(|(x, y, z, w, _d)| {
@@ -582,9 +624,7 @@ impl<
         }
         println!("res: {:?}", now.elapsed());
         now = std::time::Instant::now();
-        Polynom4d {
-            coefficients,
-        }
+        Polynom4d { coefficients }
     }
 }
 
@@ -605,9 +645,7 @@ impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom4d<N, DEGRE
                 }
             }
         }
-        Polynom4d {
-            coefficients,
-        }
+        Polynom4d { coefficients }
     }
 }
 
@@ -628,9 +666,7 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
                 }
             }
         }
-        Polynom4d {
-            coefficients,
-        }
+        Polynom4d { coefficients }
     }
 }
 

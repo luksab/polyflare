@@ -374,16 +374,63 @@ fn main() {
                     lens_ui.sim_params = sim_params;
                     lens_ui.needs_update = true;
                     lens_ui.num_wavelengths /= 10;
-                    save_png::save_png(&tex, size, &state.device, &state.queue);
+                    save_png::save_png(&tex, size, &state.device, &state.queue, "hi-res.png");
 
                     println!("Rendering and saving image took {:?}", now.elapsed());
                 }
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
 
                 if compute {
-                    let num_dots = 8;
+                    let old_pos_params = lens_ui.pos_params;
+                    let old_sim_params = lens_ui.sim_params;
+                    let size = [2048, 2048];
+                    let extend = wgpu::Extent3d {
+                        width: size[0],
+                        height: size[1],
+                        depth_or_array_layers: 1,
+                    };
+                    let desc = wgpu::TextureDescriptor {
+                        label: Some("hi-res"),
+                        size: extend,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_SRC,
+                    };
+                    let tex = state.device.create_texture(&desc);
+                    poly_tri.resize(
+                        winit::dpi::PhysicalSize {
+                            width: size[0],
+                            height: size[1],
+                        },
+                        2.0,
+                        &state.device,
+                        &state.config,
+                    );
+                    lens_ui.resize_window(
+                        winit::dpi::PhysicalSize {
+                            width: size[0],
+                            height: size[1],
+                        },
+                        1.0,
+                    );
+                    lens_ui.update(&state.device, &state.queue);
+                    poly_tri
+                        .render(
+                            &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                            &state.device,
+                            &state.queue,
+                            &lens_ui,
+                        )
+                        .unwrap();
+                    save_png::save_png(&tex, size, &state.device, &state.queue, "before.png");
+                    let num_dots = 6;
                     let width = 2.;
                     let mut points = vec![];
+
                     for i in 0..num_dots {
                         for j in 0..num_dots {
                             lens_ui.pos_params[0] =
@@ -409,16 +456,20 @@ fn main() {
                             }
                         }
                     }
+                    lens_ui.pos_params = old_pos_params;
+                    lens_ui.update(&state.device, &state.queue);
+
                     let now = Instant::now();
                     let polynom = Polynom4d::<_, 4>::fit(&points);
                     println!("Fitting took {:?}", now.elapsed());
-                    println!("{:?}", polynom);
-                    let sparse_poly = polynom.get_sparse(&points, 10);
+                    println!("{}", polynom);
+                    let sparse_poly = polynom.get_sparse(&points, 100);
+                    println!("{}", sparse_poly);
                     let mut difference = 0.0;
                     let mut difference_sparse = 0.0;
                     for point in points.iter() {
                         let strength = polynom.eval(point.0, point.1, point.2, point.3);
-                        difference += (strength - point.4).abs() * (strength - point.4).abs();
+                        difference += (strength - point.4).abs().powf(2.);
                         difference_sparse +=
                             (sparse_poly.eval([point.0, point.1, point.2, point.3]) - point.4)
                                 .abs()
@@ -436,6 +487,87 @@ fn main() {
                         "average difference sparse: {}",
                         (difference_sparse / points.len() as f32).sqrt()
                     );
+                    /*
+                    struct VertexInput {
+                        [[location(0)]] pos: vec2<f32>;
+                        [[location(1)]] aperture_pos: vec2<f32>;
+                        [[location(2)]] entry_pos: vec2<f32>;
+                        [[location(3)]] strength: f32;
+                        [[location(4)]] wavelength: f32;
+                    };
+                     */
+                    let points = poly_tri
+                        .get_dots(&state.device, &state.queue, true, &lens_ui)
+                        .into_iter()
+                        // .map(|mut point| {
+                        //     point.strength = polynom.eval(
+                        //         lens_ui.pos_params[0],
+                        //         lens_ui.pos_params[1],
+                        //         point.init_pos[0],
+                        //         point.init_pos[1],
+                        //     );
+                        //     point
+                        // })
+                        .map(|mut point| {
+                            let strength = point.strength;
+                            point.strength = sparse_poly.eval([
+                                lens_ui.pos_params[0],
+                                lens_ui.pos_params[1],
+                                point.init_pos[0],
+                                point.init_pos[1],
+                            ]);
+                            println!(
+                                "strength at {:?}: {} was {}",
+                                (
+                                    lens_ui.pos_params[0],
+                                    lens_ui.pos_params[1],
+                                    point.init_pos[0],
+                                    point.init_pos[1],
+                                ),
+                                point.strength,
+                                strength
+                            );
+                            point
+                        })
+                        .into_iter()
+                        .flat_map(|point| {
+                            [
+                                point.pos[0],
+                                point.pos[1],
+                                point.aperture_pos[0],
+                                point.aperture_pos[1],
+                                point.entry_pos[0],
+                                point.entry_pos[1],
+                                point.strength,
+                                point.wavelength,
+                            ]
+                        })
+                        .collect::<Vec<f32>>();
+                    println!("num points: {}", points.len() / 8);
+                    state.queue.write_buffer(
+                        &poly_tri.vertex_buffer,
+                        0,
+                        bytemuck::cast_slice(&points),
+                    );
+                    poly_tri
+                        .render(
+                            &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                            &state.device,
+                            &state.queue,
+                            &lens_ui,
+                        )
+                        .unwrap();
+                    save_png::save_png(&tex, size, &state.device, &state.queue, "after.png");
+                    poly_tri.resize(
+                        winit::dpi::PhysicalSize {
+                            width: old_sim_params[9] as _,
+                            height: old_sim_params[10] as _,
+                        },
+                        state.scale_factor,
+                        &state.device,
+                        &state.config,
+                    );
+                    lens_ui.sim_params = old_sim_params;
                 }
 
                 if lens_ui.triangulate {

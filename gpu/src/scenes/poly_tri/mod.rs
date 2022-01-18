@@ -34,7 +34,7 @@ pub struct PolyTri {
     compute_pipeline: ComputePipeline,
     compute_bind_group: BindGroup,
     compute_bind_group_layout: BindGroupLayout,
-    vertex_buffer: wgpu::Buffer,
+    pub vertex_buffer: wgpu::Buffer,
     tri_index_buffer: wgpu::Buffer,
 
     pub dot_side_len: u32,
@@ -326,7 +326,8 @@ impl PolyTri {
             contents: bytemuck::cast_slice(&initial_ray_data),
             usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC,
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
         });
 
         // create two bind groups, one for each buffer as the src
@@ -433,7 +434,8 @@ impl PolyTri {
             contents: bytemuck::cast_slice(&initial_tri_index_data),
             usage: wgpu::BufferUsages::INDEX
                 | wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC,
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
         })
     }
 
@@ -605,19 +607,25 @@ impl PolyTri {
             for (i, elements) in data.chunks(8).enumerate() {
                 let ray_num = i as u32 % (self.dot_side_len * self.dot_side_len);
                 let ghost_num = i as u32 / (self.dot_side_len * self.dot_side_len);
-                let ray_num_x = (ray_num / (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
-                let ray_num_y = (ray_num % (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
-                print!("{:03}: ", i);
+                let ray_num_x =
+                    (ray_num / (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
+                let ray_num_y =
+                    (ray_num % (self.dot_side_len)) as f32 / (self.dot_side_len - 1) as f32;
+                // print!("{:03}: ", i);
+                let width = lens_state.pos_params[9];
                 out.push(DrawRay {
                     ghost_num,
-                    init_pos: [ray_num_x, ray_num_y],
+                    init_pos: [
+                        ray_num_x / (self.dot_side_len - 1) as f32 * width - width / 2.,
+                        ray_num_y / (self.dot_side_len - 1) as f32 * width - width / 2.,
+                    ],
                     pos: [elements[0], elements[1]],
                     aperture_pos: [elements[2], elements[3]],
                     entry_pos: [elements[4], elements[5]],
                     strength: elements[6],
                     wavelength: elements[7],
                 });
-                println!("{:?}", out.last().unwrap());
+                // println!("{:?}", out.last().unwrap());
             }
             // println!("{:?}", data);
             out

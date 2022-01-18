@@ -12,8 +12,13 @@
 - [x] sparse
 - [ ] autodiff 1/gradient as strength
 
+# Polynomials
+- [ ] make Dense degree correct
+  - [ ] implement exponent generation function
+  - [ ] use generated exponents
+
 # Fitting Polynomials
 - [ ] proper ray generation 
 - [ ] Dense polynomials - this is currently broken
-  - [x] Sparse from polynomials
-    - [ ] accelerate?
+  - [ ] Sparse from polynomials
+    - [ ] fix used_monomials hashMap
