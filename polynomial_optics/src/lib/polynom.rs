@@ -486,6 +486,86 @@ impl<
         println!("total time: {:?}", now.elapsed());
         phi
     }
+
+    /// # Orthogonal Matching Pursuit with replacement
+    /// ```
+    /// ```
+    pub fn get_sparse_cheap(&self, points: &[(N, N, N, N, N)], terms: usize) -> crate::Polynomial<N, 4> {
+        let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
+        let mut now = Instant::now();
+        let mut counter = 0;
+
+        // for (counter, (((i, j), k), l)) in (0..DEGREE)
+        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
+        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
+        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
+        //     .enumerate()
+        // {
+        for i in 0..DEGREE {
+            for j in 0..DEGREE {
+                for k in 0..DEGREE {
+                    for l in 0..DEGREE {
+                        if now.elapsed().as_secs() > 0 {
+                            println!("{}: took {:?}", counter, now.elapsed());
+                            now = Instant::now();
+                        }
+                        counter += 1;
+
+                        if counter > terms {
+                            return phi;
+                        }
+
+                        phi.terms.push(self.get_monomial(i, j, k, l));
+                        let mut min = Self::dist(&phi, points);
+                        let (mut min_i, mut min_j, mut min_k, mut min_l) = (i, j, k, l);
+                        phi.terms.pop();
+                        for m in 0..DEGREE {
+                            for n in 0..DEGREE {
+                                for o in 0..DEGREE {
+                                    for p in 0..DEGREE {
+                                        if !phi
+                                            .terms
+                                            .iter()
+                                            .any(|&mon| mon.exponents == [m, n, o, p])
+                                        {
+                                            phi.terms.push(self.get_monomial(m, n, o, p));
+                                            let new_min = Self::dist(&phi, points);
+                                            phi.terms.pop();
+                                            if new_min < min {
+                                                min = new_min;
+                                                min_i = m;
+                                                min_j = n;
+                                                min_k = o;
+                                                min_l = p;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if phi.terms.len() < terms {
+                            phi.terms
+                                .push(self.get_monomial(min_i, min_j, min_k, min_l));
+                        } else {
+                            let mut term = self.get_monomial(min_i, min_j, min_k, min_l);
+                            for k in 0..phi.terms.len() {
+                                term = std::mem::replace(&mut phi.terms[k], term);
+                                let new_min = Self::dist(&phi, points);
+                                if new_min < min {
+                                    break;
+                                }
+                            }
+                        }
+                        phi.fit(points);
+                    }
+                }
+            }
+        }
+
+        println!("resulting polynomial: {:?}", phi);
+        println!("total time: {:?}", now.elapsed());
+        phi
+    }
 }
 
 impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usize>
@@ -617,29 +697,29 @@ impl<
         }
         println!("coefficients: {:?}", now.elapsed());
         now = std::time::Instant::now();
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                for k in 0..DEGREE {
-                    for l in 0..DEGREE {
-                        coefficients[i][j][k][l] = points
-                            .iter()
-                            .map(|(x, y, z, w, d)| {
-                                (*d) * (*x).upow(i) * (*y).upow(j) * (*z).upow(k) * (*w).upow(l)
-                            })
-                            .sum::<N>()
-                            / points
-                                .iter()
-                                .map(|(x, y, z, w, _)| {
-                                    (*x).upow(2 * i)
-                                        * (*y).upow(2 * j)
-                                        * (*z).upow(2 * k)
-                                        * (*w).upow(2 * l)
-                                })
-                                .sum();
-                    }
-                }
-            }
-        }
+        // for i in 0..DEGREE {
+        //     for j in 0..DEGREE {
+        //         for k in 0..DEGREE {
+        //             for l in 0..DEGREE {
+        //                 coefficients[i][j][k][l] = points
+        //                     .iter()
+        //                     .map(|(x, y, z, w, d)| {
+        //                         (*d) * (*x).upow(i) * (*y).upow(j) * (*z).upow(k) * (*w).upow(l)
+        //                     })
+        //                     .sum::<N>()
+        //                     / points
+        //                         .iter()
+        //                         .map(|(x, y, z, w, _)| {
+        //                             (*x).upow(2 * i)
+        //                                 * (*y).upow(2 * j)
+        //                                 * (*z).upow(2 * k)
+        //                                 * (*w).upow(2 * l)
+        //                         })
+        //                         .sum();
+        //             }
+        //         }
+        //     }
+        // }
         println!("res: {:?}", now.elapsed());
         now = std::time::Instant::now();
         Polynom4d { coefficients }

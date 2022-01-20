@@ -7,24 +7,6 @@ use wgpu::{
 
 use crate::{lens_state::LensState, texture::Texture};
 
-///struct DrawRay {
-///  pos: vec2<f32>;
-///  aperture_pos: vec2<f32>;
-///  entry_pos: vec2<f32>;
-///  strength: f32;
-///  wavelength: f32;
-///};
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct DrawRay {
-    pub ghost_num: u32,
-    pub init_pos: [f32; 2],
-    pub pos: [f32; 2],
-    pub aperture_pos: [f32; 2],
-    pub entry_pos: [f32; 2],
-    pub strength: f32,
-    pub wavelength: f32,
-}
-
 pub struct PolyTri {
     tri_render_pipeline: wgpu::RenderPipeline,
     triangulate_pipeline: wgpu::ComputePipeline,
@@ -517,7 +499,7 @@ impl PolyTri {
         queue: &wgpu::Queue,
         update_size: bool,
         lens_state: &LensState,
-    ) -> Vec<DrawRay> {
+    ) -> Vec<polynomial_optics::DrawRay> {
         if update_size {
             // println!("update: {}", self.num_dots);
             let (compute_pipeline, compute_bind_group, compute_bind_group_layout, vertex_buffer) =
@@ -625,7 +607,7 @@ impl PolyTri {
                 //         ray_num_y as f32 * width - width / 2.,
                 //     ]
                 // );
-                out.push(DrawRay {
+                out.push(polynomial_optics::DrawRay {
                     ghost_num,
                     init_pos: [
                         ray_num_x as f32 * width - width / 2.,

@@ -429,7 +429,7 @@ fn main() {
                         .unwrap();
                     save_png::save_png(&tex, size, &state.device, &state.queue, "before.png");
                     let num_dots = 1;
-                    let width = 2.;
+                    let width = 1.;
                     let mut points = vec![];
 
                     for i in 0..num_dots {
@@ -462,33 +462,43 @@ fn main() {
                                 .iter()
                                 .filter(|point| point.strength > 0.0 && point.ghost_num == 5)
                             {
-                                let point = (dot.init_pos[0], dot.init_pos[1], dot.strength);
+                                let point = (
+                                    lens_ui.pos_params[0],
+                                    lens_ui.pos_params[1],
+                                    dot.init_pos[0],
+                                    dot.init_pos[1],
+                                    dot.strength,
+                                );
                                 points.push(point);
                             }
                         }
                     }
+                    let points = points; // make points immutable
                     println!("points;: {}", points.len());
                     lens_ui.pos_params = old_pos_params;
                     lens_ui.update(&state.device, &state.queue);
 
                     let now = Instant::now();
-                    let polynom = Polynom2d::<_, 5>::fit(&points);
+                    let polynom = Polynom4d::<_, 5>::fit(&points);
                     println!("Fitting took {:?}", now.elapsed());
                     println!("{}", polynom);
-                    let sparse_poly = polynom.get_sparse(&points, 25);
+                    let sparse_poly = polynom.get_sparse_cheap(&points, 25);
                     println!("{}", sparse_poly);
                     let mut difference = 0.0;
                     let mut difference_sparse = 0.0;
                     for point in points.iter() {
-                        let strength = polynom.eval(point.0, point.1);
-                        difference += (strength - point.2).abs().powf(2.);
-                        difference_sparse += (sparse_poly.eval([point.0, point.1]) - point.2)
-                            .abs()
-                            .powf(2.);
-                        // println!(
-                        //     "xyzw:{:?}: real: {}, {}",
-                        //     (point.0, point.1, point.2, point.3), point.4, strength
-                        // );
+                        let strength = polynom.eval(point.0, point.1, point.2, point.3);
+                        difference += (strength - point.4).abs().powf(2.);
+                        difference_sparse +=
+                            (sparse_poly.eval([point.0, point.1, point.2, point.3]) - point.4)
+                                .abs()
+                                .powf(2.);
+                        println!(
+                            "xyzw:{:?}: real: {}, {}",
+                            (point.0, point.1, point.2, point.3),
+                            point.4,
+                            strength
+                        );
                     }
                     println!(
                         "average difference: {}",
@@ -498,8 +508,28 @@ fn main() {
                         "average difference sparse: {}",
                         (difference_sparse / points.len() as f32).sqrt()
                     );
+                    // poly_tri.dot_side_len = 100;
+                    // lens_ui.sim_params[11] = poly_tri.dot_side_len as f32;
+                    // lens_ui.needs_update = true;
+                    // lens_ui.update(&state.device, &state.queue);
                     let dots = poly_tri.get_dots(&state.device, &state.queue, true, &lens_ui);
-                    let points = dots
+                    // let dots = lens_ui.actual_lens.get_dots(
+                    //     100,
+                    //     cgmath::Vector3 {
+                    //         x: 0.,
+                    //         y: 0.,
+                    //         z: -6.,
+                    //     },
+                    //     cgmath::Vector3 {
+                    //         x: 0.,
+                    //         y: 0.,
+                    //         z: 1.,
+                    //     },
+                    //     lens_ui.draw,
+                    //     lens_ui.which_ghost,
+                    //     lens_ui.pos_params[8].into(),
+                    // );
+                    let draw_points = dots
                         .clone()
                         .into_iter()
                         // .map(|mut point| {
@@ -511,14 +541,19 @@ fn main() {
                         //     );
                         //     point
                         // })
-                        .filter(|point| point.strength > 0.0 && point.ghost_num == 5)
+                        // .filter(|point| point.strength > 0.0 && point.ghost_num == 5)
                         .map(|mut point| {
                             let strength = point.strength;
                             // point.strength = sparse_poly.eval([
                             //     point.init_pos[0],
                             //     point.init_pos[1],
                             // ]);
-                            point.strength = polynom.eval(point.init_pos[0], point.init_pos[1]);
+                            // point.strength = polynom.eval(
+                            //     lens_ui.pos_params[0],
+                            //     lens_ui.pos_params[1],
+                            //     point.init_pos[0],
+                            //     point.init_pos[1],
+                            // );
                             // println!(
                             //     "strength at {:?}: {} was {}",
                             //     (
@@ -546,11 +581,11 @@ fn main() {
                             ]
                         })
                         .collect::<Vec<f32>>();
-                    println!("num points: {}", points.len() / 8);
+                    println!("num points: {}", draw_points.len() / 8);
                     state.queue.write_buffer(
                         &poly_tri.vertex_buffer,
                         0,
-                        bytemuck::cast_slice(&points),
+                        bytemuck::cast_slice(&draw_points),
                     );
 
                     let grid_size = 100;
@@ -573,18 +608,22 @@ fn main() {
                     //     .collect::<Vec<String>>()
                     //     .join("\n");
 
-                    println!("zero zero: {}", sparse_poly.eval([0., 0.]));
+                    println!("zero zero: {}", sparse_poly.eval([0., 0., 0., 0.]));
 
                     let string = iproduct![(0..grid_size), (0..grid_size)]
                         .map(|(x, y)| {
                             [
                                 ((x - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
                                 ((y - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
-                                // polynom.eval(
-                                //     ((x - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
-                                //     ((y - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
-                                // ),
+                                polynom.eval(
+                                    0.,
+                                    0.,
+                                    ((x - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
+                                    ((y - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
+                                ),
                                 sparse_poly.eval([
+                                    0.,
+                                    0.,
                                     ((x - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
                                     ((y - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
                                 ]),
@@ -594,30 +633,31 @@ fn main() {
                         .collect::<Vec<String>>()
                         .join("\n");
 
-                    std::fs::write("points.txt", string).unwrap();
+                    std::fs::write("plots/points.txt", string).unwrap();
 
-                    let string = dots
-                        .iter()
-                        .filter(|point| point.strength > 0.0 && point.ghost_num == 5)
-                        .map(|point| {
-                            [point.init_pos[0], point.init_pos[1], point.strength]
-                                .map(|str| str.to_string())
-                                .join(" ")
-                        })
-                        .collect::<Vec<String>>()
-                        .join("\n");
-
-                    // let string = points
+                    // let string = dots
                     //     .iter()
+                    //     .filter(|point| point.strength > 0.0 && point.ghost_num == 5)
                     //     .map(|point| {
-                    //         [point.0, point.1, point.2]
+                    //         [point.init_pos[0], point.init_pos[1], point.strength]
                     //             .map(|str| str.to_string())
                     //             .join(" ")
                     //     })
                     //     .collect::<Vec<String>>()
                     //     .join("\n");
 
-                    std::fs::write("dots.txt", string).unwrap();
+                    let string = points
+                        .iter()
+                        .map(|point| {
+                            //[point.2, point.3, point.4]
+                            [point.2, point.3, point.4]
+                                .map(|str| str.to_string())
+                                .join(" ")
+                        })
+                        .collect::<Vec<String>>()
+                        .join("\n");
+
+                    std::fs::write("plots/dots.txt", string).unwrap();
 
                     poly_tri
                         .render(

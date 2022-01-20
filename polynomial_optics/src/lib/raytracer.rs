@@ -5,6 +5,25 @@ use serde::{Deserialize, Serialize};
 use cgmath::{num_traits::Pow, prelude::*, Vector2, Vector3};
 use tiny_skia::{Color, Pixmap};
 
+
+///struct DrawRay {
+///  pos: vec2<f32>;
+///  aperture_pos: vec2<f32>;
+///  entry_pos: vec2<f32>;
+///  strength: f32;
+///  wavelength: f32;
+///};
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
+pub struct DrawRay {
+    pub ghost_num: u32,
+    pub init_pos: [f32; 2],
+    pub pos: [f32; 2],
+    pub aperture_pos: [f32; 2],
+    pub entry_pos: [f32; 2],
+    pub strength: f32,
+    pub wavelength: f32,
+}
+
 /// ## A ray at a plane in the lens system
 #[derive(Debug, Clone, Copy)]
 pub struct Ray {
@@ -1173,7 +1192,7 @@ impl Lens {
         draw_mode: u32,
         which_ghost: u32,
         sensor_pos: f64,
-    ) -> Vec<f32> {
+    ) -> Vec<DrawRay> {
         // let rays = self.get_paths(
         //     num::integer::Roots::sqrt(&(num_rays * 1000)),
         //     center_pos,
@@ -1183,6 +1202,7 @@ impl Lens {
         // );
 
         let mut rays = vec![];
+        let mut draw_rays = vec![];
 
         let width = 2.0;
         for ray_num_x in 0..num_rays {
@@ -1205,6 +1225,7 @@ impl Lens {
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
                                 let mut ray = Ray::new(pos, direction, wavelength);
+                                let mut draw_ray = DrawRay{ ghost_num, init_pos: [pos.x as f32, pos.y as f32], entry_pos: [pos.x as f32, pos.y as f32], wavelength: wavelength as f32, ..Default::default() };
 
                                 for (ele, element) in self.elements.iter().enumerate() {
                                     // if we iterated through all elements up to
@@ -1264,14 +1285,6 @@ impl Lens {
         //     rays.len(),
         //     rays.len() as f64 / (&num_rays * 100) as f64 * 100.
         // );
-
-        let mut dots = vec![];
-        for ray in rays {
-            let intersection = ray.intersect(sensor_pos);
-            dots.push(intersection.0 as f32);
-            dots.push(intersection.1 as f32);
-            dots.push(ray.strength as f32);
-        }
-        dots
+        draw_rays
     }
 }

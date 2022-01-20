@@ -843,6 +843,7 @@ dependencies = [
  "imgui",
  "imgui-wgpu",
  "imgui-winit-support",
+ "itertools",
  "png 0.17.2",
  "pollster",
  "polynomial_optics",
