@@ -672,7 +672,7 @@ impl<
         println!("set Matrix: {:?}", now.elapsed());
         now = std::time::Instant::now();
         for (i, element) in k.iter_mut().enumerate() {
-            let (k_i, l_i) = (i / DEGREE, i % DEGREE);
+            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
             let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
             *element = points
                 .iter()
