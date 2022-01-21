@@ -1,6 +1,9 @@
 use mathru::algebra::{
     abstr::{AbsDiffEq, Field, Scalar},
-    linear::{matrix::Solve, Matrix, Vector},
+    linear::{
+        matrix::{Solve, Transpose},
+        Matrix, Vector,
+    },
 };
 use num::{traits::Zero, One};
 use std::{
@@ -418,25 +421,19 @@ impl<
 {
     pub fn fit(&mut self, points: &[(N, N, N, N, N)]) {
         let tems_num = self.terms.len();
-        let mut m = vec![num::Zero::zero(); tems_num.pow(2_u32)];
-        let mut k = vec![num::Zero::zero(); tems_num];
-        for (i, a) in self.terms.iter().enumerate() {
+        let mut m = vec![num::Zero::zero(); tems_num * points.len()];
+        for (i, point) in points.iter().enumerate() {
             for (j, b) in self.terms.iter().enumerate() {
-                m[i * self.terms.len() + j] = points
-                    .iter()
-                    .map(|(x, y, z, w, _d)| a.combine_res(b, [*x, *y, *z, *w]))
-                    .sum::<N>();
+                m[i * self.terms.len() + j] = b.eval([point.0, point.1, point.2, point.3]);
             }
         }
-        for (i, a) in self.terms.iter().enumerate() {
-            k[i] = points
-                .iter()
-                .map(|(x, y, z, w, d)| *d * a.res([*x, *y, *z, *w]))
-                .sum::<N>()
-        }
-        let m = Matrix::new(tems_num, tems_num, m);
-        let k = Vector::new_column(tems_num, k);
-        let c = m.solve(&k).unwrap();
+        let x = Matrix::new(tems_num, points.len(), m);
+        let y = Vector::new_column(points.len(), points.iter().map(|p| p.4).collect());
+
+        let y = x.clone() * y;
+        let x = x.clone() * x.transpose();
+
+        let c = x.solve(&y).unwrap();
         for (i, term) in self.terms.iter_mut().enumerate() {
             term.coefficient = *c.get(i);
         }
