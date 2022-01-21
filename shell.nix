@@ -20,7 +20,7 @@ in pkgs.mkShell {
     pkgs.libGL
     pkgs.libglvnd
     pkgs.mesa
-    pkgs.renderdoc
+    #pkgs.renderdoc
   ];
 
   LD_LIBRARY_PATH = with pkgs.xlibs; "${pkgs.mesa}/lib:${libX11}/lib:${libXcursor}/lib:${libXxf86vm}/lib:${libXi}/lib:${pkgs.xorg.libXrandr}/lib:${pkgs.libGL}/lib:/run/opengl-driver/lib:/run/opengl-driver-32/lib";
