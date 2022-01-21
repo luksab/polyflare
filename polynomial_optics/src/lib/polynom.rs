@@ -1,5 +1,6 @@
 use itertools::iproduct;
 use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
+use mathru::algebra::linear::matrix::Transpose;
 use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
 use num::traits::Zero;
 use std::time::Instant;
@@ -9,6 +10,7 @@ use std::{
     ops::{Add, AddAssign, Mul, Neg, Sub},
 };
 use std::{iter::Sum, ops::MulAssign};
+
 pub trait PowUsize {
     fn upow(self, exp: usize) -> Self;
 }
@@ -489,7 +491,11 @@ impl<
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
-    pub fn get_sparse_cheap(&self, points: &[(N, N, N, N, N)], terms: usize) -> crate::Polynomial<N, 4> {
+    pub fn get_sparse_cheap(
+        &self,
+        points: &[(N, N, N, N, N)],
+        terms: usize,
+    ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut now = Instant::now();
         let mut counter = 0;
@@ -596,6 +602,7 @@ impl<
         const DEGREE: usize,
     > Polynom4d<N, DEGREE>
 {
+    /// polynomial regression
     /// ```
     /// use polynomial_optics::*;
     /// let f = Polynom4d {
@@ -617,176 +624,42 @@ impl<
     /// assert!(f == res);
     /// ```
     pub fn fit(points: &[(N, N, N, N, N)]) -> Polynom4d<N, DEGREE> {
+        println!("num of points: {}", points.len());
         let mut now = std::time::Instant::now();
-        let mut m = Matrix::<N>::zero(
-            DEGREE * DEGREE * DEGREE * DEGREE,
-            DEGREE * DEGREE * DEGREE * DEGREE,
-        );
-        let mut k = Vector::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE);
+        let mut x = Matrix::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE, points.len());
+        let mut y = Vector::<N>::zero(points.len());
         println!("init: {:?}", now.elapsed());
         now = std::time::Instant::now();
 
-        // this is slower than the direct matrix version
-        // let mut m =
-        //     vec![N::zero(); DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE];
-        // for (i, a) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE).enumerate() {
-        //     for (j, b) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE).enumerate() {
-        //         // println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
-        //         m[i * DEGREE * DEGREE * DEGREE * DEGREE + j] = points
-        //             .iter()
-        //             .map(|(x, y, z, w, _d)| {
-        //                 (*x).upow(a.0 + b.0)
-        //                     * (*y).upow(a.1 + b.1)
-        //                     * (*z).upow(a.2 + b.2)
-        //                     * (*w).upow(a.3 + b.3)
-        //             })
-        //             .sum::<N>()
-        //     }
-        // }
-        // let m = Matrix::new(
-        //     DEGREE * DEGREE * DEGREE * DEGREE,
-        //     DEGREE * DEGREE * DEGREE * DEGREE,
-        //     m,
-        // );
-        for (iter, element) in m.iter_mut().enumerate() {
-            let (i, j) = (
-                iter / (DEGREE * DEGREE * DEGREE * DEGREE),
-                iter % (DEGREE * DEGREE * DEGREE * DEGREE),
-            );
-            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
-            let (k_j, l_j) = (j / (DEGREE * DEGREE), j % (DEGREE * DEGREE));
-            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
-            let b = (k_j / DEGREE, k_j % DEGREE, l_j / DEGREE, l_j % DEGREE);
-            // println!("j:{}, b:{:?}, k_j:{}, l_j:{}", j, b, k_j, l_j);
-            *element = points
-                .iter()
-                .map(|(x, y, z, w, _d)| {
-                    (*x).upow(a.0 + b.0)
-                        * (*y).upow(a.1 + b.1)
-                        * (*z).upow(a.2 + b.2)
-                        * (*w).upow(a.3 + b.3)
-                })
-                .sum::<N>()
-        }
-        println!("set Matrix: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-        for (i, element) in k.iter_mut().enumerate() {
-            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
-            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
-            *element = points
-                .iter()
-                .map(|(x, y, z, w, d)| {
-                    *d * (*x).upow(a.0) * (*y).upow(a.1) * (*z).upow(a.2) * (*w).upow(a.3)
-                })
-                .sum::<N>()
-        }
-        println!("set Vec: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-        // println!("m: {:?}", m);
-        // println!("k: {:?}", k);
-        let c = m.solve(&k).unwrap();
-        println!("solve: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-        let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
-        for (i, element) in c.iter().enumerate() {
-            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
-            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
-            // println!("{:?}", a);
-            coefficients[a.0][a.1][a.2][a.3] = *element;
-        }
-        println!("coefficients: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-        // for i in 0..DEGREE {
-        //     for j in 0..DEGREE {
-        //         for k in 0..DEGREE {
-        //             for l in 0..DEGREE {
-        //                 coefficients[i][j][k][l] = points
-        //                     .iter()
-        //                     .map(|(x, y, z, w, d)| {
-        //                         (*d) * (*x).upow(i) * (*y).upow(j) * (*z).upow(k) * (*w).upow(l)
-        //                     })
-        //                     .sum::<N>()
-        //                     / points
-        //                         .iter()
-        //                         .map(|(x, y, z, w, _)| {
-        //                             (*x).upow(2 * i)
-        //                                 * (*y).upow(2 * j)
-        //                                 * (*z).upow(2 * k)
-        //                                 * (*w).upow(2 * l)
-        //                         })
-        //                         .sum();
-        //             }
-        //         }
-        //     }
-        // }
-        println!("res: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-        Polynom4d { coefficients }
-    }
-
-    /// polynomial regression
-    pub fn fit_new(points: &[(N, N, N, N, N)]) -> Polynom4d<N, DEGREE> {
-        let mut now = std::time::Instant::now();
-        let mut m = Matrix::<N>::zero(
-            DEGREE * DEGREE * DEGREE * DEGREE,
-            DEGREE * DEGREE * DEGREE * DEGREE,
-        );
-        let mut k = Vector::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE);
-        println!("init: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-
-        // this is slower than the direct matrix version
-        // let mut m =
-        //     vec![N::zero(); DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE * DEGREE];
-        // for (i, a) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE).enumerate() {
-        //     for (j, b) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE).enumerate() {
-        //         // println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
-        //         m[i * DEGREE * DEGREE * DEGREE * DEGREE + j] = points
-        //             .iter()
-        //             .map(|(x, y, z, w, _d)| {
-        //                 (*x).upow(a.0 + b.0)
-        //                     * (*y).upow(a.1 + b.1)
-        //                     * (*z).upow(a.2 + b.2)
-        //                     * (*w).upow(a.3 + b.3)
-        //             })
-        //             .sum::<N>()
-        //     }
-        // }
-        // let m = Matrix::new(
-        //     DEGREE * DEGREE * DEGREE * DEGREE,
-        //     DEGREE * DEGREE * DEGREE * DEGREE,
-        //     m,
-        // );
-        for (iter, element) in m.iter_mut().enumerate() {
+        for (iter, element) in x.iter_mut().enumerate() {
             let (point, i) = (
                 iter / (DEGREE * DEGREE * DEGREE * DEGREE),
                 iter % (DEGREE * DEGREE * DEGREE * DEGREE),
             );
             let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
             let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
-            // println!("j:{}, b:{:?}, k_j:{}, l_j:{}", j, b, k_j, l_j);
             *element = (points[point].0).upow(a.0)
                 * (points[point].1).upow(a.1)
                 * (points[point].2).upow(a.2)
                 * (points[point].3).upow(a.3);
         }
-        println!("set Matrix: {:?}", now.elapsed());
+        println!("set Matrix: {:?} dim: {:?}", now.elapsed(), x.dim());
         now = std::time::Instant::now();
-        for (i, element) in k.iter_mut().enumerate() {
+        for (i, element) in y.iter_mut().enumerate() {
             *element = points[i].4;
         }
         println!("set Vec: {:?}", now.elapsed());
         now = std::time::Instant::now();
-        // println!("m: {:?}", m);
-        // println!("k: {:?}", k);
-        let c = m.solve(&k).unwrap();
+        let y = x.clone() * y;
+        let x = x.clone() * x.clone().transpose();
+
+        let c = x.solve(&y).unwrap();
         println!("solve: {:?}", now.elapsed());
         now = std::time::Instant::now();
         let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
         for (i, element) in c.iter().enumerate() {
             let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
             let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
-            // println!("{:?}", a);
             coefficients[a.0][a.1][a.2][a.3] = *element;
         }
         println!("coefficients: {:?}", now.elapsed());
