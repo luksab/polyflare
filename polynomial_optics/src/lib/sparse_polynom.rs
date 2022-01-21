@@ -208,6 +208,10 @@ where
     N: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.terms.is_empty() {
+            write!(f, "0")?;
+            return Ok(());
+        }
         let mut terms = self.terms.clone();
         terms.sort_by_key(|m| m.exponents);
         let mut iter = terms.iter();
