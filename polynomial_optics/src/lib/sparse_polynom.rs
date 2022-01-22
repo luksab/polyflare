@@ -159,6 +159,23 @@ impl<N: PowUsize + MulAssign + Zero + One + Copy + Mul<Output = N>, const VARIAB
         sum
     }
 
+    /// Evaluate the exponents of the monomial at a point
+    /// ```
+    ///# use polynomial_optics::*;
+    /// let pol = Monomial {
+    ///     coefficient: 1.0,
+    ///     exponents: [2, 3, 5],
+    /// };
+    /// println!("f(3, 2, 1.5)={}", pol.eval_exp([3.0, 2.0, 1.5]));
+    /// ```
+    pub fn eval_exp(&self, point: [N; VARIABLES]) -> N {
+        let mut sum: N = N::one();
+        for (variable, &exponent) in self.exponents.iter().enumerate() {
+            sum *= point[variable].upow(exponent);
+        }
+        sum
+    }
+
     pub fn combine_res(&self, other: &Monomial<N, VARIABLES>, point: [N; VARIABLES]) -> N {
         let mut sum: N = N::one();
         for (variable, (&exponent_self, &exponent_other)) in self
@@ -428,7 +445,7 @@ impl<
         let mut m = vec![num::Zero::zero(); tems_num * points.len()];
         for (i, point) in points.iter().enumerate() {
             for (j, b) in self.terms.iter().enumerate() {
-                m[i * self.terms.len() + j] = b.eval([point.0, point.1, point.2, point.3]);
+                m[i * self.terms.len() + j] = b.eval_exp([point.0, point.1, point.2, point.3]);
             }
         }
         let x = Matrix::new(tems_num, points.len(), m);
