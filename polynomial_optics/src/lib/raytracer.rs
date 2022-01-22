@@ -63,6 +63,13 @@ impl Ray {
         [intersect.x, intersect.y]
     }
 
+    fn intersect_vec(&self, plane: f64) -> Vector3<f64> {
+        let diff = plane - self.o.z;
+        let num_z = diff / self.d.z;
+
+        self.o + self.d * num_z
+    }
+
     fn mov_plane(&mut self, plane: f64) {
         let diff = plane - self.o.z;
         let num_z = diff / self.d.z;
@@ -199,7 +206,7 @@ impl QuarterWaveCoating {
         // refracton angle sin coating and the 2nd medium
         let theta1 = (theta0.sin() * n0 / self.ior).asin();
         let theta2 = (theta0.sin() * n0 / n2).asin();
-        println!("t1: {}, t2: {}", theta1, theta2);
+        // println!("t1: {}, t2: {}", theta1, theta2);
         // amplitude for outer refl. / transmission on topmost interface
         let rs01 = -(theta0 - theta1).sin() / (theta0 + theta1).sin();
         let rp01 = (theta0 - theta1).tan() / (theta0 + theta1).tan();
@@ -1206,10 +1213,11 @@ impl Lens {
         num_rays: u32,
         center_pos: Vector3<f64>,
         direction: Vector3<f64>,
-        draw_mode: u32,
         which_ghost: u32,
         sensor_pos: f64,
+        filter: bool,
     ) -> Vec<DrawRay> {
+        let draw_mode = 1;
         // let rays = self.get_paths(
         //     num::integer::Roots::sqrt(&(num_rays * 1000)),
         //     center_pos,
@@ -1223,7 +1231,7 @@ impl Lens {
         let width = 2.0;
         for ray_num_x in 0..num_rays {
             for ray_num_y in 0..num_rays {
-                let wave_num = 10;
+                let wave_num = 1;
                 let ray_num = ray_num_x * num_rays + ray_num_y;
                 let wavelen = (ray_num % wave_num) as f64;
                 let start_wavelen = 0.38;
@@ -1241,7 +1249,8 @@ impl Lens {
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
                                 let mut ray = Ray::new(pos, direction, [pos.x, pos.y], wavelength);
-                                ray.init_pos = ray.intersect(sensor_pos);
+                                ray.ghost_num = ghost_num;
+                                ray.init_pos = ray.intersect(self.elements[0].position);
 
                                 for (ele, element) in self.elements.iter().enumerate() {
                                     // if we iterated through all elements up to
@@ -1267,10 +1276,10 @@ impl Lens {
                                         ray.propagate(element);
                                     }
                                 }
-                                ray.o += ray.d * 100.;
+                                ray.o = ray.intersect_vec(sensor_pos as f64);
 
                                 // only return rays that have made it through
-                                if ray.d.magnitude() > 0. {
+                                if ray.d.magnitude() > 0. || !filter {
                                     rays.push(ray);
                                 }
                             }
@@ -1282,14 +1291,14 @@ impl Lens {
                     pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                     pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
                     let mut ray = Ray::new(pos, direction, [pos.x, pos.y], wavelength);
-                    ray.init_pos = ray.intersect(sensor_pos);
+                    ray.init_pos = ray.intersect(self.elements[0].position);
                     for element in &self.elements {
                         ray.propagate(element);
                     }
-                    ray.o += ray.d * 100.;
+                    ray.o = ray.intersect_vec(sensor_pos as f64);
 
                     // only return rays that have made it through
-                    if ray.d.magnitude() > 0. {
+                    if ray.d.magnitude() > 0. || !filter {
                         rays.push(ray);
                     }
                 }
