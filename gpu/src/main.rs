@@ -384,6 +384,7 @@ fn main() {
                 if compute {
                     let old_pos_params = lens_ui.pos_params;
                     let old_sim_params = lens_ui.sim_params;
+                    let which_ghost = lens_ui.which_ghost;
                     let size = [2048, 2048];
                     let extend = wgpu::Extent3d {
                         width: size[0],
@@ -429,7 +430,7 @@ fn main() {
                         .unwrap();
                     save_png::save_png(&tex, size, &state.device, &state.queue, "before.png");
                     let num_dots = 1;
-                    let width = 1.;
+                    let width = 2.;
                     let mut points = vec![];
 
                     for i in 0..num_dots {
@@ -442,7 +443,22 @@ fn main() {
                             lens_ui.update(&state.device, &state.queue);
                             let dots =
                                 poly_tri.get_dots(&state.device, &state.queue, true, &lens_ui);
-
+                            let dots = lens_ui.actual_lens.get_dots(
+                                poly_tri.dot_side_len * poly_tri.dot_side_len,
+                                cgmath::Vector3 {
+                                    x: lens_ui.pos_params[0] as f64,
+                                    y: lens_ui.pos_params[1] as f64,
+                                    z: lens_ui.pos_params[2] as f64,
+                                },
+                                cgmath::Vector3 {
+                                    x: lens_ui.pos_params[4] as f64,
+                                    y: lens_ui.pos_params[5] as f64,
+                                    z: lens_ui.pos_params[6] as f64,
+                                },
+                                1,
+                                lens_ui.pos_params[8] as f64,
+                                false,
+                            );
                             // println!(
                             //     "{}",
                             //     dots.iter()
@@ -458,16 +474,14 @@ fn main() {
                             // .chunks((poly_tri.dot_side_len * poly_tri.dot_side_len) as usize)
                             // .last()
                             // .unwrap();
-                            for dot in ghost
-                                .iter()
-                                .filter(|point| point.strength > 0.0 && point.ghost_num == 5)
-                            {
+                            for dot in ghost.iter() {
                                 let point = (
                                     lens_ui.pos_params[0],
                                     lens_ui.pos_params[1],
                                     dot.init_pos[0],
                                     dot.init_pos[1],
-                                    dot.strength,
+                                    // dot.strength,
+                                    dot.pos[0],
                                 );
                                 points.push(point);
                             }
@@ -479,26 +493,31 @@ fn main() {
                     lens_ui.update(&state.device, &state.queue);
 
                     let now = Instant::now();
-                    let polynom = Polynom4d::<_, 5>::fit(&points);
+                    let filtered_points = points
+                        .clone()
+                        .into_iter()
+                        .filter(|point| point.4 > 0.0)
+                        .collect::<Vec<_>>();
+                    let polynom = Polynom4d::<_, 5>::fit(&filtered_points);
                     println!("Fitting took {:?}", now.elapsed());
                     println!("{}", polynom);
-                    let sparse_poly = polynom.get_sparse_cheap(&points, 25);
+                    let sparse_poly = polynom.get_sparse(&filtered_points, 80);
                     println!("{}", sparse_poly);
                     let mut difference = 0.0;
                     let mut difference_sparse = 0.0;
-                    for point in points.iter() {
+                    for point in points.iter().filter(|point| point.4 > 0.0) {
                         let strength = polynom.eval(point.0, point.1, point.2, point.3);
                         difference += (strength - point.4).abs().powf(2.);
                         difference_sparse +=
                             (sparse_poly.eval([point.0, point.1, point.2, point.3]) - point.4)
                                 .abs()
                                 .powf(2.);
-                        println!(
-                            "xyzw:{:?}: real: {}, {}",
-                            (point.0, point.1, point.2, point.3),
-                            point.4,
-                            strength
-                        );
+                        // println!(
+                        //     "xyzw:{:?}: real: {}, {}",
+                        //     (point.0, point.1, point.2, point.3),
+                        //     point.4,
+                        //     strength
+                        // );
                     }
                     println!(
                         "average difference: {}",
@@ -513,6 +532,23 @@ fn main() {
                     // lens_ui.needs_update = true;
                     // lens_ui.update(&state.device, &state.queue);
                     let dots = poly_tri.get_dots(&state.device, &state.queue, true, &lens_ui);
+                    let dots = lens_ui.actual_lens.get_dots(
+                        poly_tri.dot_side_len * poly_tri.dot_side_len,
+                        cgmath::Vector3 {
+                            x: lens_ui.pos_params[0] as f64,
+                            y: lens_ui.pos_params[1] as f64,
+                            z: lens_ui.pos_params[2] as f64,
+                        },
+                        cgmath::Vector3 {
+                            x: lens_ui.pos_params[4] as f64,
+                            y: lens_ui.pos_params[5] as f64,
+                            z: lens_ui.pos_params[6] as f64,
+                        },
+                        which_ghost,
+                        lens_ui.pos_params[8] as f64,
+                        false,
+                    );
+                    // println!("dots: {:?}", dots[0..5].to_vec());
                     // let dots = lens_ui.actual_lens.get_dots(
                     //     100,
                     //     cgmath::Vector3 {
@@ -582,11 +618,11 @@ fn main() {
                         })
                         .collect::<Vec<f32>>();
                     println!("num points: {}", draw_points.len() / 8);
-                    state.queue.write_buffer(
-                        &poly_tri.vertex_buffer,
-                        0,
-                        bytemuck::cast_slice(&draw_points),
-                    );
+                    // state.queue.write_buffer(
+                    //     &poly_tri.vertex_buffer,
+                    //     0,
+                    //     bytemuck::cast_slice(&draw_points),
+                    // );
 
                     let grid_size = 100;
                     // let grid_string = polynom
@@ -613,23 +649,43 @@ fn main() {
                     let string = iproduct![(0..grid_size), (0..grid_size)]
                         .map(|(x, y)| {
                             [
-                                ((x - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
-                                ((y - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
+                                ((x - grid_size / 2) as f32 * width / grid_size as f32) * width,
+                                ((y - grid_size / 2) as f32 * width / grid_size as f32) * width,
                                 polynom.eval(
                                     0.,
                                     0.,
-                                    ((x - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
-                                    ((y - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
+                                    ((x - grid_size / 2) as f32 * width / grid_size as f32) * width,
+                                    ((y - grid_size / 2) as f32 * width / grid_size as f32) * width,
                                 ),
                                 sparse_poly.eval([
                                     0.,
                                     0.,
-                                    ((x - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
-                                    ((y - grid_size / 2) as f32 * 1. / grid_size as f32) * 0.5,
+                                    ((x - grid_size / 2) as f32 * width / grid_size as f32) * width,
+                                    ((y - grid_size / 2) as f32 * width / grid_size as f32) * width,
                                 ]),
                             ]
                         })
                         .map(|str| str.map(|str| str.to_string()).join(" "))
+                        .collect::<Vec<String>>()
+                        .join("\n");
+
+                    let string = points
+                        .iter()
+                        .map(|point| {
+                            //[point.2, point.3, point.4]
+                            if point.4.is_finite() {
+                                [
+                                    point.2,
+                                    point.3,
+                                    polynom.eval(0., 0., point.2, point.3),
+                                    sparse_poly.eval([0., 0., point.2, point.3]),
+                                ]
+                            } else {
+                                [point.2, point.3, f32::NAN, f32::NAN]
+                            }
+                            .map(|str| str.to_string())
+                            .join(" ")
+                        })
                         .collect::<Vec<String>>()
                         .join("\n");
 
