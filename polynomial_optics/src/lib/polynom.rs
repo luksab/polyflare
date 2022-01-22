@@ -438,33 +438,28 @@ impl<
             // let mut min = points.iter().map(|p| p.4.upow(2)).sum::<N>().sqrt();
             print!("{}: {}", counter, min);
             let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
-            for m in 0..DEGREE {
-                for n in 0..DEGREE {
-                    for o in 0..DEGREE {
-                        for p in 0..DEGREE {
-                            if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
-                                phi.terms.push(self.get_monomial(m, n, o, p));
-                                let new_min = Self::dist(&phi, points);
-                                println!("{} {} {} {} {}", m, n, o, p, new_min);
-                                phi.terms.pop();
-                                if new_min < min {
-                                    min = new_min;
-                                    min_i = m;
-                                    min_j = n;
-                                    min_k = o;
-                                    min_l = p;
-                                }
-                            }
-                        }
+            for (m, n, o, p) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE) {
+                if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
+                    phi.terms.push(self.get_monomial(m, n, o, p));
+                    let new_min = Self::dist(&phi, points);
+                    println!("{} {} {} {} {}", m, n, o, p, new_min);
+                    phi.terms.pop();
+                    if new_min < min {
+                        min = new_min;
+                        min_i = m;
+                        min_j = n;
+                        min_k = o;
+                        min_l = p;
                     }
                 }
             }
-            if !phi
+            if phi
                 .terms
                 .iter()
                 .any(|&mon| mon.exponents == [min_i, min_j, min_k, min_l])
             {
                 println!("\nNo better term found!!!");
+                phi.fit(points);
                 return phi;
             }
             println!(" {}", min);
@@ -522,24 +517,18 @@ impl<
             // let mut min = points.iter().map(|p| p.4.upow(2)).sum::<N>().sqrt();
             print!("{}: {}", counter, min);
             let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
-            for m in 0..DEGREE {
-                for n in 0..DEGREE {
-                    for o in 0..DEGREE {
-                        for p in 0..DEGREE {
-                            if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
-                                phi.terms.push(self.get_monomial(m, n, o, p));
-                                let new_min = Self::dist(&phi, points);
-                                println!("{} {} {} {} {}", m, n, o, p, new_min);
-                                phi.terms.pop();
-                                if new_min < min {
-                                    min = new_min;
-                                    min_i = m;
-                                    min_j = n;
-                                    min_k = o;
-                                    min_l = p;
-                                }
-                            }
-                        }
+            for (m, n, o, p) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE) {
+                if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
+                    phi.terms.push(self.get_monomial(m, n, o, p));
+                    let new_min = Self::dist(&phi, points);
+                    println!("{} {} {} {} {}", m, n, o, p, new_min);
+                    phi.terms.pop();
+                    if new_min < min {
+                        min = new_min;
+                        min_i = m;
+                        min_j = n;
+                        min_k = o;
+                        min_l = p;
                     }
                 }
             }
@@ -549,6 +538,7 @@ impl<
                 .any(|&mon| mon.exponents == [min_i, min_j, min_k, min_l])
             {
                 println!("\nNo better term found!!!");
+                phi.fit(points);
                 return phi;
             }
             println!(" {}", min);
