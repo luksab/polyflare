@@ -442,7 +442,7 @@ impl<
                 if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
                     phi.terms.push(self.get_monomial(m, n, o, p));
                     let new_min = Self::dist(&phi, points);
-                    println!("{} {} {} {} {}", m, n, o, p, new_min);
+                    // println!("{} {} {} {} {}", m, n, o, p, new_min);
                     phi.terms.pop();
                     if new_min < min {
                         min = new_min;
@@ -521,7 +521,7 @@ impl<
                 if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
                     phi.terms.push(self.get_monomial(m, n, o, p));
                     let new_min = Self::dist(&phi, points);
-                    println!("{} {} {} {} {}", m, n, o, p, new_min);
+                    // println!("{} {} {} {} {}", m, n, o, p, new_min);
                     phi.terms.pop();
                     if new_min < min {
                         min = new_min;

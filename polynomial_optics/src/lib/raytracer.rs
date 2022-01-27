@@ -1142,7 +1142,8 @@ impl Lens {
                                 let mut pos = center_pos;
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(pos, direction, [0., 0., pos.x, pos.y], wavelength);
+                                let mut ray =
+                                    Ray::new(pos, direction, [0., 0., pos.x, pos.y], wavelength);
                                 ray_collection.push(ray);
 
                                 for (ele, element) in self.elements.iter().enumerate() {
@@ -1208,6 +1209,53 @@ impl Lens {
         rays
     }
 
+    pub fn get_ghost_dot(&self, i: usize, j: usize, mut ray: Ray, sensor_pos: f64) -> Ray {
+        ray.d = ray.d.normalize();
+        // ray.init_pos = ray.intersect(self.elements[0].position);
+
+        for (ele, element) in self.elements.iter().enumerate() {
+            // if we iterated through all elements up to
+            // the first reflection point
+
+            if ele == j {
+                // reflect at the first element,
+                // which is further down the optical path
+                ray.reflect(element);
+
+                // propagate backwards through system
+                // until the second reflection
+                for k in (i + 1..j).rev() {
+                    ray.propagate(&self.elements[k]);
+                }
+                ray.reflect(&self.elements[i]);
+
+                for k in i + 1..=j {
+                    ray.propagate(&self.elements[k]);
+                }
+                // println!("strength: {}", ray.strength);
+            } else {
+                ray.propagate(element);
+            }
+        }
+        ray.o = ray.intersect_vec(sensor_pos);
+
+        ray
+    }
+
+    pub fn get_at_pos(&self, pos: Vector3<f64>, dir: Vector3<f64>, which_ghost: usize, sensor_pos: f64) -> Ray {
+        let mut ray = Ray::new(pos, dir, [pos.x, pos.y, dir.x, dir.y], 0.5);
+        let mut ghost_num = 0;
+        for i in 0..self.elements.len() - 1 {
+            for j in i + 1..self.elements.len() {
+                ghost_num += 1;
+                if ghost_num == which_ghost {
+                    ray = self.get_ghost_dot(i, j, ray, sensor_pos);
+                }
+            }
+        }
+        ray
+    }
+
     pub fn get_dots(
         &self,
         num_rays: u32,
@@ -1215,7 +1263,7 @@ impl Lens {
         center_dir: Vector3<f64>,
         which_ghost: u32,
         sensor_pos: f64,
-        filter: bool,
+        width: [f64; 2],
     ) -> Vec<DrawRay> {
         let draw_mode = 1;
         // let rays = self.get_paths(
@@ -1228,102 +1276,80 @@ impl Lens {
 
         let mut rays = vec![];
 
-        let width = 2.0;
-        for ray_num_x in 0..num_rays {
-            for ray_num_y in 0..num_rays {
-                let wave_num = 1;
-                let ray_num = ray_num_x * num_rays + ray_num_y;
-                let wavelen = (ray_num % wave_num) as f64;
-                let start_wavelen = 0.38;
-                let end_wavelen = 0.78;
-                let wavelength =
-                    start_wavelen + wavelen * ((end_wavelen - start_wavelen) / (wave_num as f64));
-                if draw_mode & 1 > 0 {
-                    let mut ghost_num = 0;
-                    for i in 0..self.elements.len() - 1 {
-                        for j in i + 1..self.elements.len() {
-                            ghost_num += 1;
-                            if ghost_num == which_ghost || which_ghost == 0 {
-                                // make new ray
-                                let mut dir = center_dir;
-                                dir.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
-                                dir.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(
-                                    pos,
-                                    dir,
-                                    [
-                                        pos.x,
-                                        pos.y,
-                                        ray_num_x as f64 / (num_rays as f64),
-                                        ray_num_y as f64 / (num_rays as f64),
-                                    ],
-                                    wavelength,
-                                );
-                                ray.ghost_num = ghost_num;
-                                // ray.init_pos = ray.intersect(self.elements[0].position);
+        let width_d = width[0];
+        let width_p = width[1];
+        // if draw_mode & 1 > 0 {
+        let mut ghost_num = 0;
+        for i in 0..self.elements.len() - 1 {
+            for j in i + 1..self.elements.len() {
+                ghost_num += 1;
+                if ghost_num == which_ghost {
+                    for _ in 0..num_rays {
+                        // let wave_num = 1;
+                        // let ray_num = ray_num_x * num_rays + ray_num_y;
+                        // let wavelen = (ray_num % wave_num) as f64;
+                        // let start_wavelen = 0.38;
+                        // let end_wavelen = 0.78;
+                        // let wavelength = start_wavelen
+                        //     + wavelen * ((end_wavelen - start_wavelen) / (wave_num as f64));
+                        let wavelength = 0.5;
 
-                                for (ele, element) in self.elements.iter().enumerate() {
-                                    // if we iterated through all elements up to
-                                    // the first reflection point
+                        // make new ray
+                        let mut dir = center_dir;
+                        // dir.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                        // dir.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                        dir.x += fastrand::f64() * width_d - width_d / 2.;
+                        dir.y += fastrand::f64() * width_d - width_d / 2.;
 
-                                    if ele == j {
-                                        // reflect at the first element,
-                                        // which is further down the optical path
-                                        ray.reflect(element);
-
-                                        // propagate backwards through system
-                                        // until the second reflection
-                                        for k in (i + 1..j).rev() {
-                                            ray.propagate(&self.elements[k]);
-                                        }
-                                        ray.reflect(&self.elements[i]);
-
-                                        for k in i + 1..=j {
-                                            ray.propagate(&self.elements[k]);
-                                        }
-                                        // println!("strength: {}", ray.strength);
-                                    } else {
-                                        ray.propagate(element);
-                                    }
-                                }
-                                ray.o = ray.intersect_vec(sensor_pos as f64);
-
-                                // only return rays that have made it through
-                                if ray.d.magnitude() > 0. || !filter {
-                                    rays.push(ray);
-                                }
-                            }
-                        }
-                    }
-                }
-                if draw_mode & 2 > 0 {
-                    let mut dir = center_dir;
-                    dir.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
-                    dir.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                    let mut ray = Ray::new(
-                        pos,
-                        dir,
-                        [
-                            pos.x,
-                            pos.y,
-                            ray_num_x as f64 / (num_rays as f64),
-                            ray_num_y as f64 / (num_rays as f64),
-                        ],
-                        wavelength,
-                    );
-                    // ray.init_pos = ray.intersect(self.elements[0].position);
-                    for element in &self.elements {
-                        ray.propagate(element);
-                    }
-                    ray.o = ray.intersect_vec(sensor_pos as f64);
-
-                    // only return rays that have made it through
-                    if ray.d.magnitude() > 0. || !filter {
-                        rays.push(ray);
+                        let mut pos = pos;
+                        pos.x += fastrand::f64() * width_p - width_p / 2.;
+                        pos.y += fastrand::f64() * width_p - width_p / 2.;
+                        let mut ray = Ray::new(pos, dir, [pos.x, pos.y, dir.x, dir.y], wavelength);
+                        ray.ghost_num = ghost_num;
+                        rays.push(self.get_ghost_dot(i, j, ray, sensor_pos));
                     }
                 }
             }
         }
+        // }
+
+        // if draw_mode & 2 > 0 {
+        //     for ray_num_x in 0..num_rays {
+        //         for ray_num_y in 0..num_rays {
+        //             let wave_num = 1;
+        //             let ray_num = ray_num_x * num_rays + ray_num_y;
+        //             let wavelen = (ray_num % wave_num) as f64;
+        //             let start_wavelen = 0.38;
+        //             let end_wavelen = 0.78;
+        //             let wavelength = start_wavelen
+        //                 + wavelen * ((end_wavelen - start_wavelen) / (wave_num as f64));
+        //             let mut dir = center_dir;
+        //             dir.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+        //             dir.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+        //             let mut ray = Ray::new(
+        //                 pos,
+        //                 dir,
+        //                 [
+        //                     pos.x,
+        //                     pos.y,
+        //                     ray_num_x as f64 / (num_rays as f64),
+        //                     ray_num_y as f64 / (num_rays as f64),
+        //                 ],
+        //                 wavelength,
+        //             );
+        //             // ray.init_pos = ray.intersect(self.elements[0].position);
+        //             for element in &self.elements {
+        //                 ray.propagate(element);
+        //             }
+        //             ray.o = ray.intersect_vec(sensor_pos as f64);
+
+        //             // only return rays that have made it through
+        //             if ray.d.magnitude() > 0. || !filter {
+        //                 rays.push(ray);
+        //             }
+        //         }
+        //     }
+        // }
 
         // println!(
         //     "in: {} out:{} percent: {}",
@@ -1337,7 +1363,12 @@ impl Lens {
                 wavelength: ray.wavelength as f32,
                 strength: ray.strength as f32,
                 ghost_num: ray.ghost_num,
-                init_pos: [ray.init_pos[0] as f32, ray.init_pos[1] as f32, ray.init_pos[2] as f32, ray.init_pos[3] as f32],
+                init_pos: [
+                    ray.init_pos[0] as f32,
+                    ray.init_pos[1] as f32,
+                    ray.init_pos[2] as f32,
+                    ray.init_pos[3] as f32,
+                ],
                 aperture_pos: [ray.aperture_pos[0] as f32, ray.aperture_pos[1] as f32],
                 entry_pos: [ray.entry_pos[0] as f32, ray.entry_pos[1] as f32],
             })
