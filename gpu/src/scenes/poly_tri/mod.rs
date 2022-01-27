@@ -610,6 +610,8 @@ impl PolyTri {
                 out.push(polynomial_optics::DrawRay {
                     ghost_num,
                     init_pos: [
+                        lens_state.pos_params[0],
+                        lens_state.pos_params[1],
                         ray_num_x as f32 * width - width / 2.,
                         ray_num_y as f32 * width - width / 2.,
                     ],

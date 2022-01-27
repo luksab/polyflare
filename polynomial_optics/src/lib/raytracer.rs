@@ -15,7 +15,7 @@ use tiny_skia::{Color, Pixmap};
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
 pub struct DrawRay {
     pub ghost_num: u32,
-    pub init_pos: [f32; 2],
+    pub init_pos: [f32; 4],
     pub pos: [f32; 2],
     pub aperture_pos: [f32; 2],
     pub entry_pos: [f32; 2],
@@ -34,7 +34,7 @@ pub struct Ray {
     pub d: cgmath::Vector3<f64>,
     pub strength: f64,
     pub ghost_num: u32,
-    pub init_pos: [f64; 2],
+    pub init_pos: [f64; 4],
     pub aperture_pos: [f64; 2],
     pub entry_pos: [f64; 2],
 }
@@ -47,7 +47,7 @@ impl Default for Ray {
             strength: 1.,
             wavelength: 0.5,
             ghost_num: 0,
-            init_pos: [0., 0.],
+            init_pos: [0., 0., 0., 0.],
             aperture_pos: [0., 0.],
             entry_pos: [0., 0.],
         }
@@ -344,7 +344,7 @@ pub enum Properties {
 }
 
 impl Ray {
-    pub fn new(o: Vector3<f64>, d: Vector3<f64>, init_pos: [f64; 2], wavelength: f64) -> Ray {
+    pub fn new(o: Vector3<f64>, d: Vector3<f64>, init_pos: [f64; 4], wavelength: f64) -> Ray {
         Ray {
             o,
             d,
@@ -1007,7 +1007,7 @@ impl Lens {
                             // make new ray
                             let mut pos = center_pos;
                             pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                            let mut ray = Ray::new(pos, direction, [0., pos.y], wavelength);
+                            let mut ray = Ray::new(pos, direction, [0., 0., 0., pos.y], wavelength);
                             rays.push(ray.o.z);
                             rays.push(ray.o.y);
                             rays.push(ray.strength);
@@ -1086,7 +1086,7 @@ impl Lens {
             if draw_mode & 2 > 0 {
                 let mut pos = center_pos;
                 pos.y += ray_num as f64 / (num_rays as f64) * width - width / 2.;
-                let mut ray = Ray::new(pos, direction, [0., pos.y], wavelength);
+                let mut ray = Ray::new(pos, direction, [0., 0., 0., pos.y], wavelength);
                 rays.push(ray.o.z);
                 rays.push(ray.o.y);
                 rays.push(ray.strength);
@@ -1142,7 +1142,7 @@ impl Lens {
                                 let mut pos = center_pos;
                                 pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                                 pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(pos, direction, [pos.x, pos.y], wavelength);
+                                let mut ray = Ray::new(pos, direction, [0., 0., pos.x, pos.y], wavelength);
                                 ray_collection.push(ray);
 
                                 for (ele, element) in self.elements.iter().enumerate() {
@@ -1189,7 +1189,7 @@ impl Lens {
                     let mut pos = center_pos;
                     pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
                     pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                    let mut ray = Ray::new(pos, direction, [pos.x, pos.y], wavelength);
+                    let mut ray = Ray::new(pos, direction, [0., 0., pos.x, pos.y], wavelength);
                     let mut ray_collection = vec![ray];
                     for element in &self.elements {
                         ray.propagate(element);
@@ -1211,8 +1211,8 @@ impl Lens {
     pub fn get_dots(
         &self,
         num_rays: u32,
-        center_pos: Vector3<f64>,
-        direction: Vector3<f64>,
+        pos: Vector3<f64>,
+        center_dir: Vector3<f64>,
         which_ghost: u32,
         sensor_pos: f64,
         filter: bool,
@@ -1245,12 +1245,22 @@ impl Lens {
                             ghost_num += 1;
                             if ghost_num == which_ghost || which_ghost == 0 {
                                 // make new ray
-                                let mut pos = center_pos;
-                                pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
-                                pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                                let mut ray = Ray::new(pos, direction, [pos.x, pos.y], wavelength);
+                                let mut dir = center_dir;
+                                dir.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                                dir.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                                let mut ray = Ray::new(
+                                    pos,
+                                    dir,
+                                    [
+                                        pos.x,
+                                        pos.y,
+                                        ray_num_x as f64 / (num_rays as f64),
+                                        ray_num_y as f64 / (num_rays as f64),
+                                    ],
+                                    wavelength,
+                                );
                                 ray.ghost_num = ghost_num;
-                                ray.init_pos = ray.intersect(self.elements[0].position);
+                                // ray.init_pos = ray.intersect(self.elements[0].position);
 
                                 for (ele, element) in self.elements.iter().enumerate() {
                                     // if we iterated through all elements up to
@@ -1287,11 +1297,21 @@ impl Lens {
                     }
                 }
                 if draw_mode & 2 > 0 {
-                    let mut pos = center_pos;
-                    pos.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
-                    pos.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
-                    let mut ray = Ray::new(pos, direction, [pos.x, pos.y], wavelength);
-                    ray.init_pos = ray.intersect(self.elements[0].position);
+                    let mut dir = center_dir;
+                    dir.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                    dir.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                    let mut ray = Ray::new(
+                        pos,
+                        dir,
+                        [
+                            pos.x,
+                            pos.y,
+                            ray_num_x as f64 / (num_rays as f64),
+                            ray_num_y as f64 / (num_rays as f64),
+                        ],
+                        wavelength,
+                    );
+                    // ray.init_pos = ray.intersect(self.elements[0].position);
                     for element in &self.elements {
                         ray.propagate(element);
                     }
@@ -1311,16 +1331,16 @@ impl Lens {
         //     rays.len(),
         //     rays.len() as f64 / (&num_rays * 100) as f64 * 100.
         // );
-        rays.iter().map(|ray| {
-            DrawRay {
+        rays.iter()
+            .map(|ray| DrawRay {
                 pos: [ray.o.x as f32, ray.o.y as f32],
                 wavelength: ray.wavelength as f32,
                 strength: ray.strength as f32,
                 ghost_num: ray.ghost_num,
-                init_pos: [ray.init_pos[0] as f32, ray.init_pos[1] as f32],
+                init_pos: [ray.init_pos[0] as f32, ray.init_pos[1] as f32, ray.init_pos[2] as f32, ray.init_pos[3] as f32],
                 aperture_pos: [ray.aperture_pos[0] as f32, ray.aperture_pos[1] as f32],
                 entry_pos: [ray.entry_pos[0] as f32, ray.entry_pos[1] as f32],
-            }
-        }).collect()
+            })
+            .collect()
     }
 }
