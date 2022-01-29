@@ -438,14 +438,14 @@ fn main() {
                     let dots = lens_ui.actual_lens.get_dots(
                         poly_tri.dot_side_len * poly_tri.dot_side_len,
                         cgmath::Vector3 {
-                                    x: lens_ui.pos_params[0] as f64,
-                                    y: lens_ui.pos_params[1] as f64,
-                                    z: lens_ui.pos_params[2] as f64,
+                            x: lens_ui.pos_params[0] as f64,
+                            y: lens_ui.pos_params[1] as f64,
+                            z: lens_ui.pos_params[2] as f64,
                         },
                         cgmath::Vector3 {
-                                    x: lens_ui.pos_params[4] as f64,
-                                    y: lens_ui.pos_params[5] as f64,
-                                    z: lens_ui.pos_params[6] as f64,
+                            x: lens_ui.pos_params[4] as f64,
+                            y: lens_ui.pos_params[5] as f64,
+                            z: lens_ui.pos_params[6] as f64,
                         },
                         lens_ui.which_ghost,
                         lens_ui.pos_params[8] as f64,
