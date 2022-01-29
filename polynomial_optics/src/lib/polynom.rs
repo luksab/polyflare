@@ -619,12 +619,16 @@ impl<
     pub fn fit(points: &[(N, N, N, N, N)]) -> Polynom4d<N, DEGREE> {
         println!("num of points: {}", points.len());
         let mut now = std::time::Instant::now();
-        let mut x = Matrix::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE, points.len());
-        let mut y = Vector::<N>::zero(points.len());
+        let mut m = Matrix::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE, points.len());
+        let y = Vector::<N>::new_column(
+            points.len(),
+            points.iter().map(|point| point.4).collect::<Vec<_>>(),
+        );
         println!("init: {:?}", now.elapsed());
         now = std::time::Instant::now();
 
-        for (iter, element) in x.iter_mut().enumerate() {
+        // iter_mut is column first
+        for (iter, element) in m.iter_mut().enumerate() {
             let (point, i) = (
                 iter / (DEGREE * DEGREE * DEGREE * DEGREE),
                 iter % (DEGREE * DEGREE * DEGREE * DEGREE),
@@ -636,15 +640,10 @@ impl<
                 * (points[point].2).upow(a.2)
                 * (points[point].3).upow(a.3);
         }
-        println!("set Matrix: {:?} dim: {:?}", now.elapsed(), x.dim());
+        println!("set Matrix: {:?} dim: {:?}", now.elapsed(), m.dim());
         now = std::time::Instant::now();
-        for (i, element) in y.iter_mut().enumerate() {
-            *element = points[i].4;
-        }
-        println!("set Vec: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-        let y = x.clone() * y;
-        let x = x.clone() * x.clone().transpose();
+        let y = m.clone() * y;
+        let x = m.clone() * m.clone().transpose();
 
         let c = x.solve(&y).unwrap();
         println!("solve: {:?}", now.elapsed());
