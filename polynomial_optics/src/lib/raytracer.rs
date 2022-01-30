@@ -15,12 +15,12 @@ use tiny_skia::{Color, Pixmap};
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
 pub struct DrawRay {
     pub ghost_num: u32,
-    pub init_pos: [f32; 4],
-    pub pos: [f32; 2],
-    pub aperture_pos: [f32; 2],
-    pub entry_pos: [f32; 2],
-    pub strength: f32,
-    pub wavelength: f32,
+    pub init_pos: [f64; 4],
+    pub pos: [f64; 2],
+    pub aperture_pos: [f64; 2],
+    pub entry_pos: [f64; 2],
+    pub strength: f64,
+    pub wavelength: f64,
 }
 
 /// ## A ray at a plane in the lens system
@@ -603,7 +603,7 @@ impl Ray {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Lens {
     pub elements: Vec<Element>,
-    pub sensor_dist: f32,
+    pub sensor_dist: f64,
 }
 
 impl Lens {
@@ -657,7 +657,7 @@ impl Lens {
 }
 
 impl Lens {
-    pub fn new(elements: Vec<Element>, sensor_dist: f32) -> Self {
+    pub fn new(elements: Vec<Element>, sensor_dist: f64) -> Self {
         Self {
             elements,
             sensor_dist,
@@ -1373,18 +1373,13 @@ impl Lens {
         // );
         rays.iter()
             .map(|ray| DrawRay {
-                pos: [ray.o.x as f32, ray.o.y as f32],
-                wavelength: ray.wavelength as f32,
-                strength: ray.strength as f32,
+                pos: ray.o.xy().into(),
+                wavelength: ray.wavelength,
+                strength: ray.strength,
                 ghost_num: ray.ghost_num,
-                init_pos: [
-                    ray.init_pos[0] as f32,
-                    ray.init_pos[1] as f32,
-                    ray.init_pos[2] as f32,
-                    ray.init_pos[3] as f32,
-                ],
-                aperture_pos: [ray.aperture_pos[0] as f32, ray.aperture_pos[1] as f32],
-                entry_pos: [ray.entry_pos[0] as f32, ray.entry_pos[1] as f32],
+                init_pos: ray.init_pos,
+                aperture_pos: ray.aperture_pos,
+                entry_pos: ray.entry_pos,
             })
             .collect()
     }

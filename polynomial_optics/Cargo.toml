@@ -18,13 +18,14 @@ path = "src/lib/lib.rs"
 tiny-skia = "0.6.1"
 num = "0.4.0"
 cgmath = { version = "0.18", features = ["swizzle"] }
-mathru = "0.10"
+mathru = { version = "0.11", default-features = false, features = ["intel-mkl"] }
 serde = "1.0"
 ron = "0.7"
 csv = "1.1"
 itertools = "0.10.3"
 autodiff = {version = "0.4.0", features = ["cgmath"]}
 fastrand = "1.5"
+
 
 [dev-dependencies]
 approx = "0.5.0"

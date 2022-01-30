@@ -11,6 +11,11 @@ use std::{
     fmt::{Debug, Display},
     ops::{Add, AddAssign, Mul, MulAssign, Neg},
 };
+
+pub trait PolyStore<T> {
+    fn get_T_as_vec(&self) -> Vec<T>;
+}
+
 pub trait PowUsize {
     fn upow(self, exp: usize) -> Self;
 }
@@ -219,6 +224,25 @@ pub struct Polynomial<N, const VARIABLES: usize> {
     pub terms: Vec<Monomial<N, VARIABLES>>,
 }
 
+impl<N: std::convert::From<usize> + Copy, const VARIABLES: usize> PolyStore<N>
+    for Polynomial<N, VARIABLES>
+{
+    fn get_T_as_vec(&self) -> Vec<N> {
+        self.terms
+            .iter()
+            .flat_map(|m| {
+                let mut v = m
+                    .exponents
+                    .iter()
+                    .map(|exp| (*exp).into())
+                    .collect::<Vec<_>>();
+                v.push(m.coefficient);
+                v
+            })
+            .collect()
+    }
+}
+
 impl<N: Copy + Zero + One + PartialOrd + Neg<Output = N>, const VARIABLES: usize> Display
     for Polynomial<N, VARIABLES>
 where
@@ -420,10 +444,10 @@ impl<
                 .sum::<N>()
         }
         let m = Matrix::new(tems_num, tems_num, m);
-        let k = Vector::new_column(tems_num, k);
+        let k = Vector::new_column(k);
         let c = m.solve(&k).unwrap();
-        for (i, term) in self.terms.iter_mut().enumerate() {
-            term.coefficient = *c.get(i);
+        for (i, (term, c)) in self.terms.iter_mut().zip(c.iter()).enumerate() {
+            term.coefficient = *c;
         }
     }
 }
@@ -449,14 +473,14 @@ impl<
             }
         }
         let x = Matrix::new(tems_num, points.len(), m);
-        let y = Vector::new_column(points.len(), points.iter().map(|p| p.4).collect());
+        let y = Vector::new_column(points.iter().map(|p| p.4).collect());
 
         let y = x.clone() * y;
         let x = x.clone() * x.transpose();
 
         let c = x.solve(&y).unwrap();
-        for (i, term) in self.terms.iter_mut().enumerate() {
-            term.coefficient = *c.get(i);
+        for (i, (term, c)) in self.terms.iter_mut().zip(c.iter()).enumerate() {
+            term.coefficient = *c;
         }
     }
 }

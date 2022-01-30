@@ -78,6 +78,8 @@ fn main() {
         pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
     let mut poly_tri =
         pollster::block_on(scenes::PolyTri::new(&state.device, &state.config, &lens_ui));
+    // let mut poly_poly =
+    //     pollster::block_on(scenes::PolyPoly::new(&state.device, &state.config, &lens_ui));
     poly_optics.update_buffers(&state.device, true, &lens_ui);
 
     // Set up dear imgui
@@ -446,7 +448,7 @@ fn main() {
                         lens_ui.pos_params[8] as f64,
                         [width as f64, width as f64],
                     );
-                    println!("{:?}", dots);
+                    // println!("{:?}", dots);
                     // println!(
                     //     "{}",
                     //     dots.iter()
@@ -483,32 +485,32 @@ fn main() {
 
                     let now = Instant::now();
                     let filtered_points = points
-                        .clone()
+                        // .clone()
                         .into_iter()
-                        .filter(|point| point.4.is_finite())
+                        // .filter(|point| point.4.is_finite())
+                        .map(|point| (point.0 as f64, point.1 as f64, point.2 as f64, point.3 as f64, point.4 as f64))
                         .collect::<Vec<_>>();
-                    let polynom = Polynom4d::<_, 5>::fit(&filtered_points);
+                    let polynom = Polynom4d::<_, 7>::fit(&filtered_points);
                     println!("Fitting took {:?}", now.elapsed());
                     println!("{}", polynom);
-                    let sparse_poly = polynom.get_sparse(&filtered_points, 80);
+                    let sparse_poly = polynom.get_sparse(&filtered_points, 12, true);
                     println!("{}", sparse_poly);
                     let mut difference = 0.0;
                     let mut difference_sparse = 0.0;
-                    for point in points.iter().filter(|point| point.4 > 0.0) {
+                    for point in filtered_points.iter() {
                         let strength = polynom.eval(point.0, point.1, point.2, point.3);
-                        difference += (strength - point.4).abs().powf(2.);
+                        difference += (strength - point.4).powf(2.);
                         difference_sparse +=
                             (sparse_poly.eval([point.0, point.1, point.2, point.3]) - point.4)
-                                .abs()
                                 .powf(2.);
                     }
                     println!(
                         "average difference: {}",
-                        (difference / points.len() as f32).sqrt()
+                        (difference / filtered_points.len() as f64)
                     );
                     println!(
                         "average difference sparse: {}",
-                        (difference_sparse / points.len() as f32).sqrt()
+                        (difference_sparse / filtered_points.len() as f64)
                     );
 
                     let grid_size = 100;
@@ -517,8 +519,8 @@ fn main() {
 
                     let string = iproduct![(0..grid_size), (0..grid_size)]
                         .map(|(x, y)| {
-                            let x = (x - grid_size / 2) as f32 * width / grid_size as f32;
-                            let y = (y - grid_size / 2) as f32 * width / grid_size as f32;
+                            let x = (x - grid_size / 2) as f64 * width / grid_size as f64;
+                            let y = (y - grid_size / 2) as f64 * width / grid_size as f64;
                             let stren = lens_ui
                                 .actual_lens
                                 .get_at_pos(
@@ -536,20 +538,20 @@ fn main() {
                                     lens_ui.pos_params[8] as f64,
                                 )
                                 .o
-                                .x as f32;
+                                .x;
                             [
                                 x,
                                 y,
                                 stren,
                                 if stren.is_finite() {
-                                    polynom.eval(0., 0., x, y)
+                                    polynom.eval(0., 0., x.into(), y.into())
                                 } else {
-                                    f32::NAN
+                                    f64::NAN
                                 },
                                 if stren.is_finite() {
-                                    sparse_poly.eval([0., 0., x, y])
+                                    sparse_poly.eval([0., 0., x.into(), y.into()])
                                 } else {
-                                    f32::NAN
+                                    f64::NAN
                                 },
                             ]
                         })
@@ -579,6 +581,24 @@ fn main() {
                     //     .join("\n");
 
                     std::fs::write("plots/points.txt", string).unwrap();
+
+                    let string = filtered_points
+                        .iter()
+                        .map(|point| {
+                            [
+                                point.0,
+                                point.1,
+                                point.2,
+                                point.3,
+                                point.4,
+                            ]
+                            .map(|str| str.to_string())
+                            .join(" ")
+                        })
+                        .collect::<Vec<String>>()
+                        .join("\n");
+                    
+                    std::fs::write("plots/dots.txt", string).unwrap();
 
                     poly_tri
                         .render(

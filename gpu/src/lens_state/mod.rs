@@ -5,7 +5,7 @@ use std::time::Instant;
 use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
 use imgui::{CollapsingHeader, Condition, Drag, Slider, Ui};
-use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier};
+use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier, Polynomial};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
@@ -152,6 +152,10 @@ pub struct LensState {
     pub lens_bind_group: wgpu::BindGroup,
     /// bind group layout for both representations of the current lens
     pub lens_bind_group_layout: wgpu::BindGroupLayout,
+
+    // pub polys: Vec<Box< dyn PolyStore<f32>>>,
+    /// buffer containing the sparse polynomial
+    // pub poly_buffer: Buffer,
 
     last_frame_time: Instant,
     fps: f64,
@@ -665,7 +669,7 @@ impl LensState {
             label: None,
         });
 
-        self.pos_params[8] = self.actual_lens.sensor_dist;
+        self.pos_params[8] = self.actual_lens.sensor_dist as f32;
         queue.write_buffer(
             &self.pos_params_buffer,
             0,

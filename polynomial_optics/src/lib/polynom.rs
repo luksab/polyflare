@@ -418,7 +418,7 @@ impl<
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
-    pub fn get_sparse(&self, points: &[(N, N, N, N, N)], terms: usize) -> crate::Polynomial<N, 4> {
+    pub fn get_sparse(&self, points: &[(N, N, N, N, N)], terms: usize, cheap: bool) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut now = Instant::now();
 
@@ -429,6 +429,10 @@ impl<
         //     .enumerate()
         // {
         for (counter, _) in (0..(DEGREE * DEGREE * DEGREE * DEGREE)).enumerate() {
+            if counter > terms && cheap {
+                break;
+            }
+
             if now.elapsed().as_secs() > 0 {
                 println!("{}: took {:?}", counter, now.elapsed());
                 now = Instant::now();
@@ -486,6 +490,30 @@ impl<
         phi
     }
 
+    pub fn get_full_sparse(
+        &self,
+        points: &[(N, N, N, N, N)],
+        terms: usize,
+    ) -> crate::Polynomial<N, 4> {
+        let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
+        let mut now = Instant::now();
+
+        for (m, n, o, p) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE) {
+            let mut term = self.get_monomial(m, n, o, p);
+            term.coefficient = <N as num::One>::one();
+            phi.terms.push(term);
+            // println!("{} {} {} {} {}", m, n, o, p, new_min);
+        }
+
+        // println!("pre-fit: {}", phi);
+        phi.fit(points);
+        // println!("post-fit: {}", phi);
+
+        // println!("resulting polynomial: {:?}", phi);
+        println!("total time: {:?}", now.elapsed());
+        phi
+    }
+
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
@@ -495,14 +523,11 @@ impl<
         terms: usize,
     ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
+        if terms == 0 {
+            return phi;
+        }
         let mut now = Instant::now();
 
-        // for (counter, (((i, j), k), l)) in (0..DEGREE)
-        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
-        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
-        //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
-        //     .enumerate()
-        // {
         for (counter, _) in (0..(DEGREE * DEGREE * DEGREE * DEGREE)).enumerate() {
             if now.elapsed().as_secs() > 0 {
                 println!("{}: took {:?}", counter, now.elapsed());
@@ -620,10 +645,7 @@ impl<
         println!("num of points: {}", points.len());
         let mut now = std::time::Instant::now();
         let mut m = Matrix::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE, points.len());
-        let y = Vector::<N>::new_column(
-            points.len(),
-            points.iter().map(|point| point.4).collect::<Vec<_>>(),
-        );
+        let y = Vector::<N>::new_column(points.iter().map(|point| point.4).collect::<Vec<_>>());
         println!("init: {:?}", now.elapsed());
         now = std::time::Instant::now();
 
