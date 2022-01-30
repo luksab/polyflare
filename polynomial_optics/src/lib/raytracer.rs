@@ -1242,7 +1242,13 @@ impl Lens {
         ray
     }
 
-    pub fn get_at_pos(&self, pos: Vector3<f64>, dir: Vector3<f64>, which_ghost: usize, sensor_pos: f64) -> Ray {
+    pub fn get_at_pos(
+        &self,
+        pos: Vector3<f64>,
+        dir: Vector3<f64>,
+        which_ghost: usize,
+        sensor_pos: f64,
+    ) -> Ray {
         let mut ray = Ray::new(pos, dir, [pos.x, pos.y, dir.x, dir.y], 0.5);
         let mut ghost_num = 0;
         for i in 0..self.elements.len() - 1 {
@@ -1260,11 +1266,12 @@ impl Lens {
         &self,
         num_rays: u32,
         pos: Vector3<f64>,
-        center_dir: Vector3<f64>,
         which_ghost: u32,
         sensor_pos: f64,
         width: [f64; 2],
     ) -> Vec<DrawRay> {
+        // Pick an arbitrary number as seed.
+        fastrand::seed(7);
         let draw_mode = 1;
         // let rays = self.get_paths(
         //     num::integer::Roots::sqrt(&(num_rays * 1000)),
