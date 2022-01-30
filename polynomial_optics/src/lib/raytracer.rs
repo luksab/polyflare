@@ -1274,6 +1274,13 @@ impl Lens {
         //     which_ghost,
         // );
 
+        let center_dir = Vector3 {
+            x: 0.,
+            y: 0.,
+            z: self.elements[0].position,
+        } - pos;
+        println!("center dir: {:?}", center_dir);
+
         let mut rays = vec![];
 
         let width_d = width[0];
