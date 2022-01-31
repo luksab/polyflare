@@ -25,6 +25,7 @@
     - [x] fix used_monomials ~~hashMap~~
 
 # Plugin
-- [ ] OpenFX Rust wrapper
+- [ ] OpenFX
+  - [ ] Rust wrapper
   - [ ] CPU only implementation
   - [ ] GPU implementation by forcing OpenGL
