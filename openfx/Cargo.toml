@@ -1,0 +1,16 @@
+[package]
+name = "ofx_polyflare"
+version = "0.1.0"
+license = "Apache-2.0"
+publish = false        # insurance against accidents
+
+[lib]
+name = "ofx_polyflare"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+libc = "0.2"
+log = "0.4"
+log4rs = "0.8"
+ofx = "0.3"

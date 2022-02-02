@@ -1,6 +1,11 @@
 [workspace]
-resolver = "2"
+# resolver = "2"
 
 members = [
-    "gpu",
+    # "gpu",
+    "openfx"
 ]
+
+[patch.crates-io]
+ofx = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
+ofx_sys = { git = "https://github.com/ilya-epifanov/ofx-rs.git", rev = "424b171f71845be130fefd31e494c04fe54a22ce" }
