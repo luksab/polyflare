@@ -1,6 +1,8 @@
 use ofx::*;
 use std::sync::{Arc, Mutex};
 
+use crate::wgpu_ofx::Gpu;
+
 plugin_module!(
     "de.luksab.polyflare.basic",
     ApiVersion(1),
@@ -34,6 +36,8 @@ struct MyInstanceData {
     scale_g_param: ParamHandle<Double>,
     scale_b_param: ParamHandle<Double>,
     scale_a_param: ParamHandle<Double>,
+
+	gpu: Gpu,
 }
 
 struct TileProcessor<'a> {
@@ -136,9 +140,10 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
 
             for (outer, (dst, src)) in dst_row.iter_mut().zip(src_row.iter()).enumerate() {
                 // *dst = src.scaled(&scale);
-                for i in 0..4 {
+                for i in 0..3 {
                     *dst.channel_mut(i) = outer as f32 / src_row.len() as f32; //RGBAColourF::from_f32(1.);
                 }
+				*dst.channel_mut(3) = 1.; // set alpha to 1.0
             }
             // }
             // Some(src_mask) => {
@@ -154,7 +159,7 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
     }
 }
 
-const PARAM_MAIN_NAME: &str = "Main2";
+const PARAM_MAIN_NAME: &str = "Main";
 const PARAM_SCALE_NAME: &str = "scale";
 const PARAM_SCALE_R_NAME: &str = "scaleR";
 const PARAM_SCALE_G_NAME: &str = "scaleG";
@@ -364,6 +369,8 @@ impl Execute for SimplePlugin {
                 let scale_b_param = param_set.parameter(PARAM_SCALE_B_NAME)?;
                 let scale_a_param = param_set.parameter(PARAM_SCALE_A_NAME)?;
 
+				let gpu = Gpu::new();
+
                 effect.set_instance_data(MyInstanceData {
                     is_general_effect,
                     source_clip,
@@ -375,6 +382,7 @@ impl Execute for SimplePlugin {
                     scale_g_param,
                     scale_b_param,
                     scale_a_param,
+					gpu,
                 })?;
 
                 Self::set_per_component_scale_enabledness(effect)?;

@@ -6,9 +6,9 @@ let
   pkgs = import (fetchTarball("channel:nixpkgs-unstable")) {};
 in pkgs.mkShell {
   buildInputs = [ 
-    pkgs.cargo 
     pkgs.clippy
-    pkgs.rustc
+    pkgs.rust-analyzer
+    pkgs.rustup
     pkgs.rustfmt
     pkgs.xorg.libX11
     pkgs.vulkan-tools
@@ -24,9 +24,12 @@ in pkgs.mkShell {
 
     pkgs.pkg-config
     pkgs.openssl
+    pkgs.clang
   ];
 
-  LD_LIBRARY_PATH = with pkgs.xlibs; "${pkgs.mesa}/lib:${libX11}/lib:${libXcursor}/lib:${libXxf86vm}/lib:${libXi}/lib:${pkgs.xorg.libXrandr}/lib:${pkgs.libGL}/lib:/run/opengl-driver/lib:/run/opengl-driver-32/lib";
+  LD_LIBRARY_PATH = with pkgs.xlibs; "${pkgs.glibc}/lib:${pkgs.mesa}/lib:${libX11}/lib:${libXcursor}/lib:${libXxf86vm}/lib:${libXi}/lib:${pkgs.xorg.libXrandr}/lib:${pkgs.libGL}/lib:/run/opengl-driver/lib:/run/opengl-driver-32/lib";
+
+  LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
   # Certain Rust tools won't work without this
   # This can also be fixed by using oxalica/rust-overlay and specifying the rust-src extension

@@ -1,4 +1,7 @@
 #![allow(clippy::float_cmp)]
+use gpu::*;
+use state::State;
+
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use itertools::iproduct;
@@ -8,16 +11,6 @@ use std::time::Instant;
 use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-
-mod texture;
-
-mod state;
-use state::State;
-
-mod scenes;
-
-mod lens_state;
-mod save_png;
 
 use structopt::StructOpt;
 
