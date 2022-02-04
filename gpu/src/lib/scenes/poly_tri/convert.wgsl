@@ -41,9 +41,10 @@ var s_diffuse: sampler;
 
 [[stage(fragment)]]
 fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let screenAspect = normalize(vec2<f32>(params.window_height_scaled, params.window_width_scaled)) * 2.;
-
-    let pos = (vec2<f32>(in.clip_position.x / params.window_width_scaled, in.clip_position.y / params.window_height_scaled) + vec2<f32>(0.21,0.21)) / screenAspect;
+    let w = params.window_width_scaled;
+    let h = params.window_height_scaled;
+    let ratio = max(w,h);
+    let pos = vec2<f32>(in.clip_position.x - w/2., in.clip_position.y - h/2.) / ratio + 0.5;
     let sample = textureSample(t_diffuse, s_diffuse, pos);
     var bg = vec4<f32>(0.0,0.0,0.0,1.0);
 
