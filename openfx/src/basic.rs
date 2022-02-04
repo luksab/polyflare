@@ -18,7 +18,7 @@ struct SimplePlugin {
 impl SimplePlugin {
     pub fn new() -> SimplePlugin {
         let mut gpu = Gpu::new();
-        gpu.update(true);
+        // gpu.update(true);
         SimplePlugin {
             gpu,
             host_supports_multiple_clip_depths: false,
@@ -33,19 +33,18 @@ struct MyInstanceData {
     mask_clip: Option<ClipInstance>,
     output_clip: ClipInstance,
 
-    scale_param: ParamHandle<Double>,
-
-    per_component_scale_param: ParamHandle<Bool>,
-
-    scale_r_param: ParamHandle<Double>,
-    scale_g_param: ParamHandle<Double>,
-    scale_b_param: ParamHandle<Double>,
-    scale_a_param: ParamHandle<Double>,
+    dots_exponent: ParamHandle<Double>,
+    opacity: ParamHandle<Double>,
+    scale_fact: ParamHandle<Double>,
+    num_wavelengths: ParamHandle<Double>,
+    triangulate: ParamHandle<Bool>,
+    pos_x_param: ParamHandle<Double>,
+    pos_y_param: ParamHandle<Double>,
+    pos_z_param: ParamHandle<Double>,
 }
 
 struct TileProcessor<'a> {
     instance: ImageEffectHandle,
-    scale: RGBAColourD,
     src: ImageDescriptor<'a, RGBAColourF>,
     raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
     dst: ImageTileMut<'a, RGBAColourF>,
@@ -63,24 +62,13 @@ unsafe impl<'a> Send for TileProcessor<'a> {}
 impl<'a> TileProcessor<'a> {
     fn new(
         instance: ImageEffectHandle,
-        r_scale: Double,
-        g_scale: Double,
-        b_scale: Double,
-        a_scale: Double,
         src: ImageDescriptor<'a, RGBAColourF>,
         raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
         dst: ImageTileMut<'a, RGBAColourF>,
         render_window: RectI,
     ) -> Self {
-        let scale = RGBAColourD {
-            r: r_scale,
-            g: g_scale,
-            b: b_scale,
-            a: a_scale,
-        };
         TileProcessor {
             instance,
-            scale,
             src,
             raw,
             dst,
@@ -126,7 +114,6 @@ trait ProcessRGBA<'a> {
 
 impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
     fn do_processing(&'a mut self) -> Result<()> {
-        let scale = self.scale;
         let proc_window = self.render_window;
 
         let raw = self.raw.read().unwrap();
@@ -139,7 +126,7 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
             }
 
             for (x, dst) in dst_row.iter_mut().enumerate() {
-                if y as usize >= raw.len() || x >= raw[0].len(){
+                if y as usize >= raw.len() || x >= raw[0].len() {
                     continue; // should be out of index!
                 }
                 *dst.channel_mut(0) = raw[y as usize][x].0 as f32 / 256.;
@@ -155,13 +142,14 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
 }
 
 const PARAM_MAIN_NAME: &str = "Main";
+const PARAM_OPACITY_NAME: &str = "opacity";
+const PARAM_DOTS_NAME: &str = "dots";
 const PARAM_SCALE_NAME: &str = "scale";
-const PARAM_SCALE_R_NAME: &str = "scaleR";
-const PARAM_SCALE_G_NAME: &str = "scaleG";
-const PARAM_SCALE_B_NAME: &str = "scaleB";
-const PARAM_SCALE_A_NAME: &str = "scaleA";
-const PARAM_SCALE_COMPONENTS_NAME: &str = "scaleComponents";
-const PARAM_COMPONENT_SCALES_NAME: &str = "componentScales";
+const PARAM_WAVELEN_NAME: &str = "wavelenghts";
+const PARAM_TRI_NAME: &str = "triangulate";
+const PARAM_X_NAME: &str = "x";
+const PARAM_Y_NAME: &str = "y";
+const PARAM_Z_NAME: &str = "z";
 
 impl Execute for SimplePlugin {
     #[allow(clippy::float_cmp)]
@@ -187,8 +175,6 @@ impl Execute for SimplePlugin {
                     }
                 };
 
-                let (sv, sr, sg, sb, sa) = instance_data.get_scale_components(time)?;
-                let (r_scale, g_scale, b_scale, a_scale) = (sv * sr, sv * sg, sv * sb, sv * sa);
                 let mut output_image = output_image.borrow_mut();
                 let num_threads = plugin_context.num_threads()?;
                 let num_tiles = num_threads as usize;
@@ -198,7 +184,12 @@ impl Execute for SimplePlugin {
                     output_image.get_components()?,
                 ) {
                     (BitDepth::Float, ImageComponent::RGBA) => {
-                        self.gpu.update(true);
+                        let size = output_image
+                            .get_descriptor::<RGBAColourF>()?
+                            .data()
+                            .dimensions();
+                        self.gpu.resize([size.0, size.1]);
+                        self.gpu.update(instance_data.get_data(time));
                         self.gpu.render();
 
                         let mut queue = TileDispatch::new(
@@ -212,10 +203,6 @@ impl Execute for SimplePlugin {
                                         .and_then(|mask| mask.get_descriptor::<f32>().ok());
                                     TileProcessor::new(
                                         effect.clone(),
-                                        r_scale,
-                                        g_scale,
-                                        b_scale,
-                                        a_scale,
                                         src,
                                         self.gpu.raw.clone(),
                                         tile,
@@ -237,31 +224,36 @@ impl Execute for SimplePlugin {
             }
 
             IsIdentity(ref mut effect, ref in_args, ref mut out_args) => {
-                let time = in_args.get_time()?;
-                let _render_window = in_args.get_render_window()?;
-                let instance_data: &MyInstanceData = effect.get_instance_data()?;
+                // let time = in_args.get_time()?;
+                // let _render_window = in_args.get_render_window()?;
+                // let instance_data: &MyInstanceData = effect.get_instance_data()?;
 
-                let (scale_value, sr, sg, sb, sa) = instance_data.get_scale_components(time)?;
+                // let (scale_value, sr, sg, sb, sa) = instance_data.get_scale_components(time)?;
 
-                if scale_value == 1. && sr == 1. && sg == 1. && sb == 1. && sa == 1. {
-                    out_args.set_name(&image_effect_simple_source_clip_name())?;
-                    OK
-                } else {
-                    REPLY_DEFAULT
-                }
+                // if scale_value == 1. && sr == 1. && sg == 1. && sb == 1. && sa == 1. {
+                //     out_args.set_name(&image_effect_simple_source_clip_name())?;
+                //     OK
+                // } else {
+                //     REPLY_DEFAULT
+                // }
+                REPLY_DEFAULT
             }
 
             InstanceChanged(ref mut effect, ref in_args) => {
                 if in_args.get_change_reason()? == Change::UserEdited {
                     let obj_changed = in_args.get_name()?;
+                    let instance_data: &mut MyInstanceData = effect.get_instance_data()?;
+                    let time = in_args.get_time()?;
+                    // self.gpu.update(instance_data.get_data(time));
+
                     let expected = match in_args.get_type()? {
                         Type::Clip => Some(image_effect_simple_source_clip_name()),
-                        Type::Parameter => Some(PARAM_SCALE_COMPONENTS_NAME.to_owned()),
+                        // Type::Parameter => Some(PARAM_SCALE_COMPONENTS_NAME.to_owned()),
                         _ => None,
                     };
 
                     if expected == Some(obj_changed) {
-                        Self::set_per_component_scale_enabledness(effect)?;
+                        // Self::set_per_component_scale_enabledness(effect)?;
                         OK
                     } else {
                         REPLY_DEFAULT
@@ -352,7 +344,7 @@ impl Execute for SimplePlugin {
                 let mut param_set = effect.parameter_set()?;
 
                 let is_general_effect = effect_props.get_context()?.is_general();
-                let per_component_scale_param = param_set.parameter(PARAM_SCALE_COMPONENTS_NAME)?;
+                // let per_component_scale_param = param_set.parameter(PARAM_SCALE_COMPONENTS_NAME)?;
 
                 let source_clip = effect.get_simple_input_clip()?;
                 let output_clip = effect.get_output_clip()?;
@@ -362,26 +354,31 @@ impl Execute for SimplePlugin {
                     None
                 };
 
-                let scale_param = param_set.parameter(PARAM_SCALE_NAME)?;
-                let scale_r_param = param_set.parameter(PARAM_SCALE_R_NAME)?;
-                let scale_g_param = param_set.parameter(PARAM_SCALE_G_NAME)?;
-                let scale_b_param = param_set.parameter(PARAM_SCALE_B_NAME)?;
-                let scale_a_param = param_set.parameter(PARAM_SCALE_A_NAME)?;
+                let dots_exponent = param_set.parameter(PARAM_DOTS_NAME)?;
+                let scale_fact = param_set.parameter(PARAM_SCALE_NAME)?;
+                let opacity = param_set.parameter(PARAM_OPACITY_NAME)?;
+                let num_wavelengths = param_set.parameter(PARAM_WAVELEN_NAME)?;
+                let triangulate = param_set.parameter(PARAM_TRI_NAME)?;
+                let pos_x_param = param_set.parameter(PARAM_X_NAME)?;
+                let pos_y_param = param_set.parameter(PARAM_Y_NAME)?;
+                let pos_z_param = param_set.parameter(PARAM_Z_NAME)?;
 
                 effect.set_instance_data(MyInstanceData {
                     is_general_effect,
                     source_clip,
                     mask_clip,
                     output_clip,
-                    per_component_scale_param,
-                    scale_param,
-                    scale_r_param,
-                    scale_g_param,
-                    scale_b_param,
-                    scale_a_param,
+                    dots_exponent,
+                    opacity,
+                    scale_fact,
+                    num_wavelengths,
+                    triangulate,
+                    pos_x_param,
+                    pos_y_param,
+                    pos_z_param,
                 })?;
 
-                Self::set_per_component_scale_enabledness(effect)?;
+                // Self::set_per_component_scale_enabledness(effect)?;
 
                 OK
             }
@@ -410,15 +407,16 @@ impl Execute for SimplePlugin {
                     script_name: &'static str,
                     hint: &'static str,
                     parent: Option<&'static str>,
+                    min: f64,
+                    max: f64,
                 ) -> Result<()> {
                     let mut param_props = param_set.param_define_double(name)?;
 
                     param_props.set_double_type(ParamDoubleType::Scale)?;
                     param_props.set_label(label)?;
                     param_props.set_default(1.0)?;
-                    param_props.set_display_min(1.0)?;
-                    param_props.set_display_min(1.0)?;
-                    param_props.set_display_max(100.0)?;
+                    param_props.set_display_min(min)?;
+                    param_props.set_display_max(max)?;
                     param_props.set_hint(hint)?;
                     param_props.set_script_name(script_name)?;
 
@@ -429,71 +427,116 @@ impl Execute for SimplePlugin {
                     Ok(())
                 }
 
+                /*
+                dots_exponent: ParamHandle<Double>,
+                opacity: ParamHandle<Double>,
+                scale_fact: ParamHandle<Double>,
+                num_wavelengths: ParamHandle<Double>,
+                triangulate: bool,
+                pos_x_param: ParamHandle<Double>,
+                pos_y_param: ParamHandle<Double>,
+                pos_z_param: ParamHandle<Double>,
+                */
+
                 let mut param_set = effect.parameter_set()?;
                 define_scale_param(
                     &mut param_set,
-                    PARAM_SCALE_NAME,
-                    "scale",
-                    PARAM_SCALE_NAME,
-                    "Scales all component in the image",
+                    PARAM_OPACITY_NAME,
+                    PARAM_OPACITY_NAME,
+                    PARAM_OPACITY_NAME,
+                    "Opacity of the flare",
                     None,
+                    0.1,
+                    10.0,
                 )?;
 
-                let mut param_props =
-                    param_set.param_define_boolean(PARAM_SCALE_COMPONENTS_NAME)?;
-                param_props.set_default(false)?;
-                param_props.set_hint("Enables scale on individual components")?;
-                param_props.set_script_name(PARAM_SCALE_COMPONENTS_NAME)?;
-                param_props.set_label("Scale Individual Components")?;
+                let mut param_set = effect.parameter_set()?;
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_DOTS_NAME,
+                    PARAM_DOTS_NAME,
+                    PARAM_DOTS_NAME,
+                    "Exponent for the dots",
+                    None,
+                    1.,
+                    5.,
+                )?;
 
-                let mut param_props = param_set.param_define_group(PARAM_COMPONENT_SCALES_NAME)?;
-                param_props.set_hint("Scales on the individual component")?;
-                param_props.set_label("Components")?;
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_SCALE_NAME,
+                    PARAM_SCALE_NAME,
+                    PARAM_SCALE_NAME,
+                    "Scales the image",
+                    None,
+                    0.1,
+                    10.0,
+                )?;
 
                 define_scale_param(
                     &mut param_set,
-                    PARAM_SCALE_R_NAME,
-                    "red",
-                    PARAM_SCALE_R_NAME,
-                    "Scales the red component of the image",
-                    Some(PARAM_COMPONENT_SCALES_NAME),
+                    PARAM_WAVELEN_NAME,
+                    PARAM_WAVELEN_NAME,
+                    PARAM_WAVELEN_NAME,
+                    "Number of wavelengths",
+                    None,
+                    1.,
+                    10.,
+                )?;
+
+                let mut param_props = param_set.param_define_boolean(PARAM_TRI_NAME)?;
+                param_props.set_default(true)?;
+                param_props.set_hint("Enables triangulation")?;
+                param_props.set_script_name(PARAM_TRI_NAME)?;
+                param_props.set_label("trianguate")?;
+
+                // let mut param_props = param_set.param_define_group(PARAM_COMPONENT_SCALES_NAME)?;
+                // param_props.set_hint("Scales on the individual component")?;
+                // param_props.set_label("Components")?;
+
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_X_NAME,
+                    "X",
+                    PARAM_X_NAME,
+                    "X component of the origin of the flare",
+                    Some(PARAM_X_NAME),
+                    -3.,
+                    3.,
                 )?;
                 define_scale_param(
                     &mut param_set,
-                    PARAM_SCALE_G_NAME,
-                    "green",
-                    PARAM_SCALE_G_NAME,
-                    "Scales the green component of the image",
-                    Some(PARAM_COMPONENT_SCALES_NAME),
+                    PARAM_Y_NAME,
+                    "Y",
+                    PARAM_Y_NAME,
+                    "Y component of the origin of the flare",
+                    Some(PARAM_Y_NAME),
+                    -3.,
+                    3.,
                 )?;
                 define_scale_param(
                     &mut param_set,
-                    PARAM_SCALE_B_NAME,
-                    "blue",
-                    PARAM_SCALE_B_NAME,
-                    "Scales the blue component of the image",
-                    Some(PARAM_COMPONENT_SCALES_NAME),
-                )?;
-                define_scale_param(
-                    &mut param_set,
-                    PARAM_SCALE_A_NAME,
-                    "alpha",
-                    PARAM_SCALE_A_NAME,
-                    "Scales the alpha component of the image",
-                    Some(PARAM_COMPONENT_SCALES_NAME),
+                    PARAM_Z_NAME,
+                    "Z",
+                    PARAM_Z_NAME,
+                    "Z component of the origin of the flare",
+                    Some(PARAM_Z_NAME),
+                    -10.,
+                    0.,
                 )?;
 
                 param_set
                     .param_define_page(PARAM_MAIN_NAME)?
                     .set_children(&[
+                        PARAM_OPACITY_NAME,
+                        PARAM_DOTS_NAME,
                         PARAM_SCALE_NAME,
-                        PARAM_SCALE_COMPONENTS_NAME,
-                        PARAM_SCALE_R_NAME,
-                        PARAM_SCALE_G_NAME,
-                        PARAM_SCALE_B_NAME,
-                        PARAM_SCALE_A_NAME,
+                        PARAM_WAVELEN_NAME,
+                        PARAM_X_NAME,
+                        PARAM_Y_NAME,
+                        PARAM_Z_NAME,
                     ])?;
-
+                println!("test");
                 OK
             }
 
@@ -523,46 +566,43 @@ impl Execute for SimplePlugin {
     }
 }
 
-impl SimplePlugin {
-    fn set_per_component_scale_enabledness(effect: &mut ImageEffectHandle) -> Result<()> {
-        let instance_data: &mut MyInstanceData = effect.get_instance_data()?;
-        let input_clip = effect.get_simple_input_clip()?;
-        let is_input_rgb = input_clip.get_connected()? && input_clip.get_components()?.is_rgb();
-        instance_data
-            .per_component_scale_param
-            .set_enabled(is_input_rgb)?;
-        let per_component_scale =
-            is_input_rgb && instance_data.per_component_scale_param.get_value()?;
-        for scale_param in &mut [
-            &mut instance_data.scale_r_param,
-            &mut instance_data.scale_g_param,
-            &mut instance_data.scale_b_param,
-            &mut instance_data.scale_a_param,
-        ] {
-            scale_param.set_enabled(per_component_scale)?;
-            instance_data
-                .scale_param
-                .set_enabled(!per_component_scale)?
-        }
+// impl SimplePlugin {
+//     fn set_per_component_scale_enabledness(effect: &mut ImageEffectHandle) -> Result<()> {
+//         let instance_data: &mut MyInstanceData = effect.get_instance_data()?;
+//         let input_clip = effect.get_simple_input_clip()?;
+//         let is_input_rgb = input_clip.get_connected()? && input_clip.get_components()?.is_rgb();
+//         instance_data
+//             .per_component_scale_param
+//             .set_enabled(is_input_rgb)?;
+//         let per_component_scale =
+//             is_input_rgb && instance_data.per_component_scale_param.get_value()?;
+//         for scale_param in &mut [
+//             &mut instance_data.scale_r_param,
+//             &mut instance_data.scale_g_param,
+//             &mut instance_data.scale_b_param,
+//             &mut instance_data.scale_a_param,
+//         ] {
+//             scale_param.set_enabled(per_component_scale)?;
+//             instance_data
+//                 .scale_param
+//                 .set_enabled(!per_component_scale)?
+//         }
 
-        Ok(())
-    }
-}
+//         Ok(())
+//     }
+// }
 
 impl MyInstanceData {
-    fn get_scale_components(&self, time: Time) -> Result<(f64, f64, f64, f64, f64)> {
-        let scale_value = self.scale_param.get_value_at_time(time)?;
-        let per_component_scale = self.per_component_scale_param.get_value_at_time(time)?;
-        if per_component_scale && self.source_clip.get_components()?.is_rgb() {
-            Ok((
-                scale_value,
-                self.scale_r_param.get_value_at_time(time)?,
-                self.scale_g_param.get_value_at_time(time)?,
-                self.scale_b_param.get_value_at_time(time)?,
-                self.scale_a_param.get_value_at_time(time)?,
-            ))
-        } else {
-            Ok((scale_value, 1., 1., 1., 1.))
-        }
+    fn get_data(&self, time: Time) -> Result<(f64, f64, f64, f64, bool, f64, f64, f64)> {
+        Ok((
+            self.dots_exponent.get_value_at_time(time)?,
+            self.num_wavelengths.get_value_at_time(time)?,
+            self.opacity.get_value_at_time(time)?,
+            self.scale_fact.get_value_at_time(time)?,
+            self.triangulate.get_value_at_time(time)?,
+            self.pos_x_param.get_value_at_time(time)?,
+            self.pos_y_param.get_value_at_time(time)?,
+            self.pos_z_param.get_value_at_time(time)?,
+        ))
     }
 }

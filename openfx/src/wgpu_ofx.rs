@@ -4,7 +4,6 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 use gpu::lens_state::LensState;
-use gpu::*;
 use wgpu::Device;
 use wgpu::Queue;
 use wgpu::SurfaceConfiguration;
@@ -97,8 +96,8 @@ impl State {
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::COPY_DST,
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
-            width: 1920,
-            height: 1080,
+            width: size[0],
+            height: size[1],
             present_mode: wgpu::PresentMode::Immediate,
         };
 
@@ -139,24 +138,46 @@ impl Gpu {
         }
     }
 
-    pub fn update(&mut self, update_dot_num: bool) {
+    pub fn update(
+        &mut self,
+        parameters: Result<(f64, f64, f64, f64, bool, f64, f64, f64), ofx::Error>,
+    ) {
         //TODO: todo!("add update logic");
         // let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) = self
         //     .lens_ui
         //     .build_ui(&ui, &self.state.device, &self.state.queue);
 
-        if self.lens_ui.triangulate {
-            self.poly_tri.update(&self.state.device, &self.lens_ui);
-        } else {
-            self.poly_res.update(&self.state.device, &self.lens_ui);
-        }
+        let (
+            dots_exponent,
+            num_wavelengths,
+            opacity,
+            scale_fact,
+            triangulate,
+            pos_x_param,
+            pos_y_param,
+            pos_z_param,
+        ) = parameters.unwrap();
 
-        if update_dot_num {
-            self.poly_res.num_dots = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
-            self.poly_tri.dot_side_len = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
-            self.lens_ui.sim_params[11] = self.poly_tri.dot_side_len as f32;
-            self.lens_ui.needs_update = true;
-        }
+        self.lens_ui.sim_params[12] = scale_fact as f32;
+        self.lens_ui.opacity = opacity as f32;
+        self.lens_ui.dots_exponent = dots_exponent;
+        self.lens_ui.num_wavelengths = num_wavelengths as u32;
+        self.lens_ui.triangulate = triangulate;
+        self.lens_ui.pos_params[0] = pos_x_param as f32;
+        self.lens_ui.pos_params[1] = pos_y_param as f32;
+        self.lens_ui.pos_params[2] = pos_z_param as f32;
+
+        self.poly_res.num_dots = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
+        self.poly_tri.dot_side_len = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
+        self.lens_ui.sim_params[11] = self.poly_tri.dot_side_len as f32;
+        self.lens_ui.needs_update = true;
+        self.lens_ui.update(&self.state.device, &self.state.queue);
+
+        // if self.lens_ui.triangulate {
+        //     self.poly_tri.update(&self.state.device, &self.lens_ui);
+        // } else {
+        //     self.poly_res.update(&self.state.device, &self.lens_ui);
+        // }
     }
 
     fn tex_to_raw(
@@ -234,7 +255,7 @@ impl Gpu {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,//wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
