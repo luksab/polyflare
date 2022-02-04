@@ -1,5 +1,5 @@
 use ofx::*;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::wgpu_ofx::Gpu;
 
@@ -10,14 +10,19 @@ plugin_module!(
     SimplePlugin::new
 );
 
-#[derive(Default)]
 struct SimplePlugin {
     host_supports_multiple_clip_depths: Bool,
+    gpu: Gpu,
 }
 
 impl SimplePlugin {
     pub fn new() -> SimplePlugin {
-        SimplePlugin::default()
+        let mut gpu = Gpu::new();
+        gpu.update(true);
+        SimplePlugin {
+            gpu,
+            host_supports_multiple_clip_depths: false,
+        }
     }
 }
 #[allow(unused)]
@@ -36,14 +41,13 @@ struct MyInstanceData {
     scale_g_param: ParamHandle<Double>,
     scale_b_param: ParamHandle<Double>,
     scale_a_param: ParamHandle<Double>,
-
-	gpu: Gpu,
 }
 
 struct TileProcessor<'a> {
     instance: ImageEffectHandle,
     scale: RGBAColourD,
     src: ImageDescriptor<'a, RGBAColourF>,
+    raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
     dst: ImageTileMut<'a, RGBAColourF>,
     render_window: RectI,
 }
@@ -64,6 +68,7 @@ impl<'a> TileProcessor<'a> {
         b_scale: Double,
         a_scale: Double,
         src: ImageDescriptor<'a, RGBAColourF>,
+        raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
         dst: ImageTileMut<'a, RGBAColourF>,
         render_window: RectI,
     ) -> Self {
@@ -77,6 +82,7 @@ impl<'a> TileProcessor<'a> {
             instance,
             scale,
             src,
+            raw,
             dst,
             // mask,
             render_window,
@@ -122,6 +128,8 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
     fn do_processing(&'a mut self) -> Result<()> {
         let scale = self.scale;
         let proc_window = self.render_window;
+
+        let raw = self.raw.read().unwrap();
         for y in self.dst.y1.max(proc_window.y1)..self.dst.y2.min(proc_window.y2) {
             let dst_row = self.dst.row_range(proc_window.x1, proc_window.x2, y);
             let src_row = self.src.row_range(proc_window.x1, proc_window.x2, y);
@@ -130,29 +138,16 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
                 break;
             }
 
-            // let src_mask = self
-            //     .mask
-            //     .as_ref()
-            //     .map(|mask| mask.row_range(proc_window.x1, proc_window.x2, y));
-
-            // match src_mask {
-            //     None => {
-
-            for (outer, (dst, src)) in dst_row.iter_mut().zip(src_row.iter()).enumerate() {
-                // *dst = src.scaled(&scale);
-                for i in 0..3 {
-                    *dst.channel_mut(i) = outer as f32 / src_row.len() as f32; //RGBAColourF::from_f32(1.);
+            for (x, dst) in dst_row.iter_mut().enumerate() {
+                if y as usize >= raw.len() || x >= raw[0].len(){
+                    continue; // should be out of index!
                 }
-				*dst.channel_mut(3) = 1.; // set alpha to 1.0
+                *dst.channel_mut(0) = raw[y as usize][x].0 as f32 / 256.;
+                *dst.channel_mut(1) = raw[y as usize][x].1 as f32 / 256.;
+                *dst.channel_mut(2) = raw[y as usize][x].2 as f32 / 256.;
+
+                *dst.channel_mut(3) = 1.; // set alpha to 1.0
             }
-            // }
-            // Some(src_mask) => {
-            //     for ((dst, src), mask) in dst_row.iter_mut().zip(src_row.iter()).zip(src_mask) {
-            //         let mask0 = mask.to_f32();
-            //         *dst = src.mix(&src.scaled(&scale), mask0);
-            //     }
-            // }
-            // }
         }
 
         Ok(())
@@ -203,6 +198,9 @@ impl Execute for SimplePlugin {
                     output_image.get_components()?,
                 ) {
                     (BitDepth::Float, ImageComponent::RGBA) => {
+                        self.gpu.update(true);
+                        self.gpu.render();
+
                         let mut queue = TileDispatch::new(
                             output_image
                                 .get_tiles_mut::<RGBAColourF>(num_tiles)?
@@ -219,6 +217,7 @@ impl Execute for SimplePlugin {
                                         b_scale,
                                         a_scale,
                                         src,
+                                        self.gpu.raw.clone(),
                                         tile,
                                         render_window,
                                     )
@@ -369,8 +368,6 @@ impl Execute for SimplePlugin {
                 let scale_b_param = param_set.parameter(PARAM_SCALE_B_NAME)?;
                 let scale_a_param = param_set.parameter(PARAM_SCALE_A_NAME)?;
 
-				let gpu = Gpu::new();
-
                 effect.set_instance_data(MyInstanceData {
                     is_general_effect,
                     source_clip,
@@ -382,7 +379,6 @@ impl Execute for SimplePlugin {
                     scale_g_param,
                     scale_b_param,
                     scale_a_param,
-					gpu,
                 })?;
 
                 Self::set_per_component_scale_enabledness(effect)?;

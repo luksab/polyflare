@@ -1,18 +1,41 @@
+use std::iter;
+use std::sync::Arc;
+use std::sync::RwLock;
+use std::time::Instant;
+
+use gpu::lens_state::LensState;
 use gpu::*;
+use wgpu::Device;
+use wgpu::Queue;
+use wgpu::SurfaceConfiguration;
+
+use gpu::scenes::PolyRes;
+use gpu::scenes::PolyTri;
+use wgpu::Texture;
 
 pub struct Gpu {
     pub state: State,
+    pub lens_ui: LensState,
+    pub poly_res: PolyRes,
+    pub poly_tri: PolyTri,
+    pub raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
 }
 
 impl Gpu {
     pub fn new() -> Gpu {
-        let mut state = pollster::block_on(State::new(
-            wgpu::Backends::PRIMARY,
-            true,
-            None,
-            [1920, 1080],
-        ));
-        Gpu { state }
+        let mut state = pollster::block_on(State::new(wgpu::Backends::PRIMARY, None, [1920, 1080]));
+        let mut lens_ui = LensState::default(&state.device);
+        lens_ui.init(&state.device, &state.queue);
+        let mut poly_res = pollster::block_on(PolyRes::new(&state.device, &state.config, &lens_ui));
+        let mut poly_tri = pollster::block_on(PolyTri::new(&state.device, &state.config, &lens_ui));
+
+        Gpu {
+            state,
+            lens_ui,
+            poly_res,
+            poly_tri,
+            raw: Arc::new(RwLock::new(vec![])),
+        }
     }
 }
 
@@ -22,7 +45,7 @@ pub struct State {
     pub device: wgpu::Device,
     pub adapter: wgpu::Adapter,
     pub queue: wgpu::Queue,
-    pub size: [u32; 2],
+    pub config: SurfaceConfiguration,
 }
 
 impl State {
@@ -31,12 +54,7 @@ impl State {
     /// add those by calling `state.scenes.push(scene)`
     ///
     /// backend is one of  `VULKAN, GL, METAL, DX11, DX12, BROWSER_WEBGPU, PRIMARY`
-    pub async fn new(
-        backend: wgpu::Backends,
-        low_req: bool,
-        adapter: Option<usize>,
-        size: [u32; 2],
-    ) -> Self {
+    pub async fn new(backend: wgpu::Backends, adapter: Option<usize>, size: [u32; 2]) -> Self {
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(backend);
@@ -75,67 +93,233 @@ impl State {
             )
             .await
             .expect("even the lowest requirements device is not available");
-        /*match low_req {
-            true => ,
-            false => adapter
-                .request_device(
-                    &wgpu::DeviceDescriptor {
-                        label: None,
-                        features: wgpu::Features::empty(),
-                        limits: wgpu::Limits {
-                            max_texture_dimension_1d: 16384,
-                            max_texture_dimension_2d: 16384,
-                            max_texture_dimension_3d: 2048,
-                            max_texture_array_layers: 256, // default
-                            max_bind_groups: 4,             // default
-                            max_dynamic_uniform_buffers_per_pipeline_layout: 8, // default
-                            max_dynamic_storage_buffers_per_pipeline_layout: 4, // default
-                            max_sampled_textures_per_shader_stage: 16, // default
-                            max_samplers_per_shader_stage: 16, // default
-                            max_storage_buffers_per_shader_stage: 4, // default
-                            max_storage_textures_per_shader_stage: 4, // default
-                            max_uniform_buffers_per_shader_stage: 12, // default
-                            max_uniform_buffer_binding_size: 16384, // default
-                            max_storage_buffer_binding_size: u32::MAX, // 128 << 20, // default
-                            max_vertex_buffers: 8,          // default
-                            max_vertex_attributes: 16,      // default
-                            max_vertex_buffer_array_stride: 2048, // default
-                            max_push_constant_size: 0,      // default
-                            min_uniform_buffer_offset_alignment: 256, // default
-                            min_storage_buffer_offset_alignment: 256, // default
-                            max_inter_stage_shader_components: 60, // default
-                            max_compute_workgroup_storage_size: 16352, // default
-                            max_compute_invocations_per_workgroup: 256, // default
-                            max_compute_workgroup_size_x: 256, // default
-                            max_compute_workgroup_size_y: 256, // default
-                            max_compute_workgroup_size_z: 64, // default
-                            max_compute_workgroups_per_dimension: 65535, // default
-                        },
-                    },
-                    None, // Trace path
-                )
-                .await
-                .expect("failed to create device with high requirement"),
-        };*/
+
+        let config = SurfaceConfiguration {
+            usage: wgpu::TextureUsages::COPY_DST,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            width: 1920,
+            height: 1080,
+            present_mode: wgpu::PresentMode::Immediate,
+        };
 
         Self {
             device,
             adapter,
             queue,
-            size,
+            config,
         }
     }
 
+    pub fn resize(&mut self, new_size: [u32; 2]) {
+        // check that the size is real
+        if new_size[0] > 0 && new_size[1] > 0 {
+            self.config.width = new_size[0];
+            self.config.height = new_size[1];
+            // self.surface.configure(&self.device, &self.config);
+        }
+    }
+}
+
+impl Gpu {
     /// call this when the main window is resized.
     ///
     /// internally calls resize on all scenes
     pub fn resize(&mut self, new_size: [u32; 2]) {
         // check that the size is real
         if new_size[0] > 0 && new_size[1] > 0 {
-            self.size = new_size;
             // self.surface.configure(&self.device, &self.config);
-            todo!();
+            self.state.resize(new_size);
+            self.lens_ui.resize_window(new_size, 1.0);
+
+            self.poly_res
+                .resize(new_size, 1.0, &self.state.device, &self.state.config);
+
+            self.poly_tri
+                .resize(new_size, 1.0, &self.state.device, &self.state.config);
         }
     }
-}
 
+    pub fn update(&mut self, update_dot_num: bool) {
+        //TODO: todo!("add update logic");
+        // let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) = self
+        //     .lens_ui
+        //     .build_ui(&ui, &self.state.device, &self.state.queue);
+
+        if self.lens_ui.triangulate {
+            self.poly_tri.update(&self.state.device, &self.lens_ui);
+        } else {
+            self.poly_res.update(&self.state.device, &self.lens_ui);
+        }
+
+        if update_dot_num {
+            self.poly_res.num_dots = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
+            self.poly_tri.dot_side_len = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
+            self.lens_ui.sim_params[11] = self.poly_tri.dot_side_len as f32;
+            self.lens_ui.needs_update = true;
+        }
+    }
+
+    fn tex_to_raw(
+        tex: &Texture,
+        size: [u32; 2],
+        device: &Device,
+        queue: &Queue,
+    ) -> Vec<Vec<(u8, u8, u8, u8)>> {
+        let output_buffer_size = (size[0] * size[1] * 4) as wgpu::BufferAddress;
+        let output_buffer_desc = wgpu::BufferDescriptor {
+            size: output_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            label: Some("Ray DST"),
+            mapped_at_creation: false,
+        };
+
+        let output_buffer = device.create_buffer(&output_buffer_desc);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
+        let texture_extent = wgpu::Extent3d {
+            width: size[0] as u32,
+            height: size[1] as u32,
+            depth_or_array_layers: 1,
+        };
+        encoder.copy_texture_to_buffer(
+            tex.as_image_copy(),
+            wgpu::ImageCopyBuffer {
+                buffer: &output_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(std::num::NonZeroU32::new(size[0] * 4).unwrap()),
+                    rows_per_image: None,
+                },
+            },
+            texture_extent,
+        );
+
+        queue.submit(iter::once(encoder.finish()));
+
+        let buffer_slice = output_buffer.slice(..);
+        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+        device.poll(wgpu::Maintain::Wait);
+
+        if let Ok(()) = pollster::block_on(buffer_future) {
+            let mut data = buffer_slice.get_mapped_range().to_vec();
+            // BGR TO RGB
+            // for chunk in data.chunks_mut(4) {
+            //     chunk.swap(0, 2);
+            // }
+            let data: Vec<(u8, u8, u8, u8)> = data
+                .chunks_mut(4)
+                .map(|chunk| (chunk[2], chunk[1], chunk[0], chunk[3]))
+                .collect();
+            let data: Vec<Vec<(u8, u8, u8, u8)>> =
+                data.chunks(size[0] as usize).map(|x| x.to_vec()).collect();
+            return data;
+        } else {
+            panic!("Failed to copy texture to CPU!")
+        }
+    }
+
+    pub fn render(&mut self) {
+        let now = Instant::now();
+        let size = [self.state.config.width, self.state.config.height]; //[2048, 2048];
+        println!("size: {:?}", size);
+        let extend = wgpu::Extent3d {
+            width: size[0],
+            height: size[1],
+            depth_or_array_layers: 1,
+        };
+        let desc = wgpu::TextureDescriptor {
+            label: Some("hi-res"),
+            size: extend,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+        };
+        let tex = self.state.device.create_texture(&desc);
+
+        if self.lens_ui.triangulate {
+            self.poly_tri.resize(
+                [size[0], size[1]],
+                1.0,
+                &self.state.device,
+                &self.state.config,
+            );
+        } else {
+            self.poly_res.resize(
+                [size[0], size[1]],
+                1.0,
+                &self.state.device,
+                &self.state.config,
+            );
+        }
+
+        let sim_params = self.lens_ui.sim_params;
+
+        self.lens_ui.resize_window([size[0], size[1]], 1.0);
+
+        self.lens_ui.num_wavelengths *= 10;
+        self.lens_ui.update(&self.state.device, &self.state.queue);
+
+        if self.lens_ui.triangulate {
+            self.poly_tri
+                .render_hires(
+                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                    &self.state.device,
+                    &self.state.queue,
+                    &mut self.lens_ui,
+                )
+                .unwrap();
+
+            self.poly_tri.resize(
+                [sim_params[9] as _, sim_params[10] as _],
+                2.0,
+                &self.state.device,
+                &self.state.config,
+            );
+        } else {
+            self.poly_res
+                .render_hires(
+                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                    &self.state.device,
+                    &self.state.queue,
+                    10.0_f64.powf(self.lens_ui.hi_dots_exponent) as u64,
+                    &mut self.lens_ui,
+                )
+                .unwrap();
+
+            self.poly_res.resize(
+                [sim_params[9] as _, sim_params[10] as _],
+                1.0,
+                &self.state.device,
+                &self.state.config,
+            );
+        }
+        self.lens_ui.sim_params = sim_params;
+        self.lens_ui.needs_update = true;
+        self.lens_ui.num_wavelengths /= 10;
+
+        // save_png::save_png(
+        //     &tex,
+        //     size,
+        //     &self.state.device,
+        //     &self.state.queue,
+        //     "test.png",
+        // );
+
+        let mut raw = self.raw.write().unwrap();
+
+        *raw = Self::tex_to_raw(&tex, size, &self.state.device, &self.state.queue);
+
+        // for r in raw.iter() {
+        //     if (r.0 != 0 || r.1 != 0 || r.2 != 0) {
+        //         println!("{:?}", r);
+        //     }
+        // }
+
+        println!("Rendering and saving image took {:?}", now.elapsed());
+    }
+}

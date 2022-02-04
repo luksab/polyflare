@@ -5,7 +5,9 @@ use std::time::Instant;
 use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
 use imgui::{CollapsingHeader, Condition, Drag, Slider, Ui};
-use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier, Polynomial};
+use polynomial_optics::{
+    Element, Glass, Lens, Polynomial, Properties, QuarterWaveCoating, Sellmeier,
+};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
@@ -156,7 +158,6 @@ pub struct LensState {
     // pub polys: Vec<Box< dyn PolyStore<f32>>>,
     /// buffer containing the sparse polynomial
     // pub poly_buffer: Buffer,
-
     last_frame_time: Instant,
     fps: f64,
 
@@ -473,11 +474,11 @@ impl LensState {
         self.needs_update = true;
     }
 
-    pub fn resize_window(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: f64) {
-        self.sim_params[7] = new_size.width as f32 * scale_factor as f32;
-        self.sim_params[8] = new_size.height as f32 * scale_factor as f32;
-        self.sim_params[9] = new_size.width as f32;
-        self.sim_params[10] = new_size.height as f32;
+    pub fn resize_window(&mut self, new_size: [u32; 2], scale_factor: f64) {
+        self.sim_params[7] = new_size[0] as f32 * scale_factor as f32;
+        self.sim_params[8] = new_size[1] as f32 * scale_factor as f32;
+        self.sim_params[9] = new_size[0] as f32;
+        self.sim_params[10] = new_size[1] as f32;
         self.needs_update = true;
     }
 
@@ -710,7 +711,7 @@ impl LensState {
             println!("creating lens directory {:?}", dir);
             DirBuilder::new().recursive(true).create(dir).unwrap();
         }
-
+        lenses.sort_by_key(|(name, _lens)| name.to_owned());
         lenses
     }
 
@@ -767,7 +768,6 @@ impl LensState {
             .position([100.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
                 let mut lenses = Self::get_lenses();
-                lenses.sort_by_key(|(name, _lens)| name.to_owned());
 
                 if ui.combo(
                     "select lens",
@@ -1058,6 +1058,90 @@ impl LensState {
         self.last_frame_time = Instant::now();
 
         self.first_frame = false;
-        (update_lens, update_rays, update_dots, render, update_res, compute)
+        (
+            update_lens,
+            update_rays,
+            update_dots,
+            render,
+            update_res,
+            compute,
+        )
+    }
+
+    pub fn init(&mut self, device: &Device, queue: &Queue) {
+        let mut update_lens = self.first_frame;
+        let mut update_sensor = self.first_frame;
+        let mut lenses = Self::get_lenses();
+
+        self.lens = lenses[self.selected_lens].1.clone();
+        self.actual_lens = self.get_lens();
+        self.current_filename = lenses[self.selected_lens].0.clone();
+        update_lens = true;
+
+        queue.write_buffer(
+            &self.sensor_buffer,
+            0,
+            bytemuck::cast_slice(&self.all_sensors[self.sensor_index].1.get_data()),
+        );
+
+        let mut delete_glass = None;
+        let mut delete_aperture = None;
+
+        if let Some(delete_element) = delete_glass {
+            self.lens.remove(delete_element);
+            self.lens.remove(delete_element);
+            update_lens = true;
+        }
+
+        if let Some(delete_aperture) = delete_aperture {
+            self.lens.remove(delete_aperture);
+            update_lens = true;
+        }
+
+        let mut update_rays = self.first_frame;
+        let mut update_dots = self.first_frame;
+        let mut update_res = false;
+        let mut render = false;
+        let mut compute = false;
+
+        let sample = 1. / (Instant::now() - self.last_frame_time).as_secs_f64();
+        let alpha = 0.98;
+        self.fps = alpha * self.fps + (1.0 - alpha) * sample;
+        let num_ghosts = (self
+            .actual_lens
+            .get_ghosts_indicies(self.draw as usize, 0)
+            .len()) as u32;
+
+        // if ui.checkbox("triangulated", &mut self.triangulate) {
+            update_lens = true;
+            update_dots = true;
+        // }
+
+        // ui.radio_button("num_rays", &mut lens_ui.1, true);
+        /*
+        update_lens |= Drag::new("ray origin")
+            .speed(0.001)
+            .range(-10., 10.)
+            .build_array(ui, &mut self.pos_params[0..3]);
+
+        update_lens |= Drag::new("ray direction")
+            .speed(0.001)
+            .range(-1., 1.)
+            .build_array(ui, &mut self.pos_params[4..7]);
+
+        update_lens |= Drag::new("ray width")
+            .range(0., 10.)
+            .speed(0.01)
+            .build(ui, &mut self.pos_params[9]);
+        */
+
+        if update_lens || self.needs_update {
+            self.update(device, queue);
+            self.needs_update = false;
+        }
+
+        self.last_frame_time = Instant::now();
+
+        self.first_frame = false;
     }
 }

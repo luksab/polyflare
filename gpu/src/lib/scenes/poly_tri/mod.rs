@@ -697,7 +697,7 @@ impl PolyTri {
 impl PolyTri {
     pub fn resize(
         &mut self,
-        new_size: winit::dpi::PhysicalSize<u32>,
+        new_size: [u32; 2],
         scale_factor: f64,
         device: &wgpu::Device,
         config: &SurfaceConfiguration,
@@ -706,8 +706,8 @@ impl PolyTri {
         let format = wgpu::TextureFormat::Rgba16Float;
         let mut config = config.clone();
         let scale_fact = 1.;
-        config.width = (new_size.width as f64 * scale_factor * scale_fact) as u32;
-        config.height = (new_size.height as f64 * scale_factor * scale_fact) as u32;
+        config.width = (new_size[0] as f64 * scale_factor * scale_fact) as u32;
+        config.height = (new_size[1] as f64 * scale_factor * scale_fact) as u32;
 
         self.high_color_tex =
             Texture::create_color_texture(device, &config, format, "high_color_tex");

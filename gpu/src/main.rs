@@ -179,13 +179,13 @@ fn main() {
                         state.resize(**new_inner_size, Some(scale_factor));
                         poly_optics.resize(&state.device, &state.config, &lens_ui);
                         poly_res.resize(
-                            state.size,
+                            [state.size.width as _, state.size.height as _],
                             *scale_factor * lens_ui.scale_fact,
                             &state.device,
                             &state.config,
                         );
                         poly_tri.resize(
-                            state.size,
+                            [state.size.width as _, state.size.height as _],
                             *scale_factor * lens_ui.scale_fact,
                             &state.device,
                             &state.config,
@@ -230,14 +230,14 @@ fn main() {
 
                 if update_res {
                     poly_res.resize(
-                        state.size,
+                        [state.size.width as _, state.size.height as _],
                         state.scale_factor * lens_ui.scale_fact,
                         &state.device,
                         &state.config,
                     );
 
                     poly_tri.resize(
-                        state.size,
+                        [state.size.width as _, state.size.height as _],
                         state.scale_factor * lens_ui.scale_fact,
                         &state.device,
                         &state.config,
@@ -293,36 +293,14 @@ fn main() {
                     let tex = state.device.create_texture(&desc);
 
                     if lens_ui.triangulate {
-                        poly_tri.resize(
-                            winit::dpi::PhysicalSize {
-                                width: size[0],
-                                height: size[1],
-                            },
-                            2.0,
-                            &state.device,
-                            &state.config,
-                        );
+                        poly_tri.resize([size[0], size[1]], 2.0, &state.device, &state.config);
                     } else {
-                        poly_res.resize(
-                            winit::dpi::PhysicalSize {
-                                width: size[0],
-                                height: size[1],
-                            },
-                            1.0,
-                            &state.device,
-                            &state.config,
-                        );
+                        poly_res.resize([size[0], size[1]], 1.0, &state.device, &state.config);
                     }
 
                     let sim_params = lens_ui.sim_params;
 
-                    lens_ui.resize_window(
-                        winit::dpi::PhysicalSize {
-                            width: size[0],
-                            height: size[1],
-                        },
-                        1.0,
-                    );
+                    lens_ui.resize_window([size[0], size[1]], 1.0);
 
                     lens_ui.num_wavelengths *= 10;
                     lens_ui.update(&state.device, &state.queue);
@@ -338,10 +316,7 @@ fn main() {
                             .unwrap();
 
                         poly_tri.resize(
-                            winit::dpi::PhysicalSize {
-                                width: sim_params[9] as _,
-                                height: sim_params[10] as _,
-                            },
+                            [sim_params[9] as _, sim_params[10] as _],
                             state.scale_factor,
                             &state.device,
                             &state.config,
@@ -358,10 +333,7 @@ fn main() {
                             .unwrap();
 
                         poly_res.resize(
-                            winit::dpi::PhysicalSize {
-                                width: sim_params[9] as _,
-                                height: sim_params[10] as _,
-                            },
+                            [sim_params[9] as _, sim_params[10] as _],
                             state.scale_factor,
                             &state.device,
                             &state.config,
@@ -398,22 +370,8 @@ fn main() {
                             | wgpu::TextureUsages::COPY_SRC,
                     };
                     let tex = state.device.create_texture(&desc);
-                    poly_tri.resize(
-                        winit::dpi::PhysicalSize {
-                            width: size[0],
-                            height: size[1],
-                        },
-                        2.0,
-                        &state.device,
-                        &state.config,
-                    );
-                    lens_ui.resize_window(
-                        winit::dpi::PhysicalSize {
-                            width: size[0],
-                            height: size[1],
-                        },
-                        1.0,
-                    );
+                    poly_tri.resize([size[0], size[1]], 2.0, &state.device, &state.config);
+                    lens_ui.resize_window([size[0], size[1]], 1.0);
                     lens_ui.update(&state.device, &state.queue);
                     poly_tri
                         .render(
@@ -481,7 +439,15 @@ fn main() {
                         // .clone()
                         .into_iter()
                         // .filter(|point| point.4.is_finite())
-                        .map(|point| (point.0 as f64, point.1 as f64, point.2 as f64, point.3 as f64, point.4 as f64))
+                        .map(|point| {
+                            (
+                                point.0 as f64,
+                                point.1 as f64,
+                                point.2 as f64,
+                                point.3 as f64,
+                                point.4 as f64,
+                            )
+                        })
                         .collect::<Vec<_>>();
                     let polynom = Polynom4d::<_, 7>::fit(&filtered_points);
                     println!("Fitting took {:?}", now.elapsed());
@@ -578,19 +544,13 @@ fn main() {
                     let string = filtered_points
                         .iter()
                         .map(|point| {
-                            [
-                                point.0,
-                                point.1,
-                                point.2,
-                                point.3,
-                                point.4,
-                            ]
-                            .map(|str| str.to_string())
-                            .join(" ")
+                            [point.0, point.1, point.2, point.3, point.4]
+                                .map(|str| str.to_string())
+                                .join(" ")
                         })
                         .collect::<Vec<String>>()
                         .join("\n");
-                    
+
                     std::fs::write("plots/dots.txt", string).unwrap();
 
                     poly_tri
@@ -603,10 +563,7 @@ fn main() {
                         .unwrap();
                     save_png::save_png(&tex, size, &state.device, &state.queue, "after.png");
                     poly_tri.resize(
-                        winit::dpi::PhysicalSize {
-                            width: old_sim_params[9] as _,
-                            height: old_sim_params[10] as _,
-                        },
+                        [old_sim_params[9] as _, old_sim_params[10] as _],
                         state.scale_factor,
                         &state.device,
                         &state.config,
@@ -661,20 +618,20 @@ fn main() {
                             );
 
                             poly_res.resize(
-                                size.into(),
+                                [size[0] as _, size[1] as _],
                                 state.scale_factor * lens_ui.scale_fact,
                                 &state.device,
                                 &state.config,
                             );
 
                             poly_tri.resize(
-                                size.into(),
+                                [size[0] as _, size[1] as _],
                                 state.scale_factor * lens_ui.scale_fact,
                                 &state.device,
                                 &state.config,
                             );
 
-                            lens_ui.resize_window(size.into(), state.scale_factor);
+                            lens_ui.resize_window([size[0] as _, size[1] as _], state.scale_factor);
                         }
 
                         if lens_ui.triangulate {
