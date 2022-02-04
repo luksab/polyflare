@@ -39,7 +39,7 @@ impl PolyTri {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyOptics"),
             source: wgpu::ShaderSource::Wgsl(
-                read_to_string("gpu/src/scenes/poly_tri/draw.wgsl")
+                read_to_string("gpu/src/lib/scenes/poly_tri/draw.wgsl")
                     .unwrap_or_else(|_| include_str!("draw.wgsl").to_string())
                     .into(),
             ),
@@ -187,7 +187,7 @@ impl PolyTri {
             let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("conversion"),
                 source: wgpu::ShaderSource::Wgsl(
-                    read_to_string("gpu/src/scenes/poly_tri/convert.wgsl")
+                    read_to_string("gpu/src/lib/scenes/poly_tri/convert.wgsl")
                         .unwrap_or_else(|_| include_str!("convert.wgsl").to_string())
                         .into(),
                 ),
@@ -257,7 +257,7 @@ impl PolyTri {
         let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
-                read_to_string("gpu/src/scenes/poly_tri/compute.wgsl")
+                read_to_string("gpu/src/lib/scenes/poly_tri/compute.wgsl")
                     .unwrap_or_else(|_| include_str!("compute.wgsl").to_string())
                     .into(),
             ),
@@ -341,7 +341,7 @@ impl PolyTri {
         let triangulate_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
-                read_to_string("gpu/src/scenes/poly_tri/triangulate.wgsl")
+                read_to_string("gpu/src/lib/scenes/poly_tri/triangulate.wgsl")
                     .unwrap_or_else(|_| include_str!("triangulate.wgsl").to_string())
                     .into(),
             ),
@@ -466,10 +466,10 @@ impl PolyTri {
             lens_state.ghost_indices.len() as u32,
         );
 
-        let convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").ok();
-        let draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").ok();
-        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").ok();
-        let triangulate_meta = std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").ok();
+        let convert_meta = std::fs::metadata("gpu/src/lib/scenes/poly_tri/convert.wgsl").ok();
+        let draw_meta = std::fs::metadata("gpu/src/lib/scenes/poly_tri/draw.wgsl").ok();
+        let compute_meta = std::fs::metadata("gpu/src/lib/scenes/poly_tri/compute.wgsl").ok();
+        let triangulate_meta = std::fs::metadata("gpu/src/lib/scenes/poly_tri/triangulate.wgsl").ok();
 
         Self {
             tri_render_pipeline,
@@ -758,14 +758,14 @@ impl PolyTri {
         //self.update_rays(device);
         if let Some(convert_meta) = &self.convert_meta {
             if convert_meta.modified().unwrap()
-                != std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl")
+                != std::fs::metadata("gpu/src/lib/scenes/poly_tri/convert.wgsl")
                     .unwrap()
                     .modified()
                     .unwrap()
             {
                 print!("reloading convert shader ");
                 let now = Instant::now();
-                self.convert_meta = std::fs::metadata("gpu/src/scenes/poly_tri/convert.wgsl").ok();
+                self.convert_meta = std::fs::metadata("gpu/src/lib/scenes/poly_tri/convert.wgsl").ok();
                 let (pipeline, bind_group) = Self::convert_shader(
                     device,
                     &lens_state.params_bind_group_layout,
@@ -779,12 +779,12 @@ impl PolyTri {
         }
         if let Some(draw_meta) = &self.draw_meta {
             if draw_meta.modified().unwrap()
-                != std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl")
+                != std::fs::metadata("gpu/src/lib/scenes/poly_tri/draw.wgsl")
                     .unwrap()
                     .modified()
                     .unwrap()
             {
-                self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_tri/draw.wgsl").ok();
+                self.draw_meta = std::fs::metadata("gpu/src/lib/scenes/poly_tri/draw.wgsl").ok();
                 print!("reloading draw shader ");
                 let now = Instant::now();
                 let pipeline = Self::shader_draw(
@@ -799,12 +799,12 @@ impl PolyTri {
         }
         if let Some(compute_meta) = &self.compute_meta {
             if compute_meta.modified().unwrap()
-                != std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl")
+                != std::fs::metadata("gpu/src/lib/scenes/poly_tri/compute.wgsl")
                     .unwrap()
                     .modified()
                     .unwrap()
             {
-                self.compute_meta = std::fs::metadata("gpu/src/scenes/poly_tri/compute.wgsl").ok();
+                self.compute_meta = std::fs::metadata("gpu/src/lib/scenes/poly_tri/compute.wgsl").ok();
                 print!("reloading compute shader ");
                 let now = Instant::now();
                 let (pipeline, bind_group, compute_bind_group_layout, vertex_buffer) =
@@ -832,13 +832,13 @@ impl PolyTri {
         }
         if let Some(triangulate_meta) = &self.triangulate_meta {
             if triangulate_meta.modified().unwrap()
-                != std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl")
+                != std::fs::metadata("gpu/src/lib/scenes/poly_tri/triangulate.wgsl")
                     .unwrap()
                     .modified()
                     .unwrap()
             {
                 self.triangulate_meta =
-                    std::fs::metadata("gpu/src/scenes/poly_tri/triangulate.wgsl").ok();
+                    std::fs::metadata("gpu/src/lib/scenes/poly_tri/triangulate.wgsl").ok();
                 print!("reloading triangulate shader ");
                 let now = Instant::now();
                 let (triangulate_pipeline, tri_index_buffer) = Self::triangulate_shader(

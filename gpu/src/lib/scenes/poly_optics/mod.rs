@@ -50,7 +50,7 @@ impl PolyOptics {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyOptics"),
             source: wgpu::ShaderSource::Wgsl(
-                read_to_string("gpu/src/scenes/poly_optics/draw.wgsl")
+                read_to_string("gpu/src/lib/scenes/poly_optics/draw.wgsl")
                     .unwrap_or_else(|_| include_str!("draw.wgsl").to_string())
                     .into(),
             ),
@@ -200,7 +200,7 @@ impl PolyOptics {
             let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("conversion"),
                 source: wgpu::ShaderSource::Wgsl(
-                    read_to_string("gpu/src/scenes/poly_optics/convert.wgsl")
+                    read_to_string("gpu/src/lib/scenes/poly_optics/convert.wgsl")
                         .unwrap_or_else(|_| include_str!("convert.wgsl").to_string())
                         .into(),
                 ),
@@ -271,7 +271,7 @@ impl PolyOptics {
         let compute_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
-                read_to_string("gpu/src/scenes/poly_optics/compute.wgsl")
+                read_to_string("gpu/src/lib/scenes/poly_optics/compute.wgsl")
                     .unwrap_or_else(|_| include_str!("compute.wgsl").to_string())
                     .into(),
             ),
@@ -372,9 +372,9 @@ impl PolyOptics {
             num_rays,
         );
 
-        let convert_meta = std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").ok();
-        let draw_meta = std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl").ok();
-        let compute_meta = std::fs::metadata("gpu/src/scenes/poly_optics/compute.wgsl").ok();
+        let convert_meta = std::fs::metadata("gpu/src/lib/scenes/poly_optics/convert.wgsl").ok();
+        let draw_meta = std::fs::metadata("gpu/src/lib/scenes/poly_optics/draw.wgsl").ok();
+        let compute_meta = std::fs::metadata("gpu/src/lib/scenes/poly_optics/compute.wgsl").ok();
 
         Self {
             render_pipeline: boid_render_pipeline,
@@ -593,7 +593,7 @@ impl PolyOptics {
 
         if let Some(convert_meta) = &self.convert_meta {
             if convert_meta.modified().unwrap()
-                != std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl")
+                != std::fs::metadata("gpu/src/lib/scenes/poly_optics/convert.wgsl")
                     .unwrap()
                     .modified()
                     .unwrap()
@@ -601,7 +601,7 @@ impl PolyOptics {
                 print!("reloading convert shader ");
                 let now = Instant::now();
                 self.convert_meta =
-                    std::fs::metadata("gpu/src/scenes/poly_optics/convert.wgsl").ok();
+                    std::fs::metadata("gpu/src/lib/scenes/poly_optics/convert.wgsl").ok();
                 let (pipeline, bind_group) = Self::convert_shader(
                     device,
                     &lens_state.lens_bind_group_layout,
@@ -617,12 +617,12 @@ impl PolyOptics {
 
         if let Some(draw_meta) = &self.draw_meta {
             if draw_meta.modified().unwrap()
-                != std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl")
+                != std::fs::metadata("gpu/src/lib/scenes/poly_optics/draw.wgsl")
                     .unwrap()
                     .modified()
                     .unwrap()
             {
-                self.draw_meta = std::fs::metadata("gpu/src/scenes/poly_optics/draw.wgsl").ok();
+                self.draw_meta = std::fs::metadata("gpu/src/lib/scenes/poly_optics/draw.wgsl").ok();
                 print!("reloading draw shader ");
                 let now = Instant::now();
                 let pipeline =
@@ -634,13 +634,13 @@ impl PolyOptics {
 
         if let Some(compute_meta) = &self.compute_meta {
             if compute_meta.modified().unwrap()
-                != std::fs::metadata("gpu/src/scenes/poly_optics/compute.wgsl")
+                != std::fs::metadata("gpu/src/lib/scenes/poly_optics/compute.wgsl")
                     .unwrap()
                     .modified()
                     .unwrap()
             {
                 self.compute_meta =
-                    std::fs::metadata("gpu/src/scenes/poly_optics/compute.wgsl").ok();
+                    std::fs::metadata("gpu/src/lib/scenes/poly_optics/compute.wgsl").ok();
                 print!("reloading compute shader ");
                 let now = Instant::now();
                 let (compute_pipeline, compute_bind_group, rays_buffer) = Self::raytrace_shader(
