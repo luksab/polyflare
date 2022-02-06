@@ -19,7 +19,6 @@ pub struct Gpu {
     pub lens_ui: LensState,
     pub poly_res: PolyRes,
     pub poly_tri: PolyTri,
-    pub raw: Arc<RwLock<Vec<Vec<(f32, f32, f32, f32)>>>>,
 }
 
 impl Gpu {
@@ -35,7 +34,6 @@ impl Gpu {
             lens_ui,
             poly_res,
             poly_tri,
-            raw: Arc::new(RwLock::new(vec![])),
         }
     }
 }
@@ -246,7 +244,7 @@ impl Gpu {
         }
     }
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self) -> Vec<Vec<(f32, f32, f32, f32)>> {
         let now = Instant::now();
         let size = [self.state.config.width, self.state.config.height]; //[2048, 2048];
         println!("size: {:?}", size);
@@ -338,9 +336,7 @@ impl Gpu {
         //     "test.png",
         // );
 
-        let mut raw = self.raw.write().unwrap();
-
-        *raw = Self::tex_to_raw(&tex, size, &self.state.device, &self.state.queue);
+        let ret = Self::tex_to_raw(&tex, size, &self.state.device, &self.state.queue);
 
         // for r in raw.iter() {
         //     if (r.0 != 0 || r.1 != 0 || r.2 != 0) {
@@ -349,5 +345,7 @@ impl Gpu {
         // }
 
         println!("Rendering and saving image took {:?}", now.elapsed());
+
+        return ret;
     }
 }

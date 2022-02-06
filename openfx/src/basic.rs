@@ -12,7 +12,7 @@ plugin_module!(
 
 struct SimplePlugin {
     host_supports_multiple_clip_depths: Bool,
-    gpu: Arc<RwLock<Gpu>>,
+    gpu: Arc<Mutex<Gpu>>,
 }
 
 impl SimplePlugin {
@@ -20,7 +20,7 @@ impl SimplePlugin {
         let mut gpu = Gpu::new();
         // gpu.update(true);
         SimplePlugin {
-            gpu: Arc::new(RwLock::new(gpu)),
+            gpu: Arc::new(Mutex::new(gpu)),
             host_supports_multiple_clip_depths: false,
         }
     }
@@ -42,7 +42,7 @@ struct MyInstanceData {
     pos_y_param: ParamHandle<Double>,
     pos_z_param: ParamHandle<Double>,
 
-    gpu: Arc<RwLock<Gpu>>,
+    // gpu: Arc<Mutex<Gpu>>,
 }
 
 struct TileProcessor<'a> {
@@ -190,15 +190,13 @@ impl Execute for SimplePlugin {
                             .get_descriptor::<RGBAColourF>()?
                             .data()
                             .dimensions();
-                        let mut gpu = self.gpu.write().unwrap();
+                        let mut gpu = self.gpu.lock().unwrap();
                         gpu.resize([size.0, size.1]);
                         gpu.update(instance_data.get_data(time));
-                        gpu.render();
+                        let raw = Arc::new(RwLock::new(gpu.render()));
 
                         // TODO: make sure no other thread gets a write lock
                         // before this read lock is aquired
-                        drop(gpu);
-                        let read = self.gpu.read().unwrap();
 
                         let mut queue = TileDispatch::new(
                             output_image
@@ -212,7 +210,7 @@ impl Execute for SimplePlugin {
                                     TileProcessor::new(
                                         effect.clone(),
                                         src,
-                                        read.raw.clone(),
+                                        raw.clone(),
                                         tile,
                                         render_window,
                                     )
@@ -253,7 +251,7 @@ impl Execute for SimplePlugin {
                 let instance_data: &mut MyInstanceData = effect.get_instance_data()?;
                 let time = in_args.get_time()?;
                 println!("Instance changed: {}", obj_changed);
-                let mut gpu = self.gpu.write().unwrap();
+                let mut gpu = self.gpu.lock().unwrap();
                 gpu.update(instance_data.get_data(time));
 
                 OK
@@ -337,6 +335,7 @@ impl Execute for SimplePlugin {
 
             CreateInstance(ref mut effect) => {
                 println!("CreateInstance");
+                let gpu = self.gpu.lock().unwrap();
                 let mut effect_props: EffectInstance = effect.properties()?;
                 let mut param_set = effect.parameter_set()?;
 
@@ -373,10 +372,10 @@ impl Execute for SimplePlugin {
                     pos_x_param,
                     pos_y_param,
                     pos_z_param,
-                    gpu: self.gpu.clone(),
+                    // gpu: self.gpu.clone(),
                 };
-                let mut gpu = self.gpu.write().unwrap();
-                gpu.update(data.get_data(1.0));
+                // let mut gpu = self.gpu.lock().unwrap();
+                // gpu.update(data.get_data(1.0));
                 effect.set_instance_data(data)?;
 
                 // Self::set_per_component_scale_enabledness(effect)?;
