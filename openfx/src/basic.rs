@@ -12,7 +12,7 @@ plugin_module!(
 
 struct SimplePlugin {
     host_supports_multiple_clip_depths: Bool,
-    gpu: Gpu,
+    gpu: Arc<RwLock<Gpu>>,
 }
 
 impl SimplePlugin {
@@ -20,7 +20,7 @@ impl SimplePlugin {
         let mut gpu = Gpu::new();
         // gpu.update(true);
         SimplePlugin {
-            gpu,
+            gpu: Arc::new(RwLock::new(gpu)),
             host_supports_multiple_clip_depths: false,
         }
     }
@@ -30,7 +30,7 @@ struct MyInstanceData {
     is_general_effect: bool,
 
     source_clip: ClipInstance,
-    mask_clip: Option<ClipInstance>,
+    // mask_clip: Option<ClipInstance>,
     output_clip: ClipInstance,
 
     dots_exponent: ParamHandle<Double>,
@@ -41,12 +41,14 @@ struct MyInstanceData {
     pos_x_param: ParamHandle<Double>,
     pos_y_param: ParamHandle<Double>,
     pos_z_param: ParamHandle<Double>,
+
+    gpu: Arc<RwLock<Gpu>>,
 }
 
 struct TileProcessor<'a> {
     instance: ImageEffectHandle,
     src: ImageDescriptor<'a, RGBAColourF>,
-    raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
+    raw: Arc<RwLock<Vec<Vec<(f32, f32, f32, f32)>>>>,
     dst: ImageTileMut<'a, RGBAColourF>,
     render_window: RectI,
 }
@@ -63,7 +65,7 @@ impl<'a> TileProcessor<'a> {
     fn new(
         instance: ImageEffectHandle,
         src: ImageDescriptor<'a, RGBAColourF>,
-        raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
+        raw: Arc<RwLock<Vec<Vec<(f32, f32, f32, f32)>>>>,
         dst: ImageTileMut<'a, RGBAColourF>,
         render_window: RectI,
     ) -> Self {
@@ -125,13 +127,13 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
                 break;
             }
 
-            for (x, dst) in dst_row.iter_mut().enumerate() {
+            for (x, (dst, src)) in dst_row.iter_mut().zip(src_row.iter()).enumerate() {
                 if y as usize >= raw.len() || x >= raw[0].len() {
                     continue; // should be out of index!
                 }
-                *dst.channel_mut(0) = raw[y as usize][x].0 as f32 / 256.;
-                *dst.channel_mut(1) = raw[y as usize][x].1 as f32 / 256.;
-                *dst.channel_mut(2) = raw[y as usize][x].2 as f32 / 256.;
+                *dst.channel_mut(0) = raw[y as usize][x].0 + src.r();
+                *dst.channel_mut(1) = raw[y as usize][x].1 + src.g();
+                *dst.channel_mut(2) = raw[y as usize][x].2 + src.b();
 
                 *dst.channel_mut(3) = 1.; // set alpha to 1.0
             }
@@ -164,16 +166,16 @@ impl Execute for SimplePlugin {
 
                 let source_image = instance_data.source_clip.get_image(time)?;
                 let output_image = instance_data.output_clip.get_image_mut(time)?;
-                let mask_image = match instance_data.mask_clip {
-                    None => None,
-                    Some(ref mask_clip) => {
-                        if instance_data.is_general_effect && mask_clip.get_connected()? {
-                            Some(mask_clip.get_image(time)?)
-                        } else {
-                            None
-                        }
-                    }
-                };
+                // let mask_image = match instance_data.mask_clip {
+                //     None => None,
+                //     Some(ref mask_clip) => {
+                //         if instance_data.is_general_effect && mask_clip.get_connected()? {
+                //             Some(mask_clip.get_image(time)?)
+                //         } else {
+                //             None
+                //         }
+                //     }
+                // };
 
                 let mut output_image = output_image.borrow_mut();
                 let num_threads = plugin_context.num_threads()?;
@@ -188,9 +190,15 @@ impl Execute for SimplePlugin {
                             .get_descriptor::<RGBAColourF>()?
                             .data()
                             .dimensions();
-                        self.gpu.resize([size.0, size.1]);
-                        self.gpu.update(instance_data.get_data(time));
-                        self.gpu.render();
+                        let mut gpu = self.gpu.write().unwrap();
+                        gpu.resize([size.0, size.1]);
+                        gpu.update(instance_data.get_data(time));
+                        gpu.render();
+
+                        // TODO: make sure no other thread gets a write lock
+                        // before this read lock is aquired
+                        drop(gpu);
+                        let read = self.gpu.read().unwrap();
 
                         let mut queue = TileDispatch::new(
                             output_image
@@ -198,13 +206,13 @@ impl Execute for SimplePlugin {
                                 .into_iter()
                                 .map(|tile| {
                                     let src = source_image.get_descriptor::<RGBAColourF>().unwrap();
-                                    let mask = mask_image
-                                        .as_ref()
-                                        .and_then(|mask| mask.get_descriptor::<f32>().ok());
+                                    // let mask = mask_image
+                                    //     .as_ref()
+                                    //     .and_then(|mask| mask.get_descriptor::<f32>().ok());
                                     TileProcessor::new(
                                         effect.clone(),
                                         src,
-                                        self.gpu.raw.clone(),
+                                        read.raw.clone(),
                                         tile,
                                         render_window,
                                     )
@@ -240,27 +248,15 @@ impl Execute for SimplePlugin {
             }
 
             InstanceChanged(ref mut effect, ref in_args) => {
-                if in_args.get_change_reason()? == Change::UserEdited {
-                    let obj_changed = in_args.get_name()?;
-                    let instance_data: &mut MyInstanceData = effect.get_instance_data()?;
-                    let time = in_args.get_time()?;
-                    // self.gpu.update(instance_data.get_data(time));
+                // if in_args.get_change_reason()? == Change::UserEdited {
+                let obj_changed = in_args.get_name()?;
+                let instance_data: &mut MyInstanceData = effect.get_instance_data()?;
+                let time = in_args.get_time()?;
+                println!("Instance changed: {}", obj_changed);
+                let mut gpu = self.gpu.write().unwrap();
+                gpu.update(instance_data.get_data(time));
 
-                    let expected = match in_args.get_type()? {
-                        Type::Clip => Some(image_effect_simple_source_clip_name()),
-                        // Type::Parameter => Some(PARAM_SCALE_COMPONENTS_NAME.to_owned()),
-                        _ => None,
-                    };
-
-                    if expected == Some(obj_changed) {
-                        // Self::set_per_component_scale_enabledness(effect)?;
-                        OK
-                    } else {
-                        REPLY_DEFAULT
-                    }
-                } else {
-                    REPLY_DEFAULT
-                }
+                OK
             }
 
             GetRegionOfDefinition(ref mut effect, ref in_args, ref mut out_args) => {
@@ -340,6 +336,7 @@ impl Execute for SimplePlugin {
             }
 
             CreateInstance(ref mut effect) => {
+                println!("CreateInstance");
                 let mut effect_props: EffectInstance = effect.properties()?;
                 let mut param_set = effect.parameter_set()?;
 
@@ -348,11 +345,11 @@ impl Execute for SimplePlugin {
 
                 let source_clip = effect.get_simple_input_clip()?;
                 let output_clip = effect.get_output_clip()?;
-                let mask_clip = if is_general_effect {
-                    Some(effect.get_clip(clip_mask!())?)
-                } else {
-                    None
-                };
+                // let mask_clip = if is_general_effect {
+                //     Some(effect.get_clip(clip_mask!())?)
+                // } else {
+                //     None
+                // };
 
                 let dots_exponent = param_set.parameter(PARAM_DOTS_NAME)?;
                 let scale_fact = param_set.parameter(PARAM_SCALE_NAME)?;
@@ -363,10 +360,10 @@ impl Execute for SimplePlugin {
                 let pos_y_param = param_set.parameter(PARAM_Y_NAME)?;
                 let pos_z_param = param_set.parameter(PARAM_Z_NAME)?;
 
-                effect.set_instance_data(MyInstanceData {
+                let data = MyInstanceData {
                     is_general_effect,
                     source_clip,
-                    mask_clip,
+                    // mask_clip,
                     output_clip,
                     dots_exponent,
                     opacity,
@@ -376,14 +373,21 @@ impl Execute for SimplePlugin {
                     pos_x_param,
                     pos_y_param,
                     pos_z_param,
-                })?;
+                    gpu: self.gpu.clone(),
+                };
+                let mut gpu = self.gpu.write().unwrap();
+                gpu.update(data.get_data(1.0));
+                effect.set_instance_data(data)?;
 
                 // Self::set_per_component_scale_enabledness(effect)?;
 
                 OK
             }
 
-            DestroyInstance(ref mut _effect) => OK,
+            DestroyInstance(ref mut _effect) => {
+                println!("DestroyInstance");
+                OK
+            }
 
             DescribeInContext(ref mut effect, ref in_args) => {
                 let mut output_clip = effect.new_output_clip()?;
@@ -394,11 +398,11 @@ impl Execute for SimplePlugin {
                 input_clip
                     .set_supported_components(&[ImageComponent::RGBA, ImageComponent::Alpha])?;
 
-                if in_args.get_context()?.is_general() {
-                    let mut mask = effect.new_clip(clip_mask!())?;
-                    mask.set_supported_components(&[ImageComponent::Alpha])?;
-                    mask.set_optional(true)?;
-                }
+                // if in_args.get_context()?.is_general() {
+                //     let mut mask = effect.new_clip(clip_mask!())?;
+                //     mask.set_supported_components(&[ImageComponent::Alpha])?;
+                //     mask.set_optional(true)?;
+                // }
 
                 fn define_scale_param(
                     param_set: &mut ParamSetHandle,
@@ -536,7 +540,6 @@ impl Execute for SimplePlugin {
                         PARAM_Y_NAME,
                         PARAM_Z_NAME,
                     ])?;
-                println!("test");
                 OK
             }
 
@@ -554,7 +557,7 @@ impl Execute for SimplePlugin {
 
                 effect_properties.set_supported_pixel_depths(&[BitDepth::Float])?;
                 effect_properties.set_supported_contexts(&[
-                    ImageEffectContext::Filter,
+                    // ImageEffectContext::Filter,
                     ImageEffectContext::General,
                 ])?;
 

@@ -16,5 +16,6 @@ log = "0.4"
 log4rs = "0.8"
 ofx = "0.3"
 wgpu = "0.12"
+half = "1.8.2"
 pollster = "0.2"
 gpu = { path = "../gpu" }

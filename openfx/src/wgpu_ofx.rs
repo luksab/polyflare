@@ -12,12 +12,14 @@ use gpu::scenes::PolyRes;
 use gpu::scenes::PolyTri;
 use wgpu::Texture;
 
+use half::f16;
+
 pub struct Gpu {
     pub state: State,
     pub lens_ui: LensState,
     pub poly_res: PolyRes,
     pub poly_tri: PolyTri,
-    pub raw: Arc<RwLock<Vec<Vec<(u8, u8, u8, u8)>>>>,
+    pub raw: Arc<RwLock<Vec<Vec<(f32, f32, f32, f32)>>>>,
 }
 
 impl Gpu {
@@ -95,7 +97,7 @@ impl State {
 
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::COPY_DST,
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba16Float,
             width: size[0],
             height: size[1],
             present_mode: wgpu::PresentMode::Immediate,
@@ -157,9 +159,17 @@ impl Gpu {
             pos_y_param,
             pos_z_param,
         ) = parameters.unwrap();
+        println!(
+            "dots_exponent: {}, num_wavelengths: {}, opacity: {}, scale_fact: {}, triangulate: {}, pos_x_param: {}, pos_y_param: {}, pos_z_param: {}",
+            dots_exponent, num_wavelengths, opacity, scale_fact, triangulate, pos_x_param, pos_y_param, pos_z_param
+        );
+
+        self.poly_res.num_dots = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
+        self.poly_tri.dot_side_len = 10.0_f64.powf(self.lens_ui.dots_exponent).sqrt() as u32;
+        self.lens_ui.sim_params[11] = self.poly_tri.dot_side_len as f32;
 
         self.lens_ui.sim_params[12] = scale_fact as f32;
-        self.lens_ui.opacity = opacity as f32;
+        self.lens_ui.opacity = (opacity * (33. / self.poly_tri.dot_side_len as f64)) as f32;
         self.lens_ui.dots_exponent = dots_exponent;
         self.lens_ui.num_wavelengths = num_wavelengths as u32;
         self.lens_ui.triangulate = triangulate;
@@ -167,9 +177,6 @@ impl Gpu {
         self.lens_ui.pos_params[1] = pos_y_param as f32;
         self.lens_ui.pos_params[2] = pos_z_param as f32;
 
-        self.poly_res.num_dots = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
-        self.poly_tri.dot_side_len = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
-        self.lens_ui.sim_params[11] = self.poly_tri.dot_side_len as f32;
         self.lens_ui.needs_update = true;
         self.lens_ui.update(&self.state.device, &self.state.queue);
 
@@ -185,8 +192,8 @@ impl Gpu {
         size: [u32; 2],
         device: &Device,
         queue: &Queue,
-    ) -> Vec<Vec<(u8, u8, u8, u8)>> {
-        let output_buffer_size = (size[0] * size[1] * 4) as wgpu::BufferAddress;
+    ) -> Vec<Vec<(f32, f32, f32, f32)>> {
+        let output_buffer_size = (size[0] * size[1] * 8) as wgpu::BufferAddress;
         let output_buffer_desc = wgpu::BufferDescriptor {
             size: output_buffer_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
@@ -209,7 +216,7 @@ impl Gpu {
                 buffer: &output_buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: Some(std::num::NonZeroU32::new(size[0] * 4).unwrap()),
+                    bytes_per_row: Some(std::num::NonZeroU32::new(size[0] * 8).unwrap()),
                     rows_per_image: None,
                 },
             },
@@ -223,16 +230,15 @@ impl Gpu {
         device.poll(wgpu::Maintain::Wait);
 
         if let Ok(()) = pollster::block_on(buffer_future) {
-            let mut data = buffer_slice.get_mapped_range().to_vec();
-            // BGR TO RGB
-            // for chunk in data.chunks_mut(4) {
-            //     chunk.swap(0, 2);
-            // }
-            let data: Vec<(u8, u8, u8, u8)> = data
-                .chunks_mut(4)
-                .map(|chunk| (chunk[2], chunk[1], chunk[0], chunk[3]))
+            let data = buffer_slice.get_mapped_range().to_vec();
+            let data: Vec<f32> = data.chunks(2).map(|chunk| {
+                f16::from_le_bytes([chunk[0], chunk[1]]).to_f32()
+            }).collect();
+            let data: Vec<(f32, f32, f32, f32)> = data
+                .chunks(4)
+                .map(|chunk| (chunk[0], chunk[1], chunk[2], chunk[3]))
                 .collect();
-            let data: Vec<Vec<(u8, u8, u8, u8)>> =
+            let data: Vec<Vec<(f32, f32, f32, f32)>> =
                 data.chunks(size[0] as usize).map(|x| x.to_vec()).collect();
             return data;
         } else {
@@ -255,7 +261,7 @@ impl Gpu {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,//wgpu::TextureFormat::Rgba16Float,
+            format: wgpu::TextureFormat::Rgba16Float,//wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
@@ -302,12 +308,13 @@ impl Gpu {
                 &self.state.config,
             );
         } else {
+            self.poly_res.num_dots = 5_000_000; // to scale opactity correctly
             self.poly_res
                 .render_hires(
                     &tex.create_view(&wgpu::TextureViewDescriptor::default()),
                     &self.state.device,
                     &self.state.queue,
-                    10.0_f64.powf(self.lens_ui.hi_dots_exponent) as u64,
+                    10.0_f64.powf(self.lens_ui.dots_exponent + 5.) as u64,
                     &mut self.lens_ui,
                 )
                 .unwrap();
