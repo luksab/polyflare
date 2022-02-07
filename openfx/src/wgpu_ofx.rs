@@ -140,7 +140,7 @@ impl Gpu {
 
     pub fn update(
         &mut self,
-        parameters: Result<(f64, f64, f64, f64, bool, f64, f64, f64), ofx::Error>,
+        parameters: Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64), ofx::Error>,
     ) {
         //TODO: todo!("add update logic");
         // let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) = self
@@ -151,6 +151,7 @@ impl Gpu {
             dots_exponent,
             num_wavelengths,
             opacity,
+            zoom_fact,
             scale_fact,
             triangulate,
             pos_x_param,
@@ -158,15 +159,26 @@ impl Gpu {
             pos_z_param,
         ) = parameters.unwrap();
         println!(
-            "dots_exponent: {}, num_wavelengths: {}, opacity: {}, scale_fact: {}, triangulate: {}, pos_x_param: {}, pos_y_param: {}, pos_z_param: {}",
-            dots_exponent, num_wavelengths, opacity, scale_fact, triangulate, pos_x_param, pos_y_param, pos_z_param
+            "dots_exponent: {}, num_wavelengths: {}, opacity: {}, zoom_fact: {}, scale_fact: {}, triangulate: {}, pos_x_param: {}, pos_y_param: {}, pos_z_param: {}",
+            dots_exponent,
+            num_wavelengths,
+            opacity,
+            zoom_fact,
+            scale_fact,
+            triangulate,
+            pos_x_param,
+            pos_y_param,
+            pos_z_param
         );
 
         self.poly_res.num_dots = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
         self.poly_tri.dot_side_len = 10.0_f64.powf(self.lens_ui.dots_exponent).sqrt() as u32;
         self.lens_ui.sim_params[11] = self.poly_tri.dot_side_len as f32;
 
-        self.lens_ui.sim_params[12] = scale_fact as f32;
+        self.lens_ui.sim_params[12] = zoom_fact as f32;
+        self.lens_ui.scale_fact = scale_fact;
+        println!("scale_fact: {}", self.lens_ui.scale_fact);
+        
         self.lens_ui.opacity = (opacity * (33. / self.poly_tri.dot_side_len as f64)) as f32;
         self.lens_ui.dots_exponent = dots_exponent;
         self.lens_ui.num_wavelengths = num_wavelengths as u32;
@@ -176,7 +188,21 @@ impl Gpu {
         self.lens_ui.pos_params[2] = pos_z_param as f32;
 
         self.lens_ui.needs_update = true;
-        self.lens_ui.update(&self.state.device, &self.state.queue);
+        // self.lens_ui.update(&self.state.device, &self.state.queue);
+
+        // self.poly_res.resize(
+        //     [self.state.config.width as _, self.state.config.height as _],
+        //     self.lens_ui.scale_fact,
+        //     &self.state.device,
+        //     &self.state.config,
+        // );
+
+        // self.poly_tri.resize(
+        //     [self.state.config.width as _, self.state.config.height as _],
+        //     self.lens_ui.scale_fact,
+        //     &self.state.device,
+        //     &self.state.config,
+        // );
 
         // if self.lens_ui.triangulate {
         //     self.poly_tri.update(&self.state.device, &self.lens_ui);
@@ -266,27 +292,27 @@ impl Gpu {
         };
         let tex = self.state.device.create_texture(&desc);
 
-        if self.lens_ui.triangulate {
-            self.poly_tri.resize(
-                [size[0], size[1]],
-                1.0,
-                &self.state.device,
-                &self.state.config,
-            );
-        } else {
-            self.poly_res.resize(
-                [size[0], size[1]],
-                1.0,
-                &self.state.device,
-                &self.state.config,
-            );
-        }
+        // if self.lens_ui.triangulate {
+        //     self.poly_tri.resize(
+        //         [size[0], size[1]],
+        //         1.0,
+        //         &self.state.device,
+        //         &self.state.config,
+        //     );
+        // } else {
+        //     self.poly_res.resize(
+        //         [size[0], size[1]],
+        //         1.0,
+        //         &self.state.device,
+        //         &self.state.config,
+        //     );
+        // }
 
         let sim_params = self.lens_ui.sim_params;
 
         self.lens_ui.resize_window([size[0], size[1]], 1.0);
 
-        self.lens_ui.num_wavelengths *= 10;
+        // self.lens_ui.num_wavelengths *= 10;
         self.lens_ui.update(&self.state.device, &self.state.queue);
 
         if self.lens_ui.triangulate {
@@ -298,13 +324,6 @@ impl Gpu {
                     &mut self.lens_ui,
                 )
                 .unwrap();
-
-            self.poly_tri.resize(
-                [sim_params[9] as _, sim_params[10] as _],
-                2.0,
-                &self.state.device,
-                &self.state.config,
-            );
         } else {
             self.poly_res.num_dots = 5_000_000; // to scale opactity correctly
             self.poly_res
@@ -316,17 +335,10 @@ impl Gpu {
                     &mut self.lens_ui,
                 )
                 .unwrap();
-
-            self.poly_res.resize(
-                [sim_params[9] as _, sim_params[10] as _],
-                1.0,
-                &self.state.device,
-                &self.state.config,
-            );
         }
         self.lens_ui.sim_params = sim_params;
         self.lens_ui.needs_update = true;
-        self.lens_ui.num_wavelengths /= 10;
+        // self.lens_ui.num_wavelengths /= 10;
 
         // save_png::save_png(
         //     &tex,

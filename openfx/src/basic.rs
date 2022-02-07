@@ -1,5 +1,5 @@
 use ofx::*;
-use std::sync::{Arc, Mutex, RwLock};
+use std::{sync::{Arc, Mutex, RwLock}, time::Duration, thread};
 
 use crate::wgpu_ofx::Gpu;
 
@@ -35,13 +35,13 @@ struct MyInstanceData {
 
     dots_exponent: ParamHandle<Double>,
     opacity: ParamHandle<Double>,
+    zoom_fact: ParamHandle<Double>,
     scale_fact: ParamHandle<Double>,
     num_wavelengths: ParamHandle<Double>,
     triangulate: ParamHandle<Bool>,
     pos_x_param: ParamHandle<Double>,
     pos_y_param: ParamHandle<Double>,
     pos_z_param: ParamHandle<Double>,
-
     // gpu: Arc<Mutex<Gpu>>,
 }
 
@@ -118,7 +118,7 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
     fn do_processing(&'a mut self) -> Result<()> {
         let proc_window = self.render_window;
 
-        let raw = self.raw.read().unwrap();
+        let raw = self.raw.write().unwrap();
         for y in self.dst.y1.max(proc_window.y1)..self.dst.y2.min(proc_window.y2) {
             let dst_row = self.dst.row_range(proc_window.x1, proc_window.x2, y);
             let src_row = self.src.row_range(proc_window.x1, proc_window.x2, y);
@@ -146,6 +146,7 @@ impl<'a> ProcessRGBA<'a> for TileProcessor<'a> {
 const PARAM_MAIN_NAME: &str = "Main";
 const PARAM_OPACITY_NAME: &str = "opacity";
 const PARAM_DOTS_NAME: &str = "dots";
+const PARAM_ZOOM_NAME: &str = "zoom";
 const PARAM_SCALE_NAME: &str = "scale";
 const PARAM_WAVELEN_NAME: &str = "wavelenghts";
 const PARAM_TRI_NAME: &str = "triangulate";
@@ -156,9 +157,11 @@ const PARAM_Z_NAME: &str = "z";
 impl Execute for SimplePlugin {
     #[allow(clippy::float_cmp)]
     fn execute(&mut self, plugin_context: &PluginContext, action: &mut Action) -> Result<Int> {
+        let mut gpu = self.gpu.lock().unwrap();
         use Action::*;
         match *action {
             Render(ref mut effect, ref in_args) => {
+                println!("render");
                 let time = in_args.get_time()?;
                 // TODO: what happens if render_window < full size?
                 let render_window = in_args.get_render_window()?;
@@ -186,11 +189,8 @@ impl Execute for SimplePlugin {
                     output_image.get_components()?,
                 ) {
                     (BitDepth::Float, ImageComponent::RGBA) => {
-                        let size = output_image
-                            .get_descriptor::<RGBAColourF>()?
-                            .data()
-                            .dimensions();
-                        let mut gpu = self.gpu.lock().unwrap();
+                        let size = output_image.get_region_of_definition()?;
+                        let size = ((size.x2 - size.x1) as u32, (size.y2 - size.y1) as u32);
                         gpu.resize([size.0, size.1]);
                         gpu.update(instance_data.get_data(time));
                         let raw = Arc::new(RwLock::new(gpu.render()));
@@ -217,7 +217,8 @@ impl Execute for SimplePlugin {
                                 })
                                 .collect(),
                         );
-                        plugin_context.run_in_threads(num_threads, &mut queue)?
+                        plugin_context.run_in_threads(num_threads, &mut queue)?;
+                        drop(gpu);
                     }
                     (_, _) => return FAILED,
                 }
@@ -251,7 +252,7 @@ impl Execute for SimplePlugin {
                 let instance_data: &mut MyInstanceData = effect.get_instance_data()?;
                 let time = in_args.get_time()?;
                 println!("Instance changed: {}", obj_changed);
-                let mut gpu = self.gpu.lock().unwrap();
+                // let mut gpu = self.gpu.lock().unwrap();
                 gpu.update(instance_data.get_data(time));
 
                 OK
@@ -335,7 +336,7 @@ impl Execute for SimplePlugin {
 
             CreateInstance(ref mut effect) => {
                 println!("CreateInstance");
-                let gpu = self.gpu.lock().unwrap();
+                // let gpu = self.gpu.lock().unwrap();
                 let mut effect_props: EffectInstance = effect.properties()?;
                 let mut param_set = effect.parameter_set()?;
 
@@ -351,6 +352,7 @@ impl Execute for SimplePlugin {
                 // };
 
                 let dots_exponent = param_set.parameter(PARAM_DOTS_NAME)?;
+                let zoom_fact = param_set.parameter(PARAM_ZOOM_NAME)?;
                 let scale_fact = param_set.parameter(PARAM_SCALE_NAME)?;
                 let opacity = param_set.parameter(PARAM_OPACITY_NAME)?;
                 let num_wavelengths = param_set.parameter(PARAM_WAVELEN_NAME)?;
@@ -366,6 +368,7 @@ impl Execute for SimplePlugin {
                     output_clip,
                     dots_exponent,
                     opacity,
+                    zoom_fact,
                     scale_fact,
                     num_wavelengths,
                     triangulate,
@@ -375,7 +378,7 @@ impl Execute for SimplePlugin {
                     // gpu: self.gpu.clone(),
                 };
                 // let mut gpu = self.gpu.lock().unwrap();
-                // gpu.update(data.get_data(1.0));
+                gpu.update(data.get_data(1.0));
                 effect.set_instance_data(data)?;
 
                 // Self::set_per_component_scale_enabledness(effect)?;
@@ -467,10 +470,21 @@ impl Execute for SimplePlugin {
 
                 define_scale_param(
                     &mut param_set,
-                    PARAM_SCALE_NAME,
-                    PARAM_SCALE_NAME,
-                    PARAM_SCALE_NAME,
+                    PARAM_ZOOM_NAME,
+                    PARAM_ZOOM_NAME,
+                    PARAM_ZOOM_NAME,
                     "Scales the image",
+                    None,
+                    0.1,
+                    4.0,
+                )?;
+
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_SCALE_NAME,
+                    PARAM_SCALE_NAME,
+                    PARAM_SCALE_NAME,
+                    "Oversampling factor",
                     None,
                     0.1,
                     10.0,
@@ -484,7 +498,7 @@ impl Execute for SimplePlugin {
                     "Number of wavelengths",
                     None,
                     1.,
-                    10.,
+                    50.,
                 )?;
 
                 let mut param_props = param_set.param_define_boolean(PARAM_TRI_NAME)?;
@@ -533,6 +547,7 @@ impl Execute for SimplePlugin {
                     .set_children(&[
                         PARAM_OPACITY_NAME,
                         PARAM_DOTS_NAME,
+                        PARAM_ZOOM_NAME,
                         PARAM_SCALE_NAME,
                         PARAM_WAVELEN_NAME,
                         PARAM_X_NAME,
@@ -595,11 +610,12 @@ impl Execute for SimplePlugin {
 // }
 
 impl MyInstanceData {
-    fn get_data(&self, time: Time) -> Result<(f64, f64, f64, f64, bool, f64, f64, f64)> {
+    fn get_data(&self, time: Time) -> Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64)> {
         Ok((
             self.dots_exponent.get_value_at_time(time)?,
             self.num_wavelengths.get_value_at_time(time)?,
             self.opacity.get_value_at_time(time)?,
+            self.zoom_fact.get_value_at_time(time)?,
             self.scale_fact.get_value_at_time(time)?,
             self.triangulate.get_value_at_time(time)?,
             self.pos_x_param.get_value_at_time(time)?,
