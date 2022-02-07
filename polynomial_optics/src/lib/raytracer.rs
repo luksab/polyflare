@@ -1281,11 +1281,7 @@ impl Lens {
         //     which_ghost,
         // );
 
-        let center_dir = Vector3 {
-            x: 0.,
-            y: 0.,
-            z: self.elements[0].position,
-        } - pos;
+        let center_dir = self.get_center_dir(pos);
         println!("center dir: {:?}", center_dir);
 
         let mut rays = vec![];
@@ -1382,5 +1378,13 @@ impl Lens {
                 entry_pos: ray.entry_pos,
             })
             .collect()
+    }
+
+    pub fn get_center_dir(&self, pos: Vector3<f64>) -> Vector3<f64> {
+        Vector3 {
+            x: 0.,
+            y: 0.,
+            z: self.elements[0].position,
+        } - pos
     }
 }

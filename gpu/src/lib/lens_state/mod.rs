@@ -89,7 +89,7 @@ pub struct LensState {
     /// index into all_lenses
     selected_lens: usize,
     /// filename of the currently selected lens
-    current_filename: String,
+    pub current_filename: String,
 
     /// all types of glass
     all_glasses: Vec<(String, Sellmeier)>,
@@ -122,6 +122,7 @@ pub struct LensState {
     /// 7: strength: f32;
     /// 8: sensor: f32;
     /// 9: width: f32;
+    ///10: entry_radius: f32;
     /// padding
     /// };
     /// ```
@@ -1041,6 +1042,11 @@ impl LensState {
                     .speed(0.01)
                     .build(ui, &mut self.pos_params[9]);
 
+                update_lens |= Drag::new("entry radius")
+                    .range(0., 5.)
+                    .speed(0.01)
+                    .build(ui, &mut self.pos_params[10]);
+
                 render = ui.button("hi-res render");
                 ui.same_line();
                 compute = ui.button("compute");
@@ -1066,6 +1072,18 @@ impl LensState {
             update_res,
             compute,
         )
+    }
+
+    pub fn dir_to_lens(&mut self) {
+        let dir = self.actual_lens.get_center_dir(Vector3::new(
+            self.pos_params[0] as f64,
+            self.pos_params[1] as f64,
+            self.pos_params[2] as f64,
+        ));
+        println!("dir: {:?}", dir);
+        self.pos_params[4] = dir.x as f32;
+        self.pos_params[5] = dir.y as f32;
+        self.pos_params[6] = dir.z as f32;
     }
 
     pub fn init(&mut self, device: &Device, queue: &Queue) {
@@ -1113,8 +1131,8 @@ impl LensState {
             .len()) as u32;
 
         // if ui.checkbox("triangulated", &mut self.triangulate) {
-            update_lens = true;
-            update_dots = true;
+        update_lens = true;
+        update_dots = true;
         // }
 
         // ui.radio_button("num_rays", &mut lens_ui.1, true);
@@ -1143,5 +1161,14 @@ impl LensState {
         self.last_frame_time = Instant::now();
 
         self.first_frame = false;
+    }
+
+    pub fn set_lens(&mut self, lens: usize) {
+        self.selected_lens = lens;
+        let mut lenses = Self::get_lenses();
+
+        self.lens = lenses[self.selected_lens].1.clone();
+        self.actual_lens = self.get_lens();
+        self.current_filename = lenses[self.selected_lens].0.clone();
     }
 }

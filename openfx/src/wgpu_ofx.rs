@@ -140,7 +140,7 @@ impl Gpu {
 
     pub fn update(
         &mut self,
-        parameters: Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64), ofx::Error>,
+        parameters: Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64, usize, f64, f64), ofx::Error>,
     ) {
         //TODO: todo!("add update logic");
         // let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) = self
@@ -157,19 +157,24 @@ impl Gpu {
             pos_x_param,
             pos_y_param,
             pos_z_param,
+            lens_index,
+            entry_radius,
+            width,
         ) = parameters.unwrap();
-        println!(
-            "dots_exponent: {}, num_wavelengths: {}, opacity: {}, zoom_fact: {}, scale_fact: {}, triangulate: {}, pos_x_param: {}, pos_y_param: {}, pos_z_param: {}",
-            dots_exponent,
-            num_wavelengths,
-            opacity,
-            zoom_fact,
-            scale_fact,
-            triangulate,
-            pos_x_param,
-            pos_y_param,
-            pos_z_param
-        );
+        // println!(
+        //     "dots_exponent: {}, num_wavelengths: {}, opacity: {}, zoom_fact: {}, scale_fact: {}, triangulate: {}, pos_x_param: {}, pos_y_param: {}, pos_z_param: {}",
+        //     dots_exponent,
+        //     num_wavelengths,
+        //     opacity,
+        //     zoom_fact,
+        //     scale_fact,
+        //     triangulate,
+        //     pos_x_param,
+        //     pos_y_param,
+        //     pos_z_param
+        // );
+
+        self.lens_ui.set_lens(lens_index);
 
         self.poly_res.num_dots = 10.0_f64.powf(self.lens_ui.dots_exponent) as u32;
         self.poly_tri.dot_side_len = 10.0_f64.powf(self.lens_ui.dots_exponent).sqrt() as u32;
@@ -187,6 +192,10 @@ impl Gpu {
         self.lens_ui.pos_params[1] = pos_y_param as f32;
         self.lens_ui.pos_params[2] = pos_z_param as f32;
 
+        self.lens_ui.pos_params[9] = width as f32;
+        self.lens_ui.pos_params[10] = entry_radius as f32;
+
+        self.lens_ui.dir_to_lens();
         self.lens_ui.needs_update = true;
         // self.lens_ui.update(&self.state.device, &self.state.queue);
 

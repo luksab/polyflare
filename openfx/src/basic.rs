@@ -42,6 +42,9 @@ struct MyInstanceData {
     pos_x_param: ParamHandle<Double>,
     pos_y_param: ParamHandle<Double>,
     pos_z_param: ParamHandle<Double>,
+    lens_param: ParamHandle<Double>,
+    entry_param: ParamHandle<Double>,
+    width_param: ParamHandle<Double>,
     // gpu: Arc<Mutex<Gpu>>,
 }
 
@@ -153,6 +156,9 @@ const PARAM_TRI_NAME: &str = "triangulate";
 const PARAM_X_NAME: &str = "x";
 const PARAM_Y_NAME: &str = "y";
 const PARAM_Z_NAME: &str = "z";
+const PARAM_LENS_NAME: &str = "lens";
+const PARAM_ENTRY_NAME: &str = "entry";
+const PARAM_WIDTH_NAME: &str = "width";
 
 impl Execute for SimplePlugin {
     #[allow(clippy::float_cmp)]
@@ -360,6 +366,9 @@ impl Execute for SimplePlugin {
                 let pos_x_param = param_set.parameter(PARAM_X_NAME)?;
                 let pos_y_param = param_set.parameter(PARAM_Y_NAME)?;
                 let pos_z_param = param_set.parameter(PARAM_Z_NAME)?;
+                let lens_param = param_set.parameter(PARAM_LENS_NAME)?;
+                let entry_param = param_set.parameter(PARAM_ENTRY_NAME)?;
+                let width_param = param_set.parameter(PARAM_WIDTH_NAME)?;
 
                 let data = MyInstanceData {
                     is_general_effect,
@@ -375,6 +384,9 @@ impl Execute for SimplePlugin {
                     pos_x_param,
                     pos_y_param,
                     pos_z_param,
+                    lens_param,
+                    entry_param,
+                    width_param,
                     // gpu: self.gpu.clone(),
                 };
                 // let mut gpu = self.gpu.lock().unwrap();
@@ -542,6 +554,40 @@ impl Execute for SimplePlugin {
                     0.,
                 )?;
 
+                println!("Current Lens: {}", gpu.lens_ui.current_filename.as_str());
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_LENS_NAME,
+                    PARAM_LENS_NAME,
+                    PARAM_LENS_NAME,
+                    "Which Lens to render",
+                    None,
+                    0.,
+                    gpu::lens_state::LensState::get_lenses().len() as f64 - 1.,
+                )?;
+
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_ENTRY_NAME,
+                    PARAM_ENTRY_NAME,
+                    PARAM_ENTRY_NAME,
+                    "Radius of the entry aperture",
+                    None,
+                    0.,
+                    5.,
+                )?;
+
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_WIDTH_NAME,
+                    PARAM_WIDTH_NAME,
+                    PARAM_WIDTH_NAME,
+                    "Width of sampled direction",
+                    None,
+                    0.,
+                    5.,
+                )?;
+
                 param_set
                     .param_define_page(PARAM_MAIN_NAME)?
                     .set_children(&[
@@ -553,6 +599,9 @@ impl Execute for SimplePlugin {
                         PARAM_X_NAME,
                         PARAM_Y_NAME,
                         PARAM_Z_NAME,
+                        PARAM_LENS_NAME,
+                        PARAM_ENTRY_NAME,
+                        PARAM_WIDTH_NAME,
                     ])?;
                 OK
             }
@@ -610,7 +659,7 @@ impl Execute for SimplePlugin {
 // }
 
 impl MyInstanceData {
-    fn get_data(&self, time: Time) -> Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64)> {
+    fn get_data(&self, time: Time) -> Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64, usize, f64, f64)> {
         Ok((
             self.dots_exponent.get_value_at_time(time)?,
             self.num_wavelengths.get_value_at_time(time)?,
@@ -621,6 +670,9 @@ impl MyInstanceData {
             self.pos_x_param.get_value_at_time(time)?,
             self.pos_y_param.get_value_at_time(time)?,
             self.pos_z_param.get_value_at_time(time)?,
+            self.lens_param.get_value_at_time(time)? as usize,
+            self.entry_param.get_value_at_time(time)?,
+            self.width_param.get_value_at_time(time)?,
         ))
     }
 }

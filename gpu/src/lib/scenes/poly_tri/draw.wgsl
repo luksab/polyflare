@@ -53,6 +53,19 @@ struct SimParams {
   zoom: f32;
 };
 
+struct Ray {
+  o: vec3<f32>;
+  wavelength: f32;
+  d: vec3<f32>;
+  strength: f32;
+};
+struct PosParams {
+  init: Ray;
+  sensor: f32;
+  width: f32;
+  entry_rad: f32;
+};
+
 struct SensorDatapoint {
     rgb: vec3<f32>;
     wavelength: f32;
@@ -71,6 +84,7 @@ struct Elements {
 
 [[group(1), binding(2)]] var<uniform> params : SimParams;
 [[group(1), binding(1)]] var<storage, read> sensor : Sensor;
+[[group(1), binding(0)]] var<uniform> posParams : PosParams;
 
 fn lookup_rgb(wavelength: f32) -> vec3<f32> {
     let lower_index = u32(clamp((wavelength - sensor.measuremens[0].wavelength / 1000.) * 100., 0., 34.));
@@ -131,7 +145,7 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 
   let strength = in.strength;
 
-  if (isNan(strength) || length(in.entry_pos) > 1.) {
+  if (isNan(strength) || length(in.entry_pos) > posParams.entry_rad) {
     return vec4<f32>(0., 0., 0., 0.);
   }
 
