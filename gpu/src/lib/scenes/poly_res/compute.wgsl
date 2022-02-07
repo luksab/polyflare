@@ -114,14 +114,15 @@ fn fresnel_r(t1: f32, t2: f32, n1: f32, n2: f32) -> f32 {
 }
 
 fn fresnel_ar(theta0: f32, lambda: f32, thickness: f32, n0: f32, n1: f32, n2: f32) -> f32 {
+    let theta0_fixed = max(theta0, 0.001);
     // refracton angle sin coating and the 2nd medium
-    let theta1 = asin(sin(theta0) * n0 / n1);
-    let theta2 = asin(sin(theta0) * n0 / n2);
+    let theta1 = asin(sin(theta0_fixed) * n0 / n1);
+    let theta2 = asin(sin(theta0_fixed) * n0 / n2);
     // amplitude for outer refl. / transmission on topmost interface
-    let rs01 = -sin(theta0 - theta1) / sin(theta0 + theta1);
-    let rp01 = tan(theta0 - theta1) / tan(theta0 + theta1);
-    let ts01 = 2. * sin(theta1) * cos(theta0) / sin(theta0 + theta1);
-    let tp01 = ts01 * cos(theta0 - theta1);
+    let rs01 = -sin(theta0_fixed - theta1) / sin(theta0_fixed + theta1);
+    let rp01 = tan(theta0_fixed - theta1) / tan(theta0_fixed + theta1);
+    let ts01 = 2. * sin(theta1) * cos(theta0_fixed) / sin(theta0_fixed + theta1);
+    let tp01 = ts01 * cos(theta0_fixed - theta1);
     // amplitude for inner reflection
     let rs12 = -sin(theta1 - theta2) / sin(theta1 + theta2);
     let rp12 = tan(theta1 - theta2) / tan(theta1 + theta2);
@@ -133,7 +134,7 @@ fn fresnel_ar(theta0: f32, lambda: f32, thickness: f32, n0: f32, n1: f32, n2: f3
     let dy = thickness * n1;
     let dx = tan(theta1) * dy;
     let delay = sqrt(dx * dx + dy * dy);
-    let rel_phase = 4. * 3.141592653589793 / lambda * (delay - dx * sin(theta0));
+    let rel_phase = 4. * 3.141592653589793 / lambda * (delay - dx * sin(theta0_fixed));
     // Add up sines of different phase and amplitude
     let out_s2 = rs01 * rs01 + ris * ris + 2. * rs01 * ris * cos(rel_phase);
     let out_p2 = rp01 * rp01 + rip * rip + 2. * rp01 * rip * cos(rel_phase);
