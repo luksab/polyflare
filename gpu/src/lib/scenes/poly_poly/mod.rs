@@ -8,8 +8,9 @@ use wgpu::{
 
 use crate::{lens_state::LensState, texture::Texture};
 
+#[allow(dead_code)]
 struct GpuPolynomials {
-    pub polynomials: Vec<Polynomial<f64, 4>>,
+    polynomials: Vec<Polynomial<f64, 4>>,
     pub polynomial_bind_group: BindGroup,
     pub polynomial_bind_group_layout: BindGroupLayout,
 }
