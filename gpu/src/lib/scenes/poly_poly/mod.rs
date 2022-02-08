@@ -400,6 +400,7 @@ impl PolyPoly {
         device: &wgpu::Device,
         lens_bind_group_layout: &BindGroupLayout,
         params_bind_group_layout: &BindGroupLayout,
+        polynomial_bind_group_layout: &BindGroupLayout,
         dot_side_len: u32,
         num_ghosts: u32,
     ) -> (ComputePipeline, BindGroup, BindGroupLayout, Buffer) {
@@ -434,6 +435,7 @@ impl PolyPoly {
                     &compute_bind_group_layout,
                     lens_bind_group_layout,
                     params_bind_group_layout,
+                    polynomial_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -559,22 +561,23 @@ impl PolyPoly {
             &high_color_tex,
         );
 
+        let num_terms = 12;
+        let num_samples = 100;
+        let polynomials = GpuPolynomials::new(num_samples, num_terms, lens_state, device);
+
         let dot_side_len = 2;
         let (compute_pipeline, compute_bind_group, compute_bind_group_layout, vertex_buffer) =
             Self::raytrace_shader(
                 device,
                 &lens_state.lens_bind_group_layout,
                 &lens_state.params_bind_group_layout,
+                &polynomials.polynomial_bind_group_layout,
                 dot_side_len,
                 lens_state.ghost_indices.len() as u32,
             );
 
         let tri_index_buffer =
             Self::get_tri_index(device, dot_side_len, lens_state.ghost_indices.len() as u32);
-
-        let num_terms = 12;
-        let num_samples = 100;
-        let polynomials = GpuPolynomials::new(num_samples, num_terms, lens_state, device);
 
         let convert_meta = std::fs::metadata("gpu/src/lib/scenes/poly_poly/convert.wgsl").ok();
         let draw_meta = std::fs::metadata("gpu/src/lib/scenes/poly_poly/draw.wgsl").ok();
@@ -617,6 +620,7 @@ impl PolyPoly {
                     device,
                     &lens_state.lens_bind_group_layout,
                     &lens_state.params_bind_group_layout,
+                    &self.polynomials.polynomial_bind_group_layout,
                     self.dot_side_len,
                     lens_state.ghost_indices.len() as u32,
                 );
@@ -647,6 +651,7 @@ impl PolyPoly {
             cpass.set_bind_group(0, &self.compute_bind_group, &[]);
             cpass.set_bind_group(1, &lens_state.lens_bind_group, &[]);
             cpass.set_bind_group(2, &lens_state.params_bind_group, &[]);
+            cpass.set_bind_group(3, &self.polynomials.polynomial_bind_group, &[]);
             cpass.dispatch(work_group_count, 1, 1);
         }
 
@@ -747,6 +752,7 @@ impl PolyPoly {
                     device,
                     &lens_state.lens_bind_group_layout,
                     &lens_state.params_bind_group_layout,
+                    &self.polynomials.polynomial_bind_group_layout,
                     self.dot_side_len,
                     lens_state.ghost_indices.len() as u32,
                 );
@@ -773,6 +779,7 @@ impl PolyPoly {
             cpass.set_bind_group(0, &self.compute_bind_group, &[]);
             cpass.set_bind_group(1, &lens_state.lens_bind_group, &[]);
             cpass.set_bind_group(2, &lens_state.params_bind_group, &[]);
+            cpass.set_bind_group(3, &self.polynomials.polynomial_bind_group, &[]);
             cpass.dispatch(work_group_count, 1, 1);
         }
     }
@@ -898,6 +905,7 @@ impl PolyPoly {
                         device,
                         &lens_state.lens_bind_group_layout,
                         &lens_state.params_bind_group_layout,
+                        &self.polynomials.polynomial_bind_group_layout,
                         self.dot_side_len,
                         lens_state.ghost_indices.len() as u32,
                     );

@@ -115,8 +115,8 @@ struct Polynomial {
 [[group(2), binding(2)]] var<uniform> params : SimParams;
 
 [[group(2), binding(0)]] var<uniform> posParams : PosParams;
-[[group(0), binding(1)]] var<storage, read> terms : Polynomial;
-[[group(0), binding(2)]] var<uniform> polyParams : PolyParams;
+[[group(3), binding(1)]] var<storage, read> terms : Polynomial;
+[[group(3), binding(0)]] var<uniform> polyParams : PolyParams;
 
 [[group(1), binding(2)]] var<storage, read> whichGhost : Ghosts;
 
