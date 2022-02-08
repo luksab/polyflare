@@ -4,9 +4,7 @@ use state::State;
 
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
-use itertools::iproduct;
 use lens_state::LensState;
-use polynomial_optics::{Polynom2d, Polynom4d};
 use std::time::Instant;
 use wgpu::Extent3d;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
