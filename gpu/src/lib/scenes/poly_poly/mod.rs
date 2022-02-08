@@ -625,6 +625,7 @@ impl PolyPoly {
                     self.dot_side_len,
                     lens_state.ghost_indices.len() as u32,
                 );
+            self.compute_bind_group_layout = compute_bind_group_layout;
             self.compute_pipeline = compute_pipeline;
             self.compute_bind_group = compute_bind_group;
             self.vertex_buffer = vertex_buffer;
@@ -757,6 +758,7 @@ impl PolyPoly {
                     self.dot_side_len,
                     lens_state.ghost_indices.len() as u32,
                 );
+            self.compute_bind_group_layout = compute_bind_group_layout;
             self.compute_pipeline = compute_pipeline;
             self.compute_bind_group = compute_bind_group;
             self.vertex_buffer = vertex_buffer;
@@ -910,6 +912,7 @@ impl PolyPoly {
                         self.dot_side_len,
                         lens_state.ghost_indices.len() as u32,
                     );
+                self.compute_bind_group_layout = compute_bind_group_layout;
                 self.compute_pipeline = pipeline;
                 self.compute_bind_group = bind_group;
                 self.vertex_buffer = vertex_buffer;
