@@ -2,7 +2,6 @@ use itertools::iproduct;
 use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
 use mathru::algebra::linear::matrix::Transpose;
 use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
-use mathru::elementary::Power;
 use num::traits::Zero;
 use std::time::Instant;
 use std::vec;
@@ -493,10 +492,9 @@ impl<
     pub fn get_full_sparse(
         &self,
         points: &[(N, N, N, N, N)],
-        terms: usize,
     ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
-        let mut now = Instant::now();
+        let now = Instant::now();
 
         for (m, n, o, p) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE) {
             let mut term = self.get_monomial(m, n, o, p);
@@ -677,7 +675,6 @@ impl<
             coefficients[a.0][a.1][a.2][a.3] = *element;
         }
         println!("coefficients: {:?}", now.elapsed());
-        now = std::time::Instant::now();
         Polynom4d { coefficients }
     }
 }

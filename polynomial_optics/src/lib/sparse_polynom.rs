@@ -9,7 +9,7 @@ use num::{traits::Zero, One};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg}, convert::TryInto,
+    ops::{Add, AddAssign, Mul, MulAssign, Neg},
 };
 
 pub trait PowUsize {
@@ -239,11 +239,11 @@ pub struct Polynomial<N, const VARIABLES: usize> {
 //     }
 // }
 
-impl<const VARIABLES: usize> Polynomial<f64, VARIABLES>
-{
+impl<const VARIABLES: usize> Polynomial<f64, VARIABLES> {
+    #[allow(non_snake_case)]
     pub fn get_T_as_vec(&self, len: usize) -> Vec<f64> {
-        let mut v: Vec<f64> = Vec::new();
-        v = self.terms
+        let v: Vec<f64> = self
+            .terms
             .iter()
             .flat_map(|m| {
                 let mut v = m
@@ -463,7 +463,7 @@ impl<
         let m = Matrix::new(tems_num, tems_num, m);
         let k = Vector::new_column(k);
         let c = m.solve(&k).unwrap();
-        for (i, (term, c)) in self.terms.iter_mut().zip(c.iter()).enumerate() {
+        for (term, c) in self.terms.iter_mut().zip(c.iter()) {
             term.coefficient = *c;
         }
     }
@@ -496,7 +496,7 @@ impl<
         let x = x.clone() * x.transpose();
 
         let c = x.solve(&y).unwrap();
-        for (i, (term, c)) in self.terms.iter_mut().zip(c.iter()).enumerate() {
+        for (term, c) in self.terms.iter_mut().zip(c.iter()) {
             term.coefficient = *c;
         }
     }
