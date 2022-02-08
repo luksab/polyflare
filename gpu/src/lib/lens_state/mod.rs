@@ -6,7 +6,7 @@ use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
 use imgui::{CollapsingHeader, Condition, Drag, Slider, Ui};
 use polynomial_optics::{
-    Element, Glass, Lens, Polynomial, Properties, QuarterWaveCoating, Sellmeier,
+    Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier,
 };
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
