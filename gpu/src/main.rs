@@ -71,8 +71,8 @@ fn main() {
         pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
     let mut poly_tri =
         pollster::block_on(scenes::PolyTri::new(&state.device, &state.config, &lens_ui));
-    // let mut poly_poly =
-    //     pollster::block_on(scenes::PolyPoly::new(&state.device, &state.config, &lens_ui));
+    let mut poly_poly =
+        pollster::block_on(scenes::PolyPoly::new(&state.device, &state.config, &lens_ui));
     poly_optics.update_buffers(&state.device, true, &lens_ui);
 
     // Set up dear imgui

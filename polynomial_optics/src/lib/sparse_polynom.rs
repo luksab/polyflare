@@ -9,12 +9,8 @@ use num::{traits::Zero, One};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg}, convert::TryInto,
 };
-
-pub trait PolyStore<T> {
-    fn get_T_as_vec(&self) -> Vec<T>;
-}
 
 pub trait PowUsize {
     fn upow(self, exp: usize) -> Self;
@@ -224,22 +220,43 @@ pub struct Polynomial<N, const VARIABLES: usize> {
     pub terms: Vec<Monomial<N, VARIABLES>>,
 }
 
-impl<N: std::convert::From<usize> + Copy, const VARIABLES: usize> PolyStore<N>
-    for Polynomial<N, VARIABLES>
+// impl<N: std::convert::From<usize> + Copy, const VARIABLES: usize> PolyStore<N>
+//     for Polynomial<N, VARIABLES>
+// {
+//     default fn get_T_as_vec(&self) -> Vec<N> {
+//         self.terms
+//             .iter()
+//             .flat_map(|m| {
+//                 let mut v = m
+//                     .exponents
+//                     .iter()
+//                     .map(|exp| (*exp).into())
+//                     .collect::<Vec<_>>();
+//                 v.push(m.coefficient);
+//                 v
+//             })
+//             .collect()
+//     }
+// }
+
+impl<const VARIABLES: usize> Polynomial<f64, VARIABLES>
 {
-    fn get_T_as_vec(&self) -> Vec<N> {
-        self.terms
+    pub fn get_T_as_vec(&self, len: usize) -> Vec<f64> {
+        let mut v: Vec<f64> = Vec::new();
+        v = self.terms
             .iter()
             .flat_map(|m| {
                 let mut v = m
                     .exponents
                     .iter()
-                    .map(|exp| (*exp).into())
+                    .map(|exp| (*exp) as f64)
                     .collect::<Vec<_>>();
                 v.push(m.coefficient);
                 v
             })
-            .collect()
+            .collect();
+        let missing_len = (VARIABLES + 1) * len - v.len();
+        [v, vec![0.0; missing_len]].concat()
     }
 }
 

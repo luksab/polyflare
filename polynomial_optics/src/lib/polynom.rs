@@ -480,9 +480,9 @@ impl<
                     }
                 }
             }
-            println!("pre-fit: {}", phi);
+            // println!("pre-fit: {}", phi);
             phi.fit(points);
-            println!("post-fit: {}", phi);
+            // println!("post-fit: {}", phi);
         }
 
         println!("resulting polynomial: {:?}", phi);
