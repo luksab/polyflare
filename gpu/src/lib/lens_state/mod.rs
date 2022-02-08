@@ -5,9 +5,7 @@ use std::time::Instant;
 use cgmath::{InnerSpace, Vector3};
 use directories::ProjectDirs;
 use imgui::{CollapsingHeader, Condition, Drag, Slider, Ui};
-use polynomial_optics::{
-    Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier,
-};
+use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
 
@@ -768,7 +766,7 @@ impl LensState {
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([100.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
-                let mut lenses = Self::get_lenses();
+                let lenses = Self::get_lenses();
 
                 if ui.combo(
                     "select lens",
@@ -1087,40 +1085,17 @@ impl LensState {
     }
 
     pub fn init(&mut self, device: &Device, queue: &Queue) {
-        let mut update_lens = self.first_frame;
-        let mut update_sensor = self.first_frame;
-        let mut lenses = Self::get_lenses();
+        let lenses = Self::get_lenses();
 
         self.lens = lenses[self.selected_lens].1.clone();
         self.actual_lens = self.get_lens();
         self.current_filename = lenses[self.selected_lens].0.clone();
-        update_lens = true;
 
         queue.write_buffer(
             &self.sensor_buffer,
             0,
             bytemuck::cast_slice(&self.all_sensors[self.sensor_index].1.get_data()),
         );
-
-        let mut delete_glass = None;
-        let mut delete_aperture = None;
-
-        if let Some(delete_element) = delete_glass {
-            self.lens.remove(delete_element);
-            self.lens.remove(delete_element);
-            update_lens = true;
-        }
-
-        if let Some(delete_aperture) = delete_aperture {
-            self.lens.remove(delete_aperture);
-            update_lens = true;
-        }
-
-        let mut update_rays = self.first_frame;
-        let mut update_dots = self.first_frame;
-        let mut update_res = false;
-        let mut render = false;
-        let mut compute = false;
 
         let sample = 1. / (Instant::now() - self.last_frame_time).as_secs_f64();
         let alpha = 0.98;
@@ -1130,33 +1105,8 @@ impl LensState {
             .get_ghosts_indicies(self.draw as usize, 0)
             .len()) as u32;
 
-        // if ui.checkbox("triangulated", &mut self.triangulate) {
-        update_lens = true;
-        update_dots = true;
-        // }
-
-        // ui.radio_button("num_rays", &mut lens_ui.1, true);
-        /*
-        update_lens |= Drag::new("ray origin")
-            .speed(0.001)
-            .range(-10., 10.)
-            .build_array(ui, &mut self.pos_params[0..3]);
-
-        update_lens |= Drag::new("ray direction")
-            .speed(0.001)
-            .range(-1., 1.)
-            .build_array(ui, &mut self.pos_params[4..7]);
-
-        update_lens |= Drag::new("ray width")
-            .range(0., 10.)
-            .speed(0.01)
-            .build(ui, &mut self.pos_params[9]);
-        */
-
-        if update_lens || self.needs_update {
-            self.update(device, queue);
-            self.needs_update = false;
-        }
+        self.update(device, queue);
+        self.needs_update = false;
 
         self.last_frame_time = Instant::now();
 
@@ -1165,7 +1115,7 @@ impl LensState {
 
     pub fn set_lens(&mut self, lens: usize) {
         self.selected_lens = lens;
-        let mut lenses = Self::get_lenses();
+        let lenses = Self::get_lenses();
 
         self.lens = lenses[self.selected_lens].1.clone();
         self.actual_lens = self.get_lens();
