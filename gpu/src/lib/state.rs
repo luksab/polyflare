@@ -26,7 +26,7 @@ impl State {
     pub async fn new(
         event_loop: &EventLoop<()>,
         backend: Backends,
-        low_req: bool,
+        _low_req: bool,
         adapter: Option<usize>,
         disable_vsync: bool,
     ) -> Self {
