@@ -1100,10 +1100,6 @@ impl LensState {
         let sample = 1. / (Instant::now() - self.last_frame_time).as_secs_f64();
         let alpha = 0.98;
         self.fps = alpha * self.fps + (1.0 - alpha) * sample;
-        let num_ghosts = (self
-            .actual_lens
-            .get_ghosts_indicies(self.draw as usize, 0)
-            .len()) as u32;
 
         self.update(device, queue);
         self.needs_update = false;
