@@ -69,8 +69,11 @@ fn main() {
         pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
     let mut poly_tri =
         pollster::block_on(scenes::PolyTri::new(&state.device, &state.config, &lens_ui));
-    let mut poly_poly =
-        pollster::block_on(scenes::PolyPoly::new(&state.device, &state.config, &lens_ui));
+    let mut poly_poly = pollster::block_on(scenes::PolyPoly::new(
+        &state.device,
+        &state.config,
+        &lens_ui,
+    ));
     poly_optics.update_buffers(&state.device, true, &lens_ui);
 
     // Set up dear imgui
@@ -188,6 +191,12 @@ fn main() {
                             &state.device,
                             &state.config,
                         );
+                        poly_poly.resize(
+                            [state.size.width as _, state.size.height as _],
+                            *scale_factor * lens_ui.scale_fact,
+                            &state.device,
+                            &state.config,
+                        );
                     }
                     _ => {}
                 }
@@ -220,11 +229,11 @@ fn main() {
                 // Render normally at background
                 poly_optics.update(&state.device, &lens_ui);
 
-                if lens_ui.triangulate {
-                    poly_tri.update(&state.device, &lens_ui);
-                } else {
-                    poly_res.update(&state.device, &lens_ui);
-                }
+                match lens_ui.render_mode {
+                    lens_state::DrawMode::Dense => poly_res.update(&state.device, &lens_ui),
+                    lens_state::DrawMode::Sparse => poly_tri.update(&state.device, &lens_ui),
+                    lens_state::DrawMode::Poly => poly_poly.update(&state.device, &lens_ui),
+                };
 
                 if update_res {
                     poly_res.resize(
@@ -240,11 +249,19 @@ fn main() {
                         &state.device,
                         &state.config,
                     );
+
+                    poly_poly.resize(
+                        [state.size.width as _, state.size.height as _],
+                        state.scale_factor * lens_ui.scale_fact,
+                        &state.device,
+                        &state.config,
+                    );
                 }
 
                 if update_dot_num {
                     poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
                     poly_tri.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                    poly_poly.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
                     lens_ui.sim_params[11] = poly_tri.dot_side_len as f32;
                     lens_ui.needs_update = true;
                 }
@@ -290,11 +307,17 @@ fn main() {
                     };
                     let tex = state.device.create_texture(&desc);
 
-                    if lens_ui.triangulate {
-                        poly_tri.resize([size[0], size[1]], 2.0, &state.device, &state.config);
-                    } else {
-                        poly_res.resize([size[0], size[1]], 1.0, &state.device, &state.config);
-                    }
+                    match lens_ui.render_mode {
+                        lens_state::DrawMode::Dense => {
+                            poly_res.resize([size[0], size[1]], 1.0, &state.device, &state.config)
+                        }
+                        lens_state::DrawMode::Sparse => {
+                            poly_tri.resize([size[0], size[1]], 2.0, &state.device, &state.config)
+                        }
+                        lens_state::DrawMode::Poly => {
+                            poly_poly.resize([size[0], size[1]], 2.0, &state.device, &state.config)
+                        }
+                    };
 
                     let sim_params = lens_ui.sim_params;
 
@@ -303,40 +326,61 @@ fn main() {
                     lens_ui.num_wavelengths *= 10;
                     lens_ui.update(&state.device, &state.queue);
 
-                    if lens_ui.triangulate {
-                        poly_tri
-                            .render_hires(
-                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
-                                &state.device,
-                                &state.queue,
-                                &mut lens_ui,
-                            )
-                            .unwrap();
+                    match lens_ui.render_mode {
+                        lens_state::DrawMode::Dense => {
+                            poly_res
+                                .render_hires(
+                                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                    &state.device,
+                                    &state.queue,
+                                    10.0_f64.powf(lens_ui.hi_dots_exponent) as u64,
+                                    &mut lens_ui,
+                                )
+                                .unwrap();
 
-                        poly_tri.resize(
-                            [sim_params[9] as _, sim_params[10] as _],
-                            state.scale_factor,
-                            &state.device,
-                            &state.config,
-                        );
-                    } else {
-                        poly_res
-                            .render_hires(
-                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                            poly_res.resize(
+                                [sim_params[9] as _, sim_params[10] as _],
+                                state.scale_factor,
                                 &state.device,
-                                &state.queue,
-                                10.0_f64.powf(lens_ui.hi_dots_exponent) as u64,
-                                &mut lens_ui,
-                            )
-                            .unwrap();
+                                &state.config,
+                            );
+                        }
+                        lens_state::DrawMode::Sparse => {
+                            poly_tri
+                                .render_hires(
+                                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                    &state.device,
+                                    &state.queue,
+                                    &mut lens_ui,
+                                )
+                                .unwrap();
 
-                        poly_res.resize(
-                            [sim_params[9] as _, sim_params[10] as _],
-                            state.scale_factor,
-                            &state.device,
-                            &state.config,
-                        );
-                    }
+                            poly_tri.resize(
+                                [sim_params[9] as _, sim_params[10] as _],
+                                state.scale_factor,
+                                &state.device,
+                                &state.config,
+                            );
+                        }
+                        lens_state::DrawMode::Poly => {
+                            poly_poly
+                                .render_hires(
+                                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                    &state.device,
+                                    &state.queue,
+                                    &mut lens_ui,
+                                )
+                                .unwrap();
+
+                            poly_poly.resize(
+                                [sim_params[9] as _, sim_params[10] as _],
+                                state.scale_factor,
+                                &state.device,
+                                &state.config,
+                            );
+                        }
+                    };
+
                     lens_ui.sim_params = sim_params;
                     lens_ui.needs_update = true;
                     lens_ui.num_wavelengths /= 10;
@@ -350,17 +394,8 @@ fn main() {
                     poly_poly.update_poly(&state.device, &lens_ui);
                 }
 
-                if lens_ui.triangulate {
-                    // let mut encoder =
-                    //     state
-                    //         .device
-                    //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    //             label: Some("Render Encoder"),
-                    //         });
-                    // poly_tri.update_dots(&state.device, &mut encoder, , &lens_ui);
-                    // state.queue.submit(Some(encoder.finish()));
-                } else {
-                    poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui);
+                if let lens_state::DrawMode::Dense = lens_ui.render_mode {
+                    poly_res.update_dots(&state.device, &state.queue, update_dot_num, &lens_ui)
                 }
 
                 // Render PolyRes
@@ -410,48 +445,79 @@ fn main() {
                                 &state.config,
                             );
 
+                            poly_poly.resize(
+                                [size[0] as _, size[1] as _],
+                                state.scale_factor * lens_ui.scale_fact,
+                                &state.device,
+                                &state.config,
+                            );
+
                             lens_ui.resize_window([size[0] as _, size[1] as _], state.scale_factor);
                         }
 
-                        if lens_ui.triangulate {
-                            match poly_tri.render_color(
-                                renderer.textures.get(res_window_texture_id).unwrap().view(),
-                                &state.device,
-                                &state.queue,
-                                &mut lens_ui,
-                                update_dot_num | update_lens,
-                            ) {
-                                Ok(_) => {}
-                                // Reconfigure the surface if lost
-                                Err(wgpu::SurfaceError::Lost) => {
-                                    state.resize(state.size, None);
+                        match lens_ui.render_mode {
+                            lens_state::DrawMode::Dense => {
+                                // Only render contents if the window is not collapsed
+                                match poly_res.render(
+                                    renderer.textures.get(res_window_texture_id).unwrap().view(),
+                                    &state.device,
+                                    &state.queue,
+                                    &lens_ui,
+                                ) {
+                                    Ok(_) => {}
+                                    // Reconfigure the surface if lost
+                                    Err(wgpu::SurfaceError::Lost) => {
+                                        state.resize(state.size, None);
+                                    }
+                                    // The system is out of memory, we should probably quit
+                                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                                        *control_flow = ControlFlow::Exit
+                                    }
+                                    // All other errors (Outdated, Timeout) should be resolved by the next frame
+                                    Err(e) => eprintln!("{:?}", e),
                                 }
-                                // The system is out of memory, we should probably quit
-                                Err(wgpu::SurfaceError::OutOfMemory) => {
-                                    *control_flow = ControlFlow::Exit
-                                }
-                                // All other errors (Outdated, Timeout) should be resolved by the next frame
-                                Err(e) => eprintln!("{:?}", e),
                             }
-                        } else {
-                            // Only render contents if the window is not collapsed
-                            match poly_res.render(
-                                renderer.textures.get(res_window_texture_id).unwrap().view(),
-                                &state.device,
-                                &state.queue,
-                                &lens_ui,
-                            ) {
-                                Ok(_) => {}
-                                // Reconfigure the surface if lost
-                                Err(wgpu::SurfaceError::Lost) => {
-                                    state.resize(state.size, None);
+                            lens_state::DrawMode::Sparse => {
+                                match poly_tri.render_color(
+                                    renderer.textures.get(res_window_texture_id).unwrap().view(),
+                                    &state.device,
+                                    &state.queue,
+                                    &mut lens_ui,
+                                    update_dot_num | update_lens,
+                                ) {
+                                    Ok(_) => {}
+                                    // Reconfigure the surface if lost
+                                    Err(wgpu::SurfaceError::Lost) => {
+                                        state.resize(state.size, None);
+                                    }
+                                    // The system is out of memory, we should probably quit
+                                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                                        *control_flow = ControlFlow::Exit
+                                    }
+                                    // All other errors (Outdated, Timeout) should be resolved by the next frame
+                                    Err(e) => eprintln!("{:?}", e),
                                 }
-                                // The system is out of memory, we should probably quit
-                                Err(wgpu::SurfaceError::OutOfMemory) => {
-                                    *control_flow = ControlFlow::Exit
+                            }
+                            lens_state::DrawMode::Poly => {
+                                match poly_poly.render_color(
+                                    renderer.textures.get(res_window_texture_id).unwrap().view(),
+                                    &state.device,
+                                    &state.queue,
+                                    &mut lens_ui,
+                                    update_dot_num | update_lens,
+                                ) {
+                                    Ok(_) => {}
+                                    // Reconfigure the surface if lost
+                                    Err(wgpu::SurfaceError::Lost) => {
+                                        state.resize(state.size, None);
+                                    }
+                                    // The system is out of memory, we should probably quit
+                                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                                        *control_flow = ControlFlow::Exit
+                                    }
+                                    // All other errors (Outdated, Timeout) should be resolved by the next frame
+                                    Err(e) => eprintln!("{:?}", e),
                                 }
-                                // All other errors (Outdated, Timeout) should be resolved by the next frame
-                                Err(e) => eprintln!("{:?}", e),
                             }
                         }
                     }

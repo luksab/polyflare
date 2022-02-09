@@ -49,6 +49,14 @@ pub enum ElementState {
     Aperture(Aperture),
 }
 
+/// Dense = 0, Sparse = 1 or Poly = 2
+#[derive(Debug, Clone, Copy)]
+pub enum DrawMode {
+    Dense = 0,
+    Sparse = 1,
+    Poly = 2,
+}
+
 /// The state of the application
 pub struct LensState {
     /// whether buffers need updating
@@ -75,8 +83,8 @@ pub struct LensState {
     pub which_ghost: u32,
     /// number of wavelengths to render
     pub num_wavelengths: u32,
-    /// whether to draw using triangulation or direct raytracing
-    pub triangulate: bool,
+    /// Dense = 0, Sparse = 1 or Poly = 2
+    pub render_mode: DrawMode,
     /// whether to draw the background
     pub draw_background: bool,
 
@@ -334,8 +342,8 @@ impl LensState {
             direction.z as f32,
             1.,
             7.,
-            0.5, // Padding
-            0.,  // Padding
+            0.5,
+            1.,
             0.,  // Padding
         ];
         let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -431,7 +439,7 @@ impl LensState {
             dots_exponent: 1.,
             hi_dots_exponent: 10.,
             draw: 1,
-            triangulate: true,
+            render_mode: DrawMode::Sparse,
             draw_background: true,
             opacity: 0.75,
             scale_fact: 1.,
@@ -996,7 +1004,7 @@ impl LensState {
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));
 
                 update_dots |=
-                    Slider::new("dots_exponent", 0., if self.triangulate { 3. } else { 7.3 })
+                    Slider::new("dots_exponent", 0., if let DrawMode::Dense = self.render_mode { 7.3 } else { 3. })
                         .build(ui, &mut self.dots_exponent);
                 ui.text(format!(
                     "dots: {}",
@@ -1015,7 +1023,19 @@ impl LensState {
 
                 ui.text("render");
                 ui.same_line();
-                if ui.checkbox("triangulated", &mut self.triangulate) {
+                let mut selected = self.render_mode as usize;
+                if ui.combo(
+                    "mode",
+                    &mut selected,
+                    &["Dense", "Sparse", "Poly"],
+                    |label| std::borrow::Cow::Borrowed(label),
+                ) {
+                    self.render_mode = match selected {
+                        0 => DrawMode::Dense,
+                        1 => DrawMode::Sparse,
+                        2 => DrawMode::Poly,
+                        _ => panic!("invalid render mode"),
+                    };
                     update_lens = true;
                     update_dots = true;
                 }
@@ -1049,7 +1069,7 @@ impl LensState {
                 ui.same_line();
                 compute = ui.button("compute");
                 ui.same_line();
-                if !self.triangulate {
+                if let DrawMode::Dense = self.render_mode {
                     Slider::new("num_hi_rays", 0., 12.).build(ui, &mut self.hi_dots_exponent);
                 }
             });

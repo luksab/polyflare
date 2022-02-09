@@ -3,7 +3,9 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Instant;
 
+use gpu::lens_state::DrawMode;
 use gpu::lens_state::LensState;
+use gpu::scenes::PolyPoly;
 use wgpu::Device;
 use wgpu::Queue;
 use wgpu::SurfaceConfiguration;
@@ -19,6 +21,7 @@ pub struct Gpu {
     pub lens_ui: LensState,
     pub poly_res: PolyRes,
     pub poly_tri: PolyTri,
+    // pub poly_poly: PolyPoly,
 }
 
 impl Gpu {
@@ -28,12 +31,15 @@ impl Gpu {
         lens_ui.init(&state.device, &state.queue);
         let mut poly_res = pollster::block_on(PolyRes::new(&state.device, &state.config, &lens_ui));
         let mut poly_tri = pollster::block_on(PolyTri::new(&state.device, &state.config, &lens_ui));
+        // let mut poly_poly =
+        //     pollster::block_on(PolyPoly::new(&state.device, &state.config, &lens_ui));
 
         Gpu {
             state,
             lens_ui,
             poly_res,
             poly_tri,
+            // poly_poly,
         }
     }
 }
@@ -140,7 +146,23 @@ impl Gpu {
 
     pub fn update(
         &mut self,
-        parameters: Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64, usize, f64, f64), ofx::Error>,
+        parameters: Result<
+            (
+                f64,
+                f64,
+                f64,
+                f64,
+                f64,
+                usize,
+                f64,
+                f64,
+                f64,
+                usize,
+                f64,
+                f64,
+            ),
+            ofx::Error,
+        >,
     ) {
         //TODO: todo!("add update logic");
         // let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) = self
@@ -153,7 +175,7 @@ impl Gpu {
             opacity,
             zoom_fact,
             scale_fact,
-            triangulate,
+            draw_mode,
             pos_x_param,
             pos_y_param,
             pos_z_param,
@@ -183,11 +205,17 @@ impl Gpu {
         self.lens_ui.sim_params[12] = zoom_fact as f32;
         self.lens_ui.scale_fact = scale_fact;
         println!("scale_fact: {}", self.lens_ui.scale_fact);
-        
+
         self.lens_ui.opacity = (opacity * (33. / self.poly_tri.dot_side_len as f64)) as f32;
         self.lens_ui.dots_exponent = dots_exponent;
         self.lens_ui.num_wavelengths = num_wavelengths as u32;
-        self.lens_ui.triangulate = triangulate;
+
+        self.lens_ui.render_mode = match draw_mode {
+            0 => DrawMode::Dense,
+            1 => DrawMode::Sparse,
+            // 2 => DrawMode::Poly,
+            _ => DrawMode::Dense,
+        };
         self.lens_ui.pos_params[0] = pos_x_param as f32;
         self.lens_ui.pos_params[1] = pos_y_param as f32;
         self.lens_ui.pos_params[2] = pos_z_param as f32;
@@ -264,9 +292,10 @@ impl Gpu {
 
         if let Ok(()) = pollster::block_on(buffer_future) {
             let data = buffer_slice.get_mapped_range().to_vec();
-            let data: Vec<f32> = data.chunks(2).map(|chunk| {
-                f16::from_le_bytes([chunk[0], chunk[1]]).to_f32()
-            }).collect();
+            let data: Vec<f32> = data
+                .chunks(2)
+                .map(|chunk| f16::from_le_bytes([chunk[0], chunk[1]]).to_f32())
+                .collect();
             let data: Vec<(f32, f32, f32, f32)> = data
                 .chunks(4)
                 .map(|chunk| (chunk[0], chunk[1], chunk[2], chunk[3]))
@@ -294,7 +323,7 @@ impl Gpu {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba16Float,//wgpu::TextureFormat::Rgba16Float,
+            format: wgpu::TextureFormat::Rgba16Float, //wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
@@ -324,26 +353,47 @@ impl Gpu {
         // self.lens_ui.num_wavelengths *= 10;
         self.lens_ui.update(&self.state.device, &self.state.queue);
 
-        if self.lens_ui.triangulate {
-            self.poly_tri
-                .render_hires(
-                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
-                    &self.state.device,
-                    &self.state.queue,
-                    &mut self.lens_ui,
-                )
-                .unwrap();
-        } else {
-            self.poly_res.num_dots = 5_000_000; // to scale opactity correctly
-            self.poly_res
-                .render_hires(
-                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
-                    &self.state.device,
-                    &self.state.queue,
-                    10.0_f64.powf(self.lens_ui.dots_exponent + 5.) as u64,
-                    &mut self.lens_ui,
-                )
-                .unwrap();
+        match self.lens_ui.render_mode {
+            gpu::lens_state::DrawMode::Dense => {
+                self.poly_res.num_dots = 5_000_000; // to scale opactity correctly
+                self.poly_res
+                    .render_hires(
+                        &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                        &self.state.device,
+                        &self.state.queue,
+                        10.0_f64.powf(self.lens_ui.dots_exponent + 5.) as u64,
+                        &mut self.lens_ui,
+                    )
+                    .unwrap();
+            }
+            gpu::lens_state::DrawMode::Sparse => {
+                self.poly_tri
+                    .render_hires(
+                        &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                        &self.state.device,
+                        &self.state.queue,
+                        &mut self.lens_ui,
+                    )
+                    .unwrap();
+            }
+            gpu::lens_state::DrawMode::Poly => {
+                self.poly_tri
+                    .render_hires(
+                        &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                        &self.state.device,
+                        &self.state.queue,
+                        &mut self.lens_ui,
+                    )
+                    .unwrap();
+                // self.poly_poly
+                //     .render_hires(
+                //         &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                //         &self.state.device,
+                //         &self.state.queue,
+                //         &mut self.lens_ui,
+                //     )
+                //     .unwrap();
+            }
         }
         self.lens_ui.sim_params = sim_params;
         self.lens_ui.needs_update = true;

@@ -38,7 +38,7 @@ struct MyInstanceData {
     zoom_fact: ParamHandle<Double>,
     scale_fact: ParamHandle<Double>,
     num_wavelengths: ParamHandle<Double>,
-    triangulate: ParamHandle<Bool>,
+    draw_mode: ParamHandle<Double>,
     pos_x_param: ParamHandle<Double>,
     pos_y_param: ParamHandle<Double>,
     pos_z_param: ParamHandle<Double>,
@@ -152,7 +152,7 @@ const PARAM_DOTS_NAME: &str = "dots";
 const PARAM_ZOOM_NAME: &str = "zoom";
 const PARAM_SCALE_NAME: &str = "scale";
 const PARAM_WAVELEN_NAME: &str = "wavelenghts";
-const PARAM_TRI_NAME: &str = "triangulate";
+const PARAM_MODE_NAME: &str = "draw_mode";
 const PARAM_X_NAME: &str = "x";
 const PARAM_Y_NAME: &str = "y";
 const PARAM_Z_NAME: &str = "z";
@@ -362,7 +362,7 @@ impl Execute for SimplePlugin {
                 let scale_fact = param_set.parameter(PARAM_SCALE_NAME)?;
                 let opacity = param_set.parameter(PARAM_OPACITY_NAME)?;
                 let num_wavelengths = param_set.parameter(PARAM_WAVELEN_NAME)?;
-                let triangulate = param_set.parameter(PARAM_TRI_NAME)?;
+                let draw_mode = param_set.parameter(PARAM_MODE_NAME)?;
                 let pos_x_param = param_set.parameter(PARAM_X_NAME)?;
                 let pos_y_param = param_set.parameter(PARAM_Y_NAME)?;
                 let pos_z_param = param_set.parameter(PARAM_Z_NAME)?;
@@ -380,7 +380,7 @@ impl Execute for SimplePlugin {
                     zoom_fact,
                     scale_fact,
                     num_wavelengths,
-                    triangulate,
+                    draw_mode,
                     pos_x_param,
                     pos_y_param,
                     pos_z_param,
@@ -513,11 +513,16 @@ impl Execute for SimplePlugin {
                     50.,
                 )?;
 
-                let mut param_props = param_set.param_define_boolean(PARAM_TRI_NAME)?;
-                param_props.set_default(true)?;
-                param_props.set_hint("Enables triangulation")?;
-                param_props.set_script_name(PARAM_TRI_NAME)?;
-                param_props.set_label("trianguate")?;
+                define_scale_param(
+                    &mut param_set,
+                    PARAM_MODE_NAME,
+                    PARAM_MODE_NAME,
+                    PARAM_MODE_NAME,
+                    "What mode to draw with: 0: dense, 1: sparse, 2: poly",
+                    None,
+                    0.,
+                    2.9,
+                )?;
 
                 // let mut param_props = param_set.param_define_group(PARAM_COMPONENT_SCALES_NAME)?;
                 // param_props.set_hint("Scales on the individual component")?;
@@ -599,6 +604,7 @@ impl Execute for SimplePlugin {
                         PARAM_X_NAME,
                         PARAM_Y_NAME,
                         PARAM_Z_NAME,
+                        PARAM_MODE_NAME,
                         PARAM_LENS_NAME,
                         PARAM_ENTRY_NAME,
                         PARAM_WIDTH_NAME,
@@ -659,14 +665,14 @@ impl Execute for SimplePlugin {
 // }
 
 impl MyInstanceData {
-    fn get_data(&self, time: Time) -> Result<(f64, f64, f64, f64, f64, bool, f64, f64, f64, usize, f64, f64)> {
+    fn get_data(&self, time: Time) -> Result<(f64, f64, f64, f64, f64, usize, f64, f64, f64, usize, f64, f64)> {
         Ok((
             self.dots_exponent.get_value_at_time(time)?,
             self.num_wavelengths.get_value_at_time(time)?,
             self.opacity.get_value_at_time(time)?,
             self.zoom_fact.get_value_at_time(time)?,
             self.scale_fact.get_value_at_time(time)?,
-            self.triangulate.get_value_at_time(time)?,
+            self.draw_mode.get_value_at_time(time)? as usize,
             self.pos_x_param.get_value_at_time(time)?,
             self.pos_y_param.get_value_at_time(time)?,
             self.pos_z_param.get_value_at_time(time)?,
