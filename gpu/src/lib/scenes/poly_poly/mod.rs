@@ -94,7 +94,7 @@ impl GpuPolynomials {
                         binding: 0,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -114,10 +114,13 @@ impl GpuPolynomials {
                 label: Some("polynomial_bind_group_layout"),
             });
 
-        let poly_data = polynomials
+        let poly_data: Vec<f32> = polynomials
             .iter()
             .flat_map(|polynomial: &Polynomial<f64, 4>| polynomial.get_T_as_vec(num_terms))
-            .collect::<Vec<_>>();
+            .map(|num| num as f32)
+            .collect();
+
+        println!("poly_data: {:?}", poly_data);
 
         let polynomial_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&"Poly Buffer".to_string()),
