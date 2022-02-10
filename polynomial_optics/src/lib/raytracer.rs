@@ -1,4 +1,4 @@
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::{fs::OpenOptions, io::Write, path::Path, hash::{Hash, Hasher}};
 
 use serde::{Deserialize, Serialize};
 
@@ -164,6 +164,15 @@ pub struct QuarterWaveCoating {
     pub ior: f64,
 }
 
+impl Hash for QuarterWaveCoating {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let t = self.thickness.to_bits();
+        t.hash(state);
+        let i = self.ior.to_bits();
+        i.hash(state);
+    }
+}
+
 impl QuarterWaveCoating {
     /// return a QuarterWaveCoating that is infinitely thin and so does nothing
     pub fn none() -> Self {
@@ -237,6 +246,17 @@ pub struct Sellmeier {
     pub c: [f64; 3],
 }
 
+impl Hash for Sellmeier {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for i in 0..3 {
+            let b = self.b[i].to_bits();
+            b.hash(state);
+            let c = self.c[i].to_bits();
+            c.hash(state);
+        }
+    }
+}
+
 impl Sellmeier {
     pub fn air() -> Self {
         Self {
@@ -296,7 +316,7 @@ impl Sellmeier {
 
 /// ## Properties of a particular glass
 /// saves ior and coating
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash)]
 pub struct Glass {
     /// ior vs air
     pub sellmeier: Sellmeier,
@@ -337,7 +357,17 @@ pub struct Element {
     pub properties: Properties,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+impl Hash for Element {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let r = self.radius.to_bits();
+        r.hash(state);
+        let p = self.position.to_bits();
+        p.hash(state);
+        self.properties.hash(state);
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Hash)]
 pub enum Properties {
     Glass(Glass),
     Aperture(u32),
@@ -604,6 +634,14 @@ impl Ray {
 pub struct Lens {
     pub elements: Vec<Element>,
     pub sensor_dist: f64,
+}
+
+impl Hash for Lens {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.elements.hash(state);
+        let mut v = self.sensor_dist.to_bits();
+        v.hash(state);
+    }
 }
 
 impl Lens {

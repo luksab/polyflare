@@ -1,5 +1,13 @@
-use std::{fs::read_to_string, iter, time::Instant};
+use std::{
+    collections::hash_map::DefaultHasher,
+    fs::{self, read_to_string, DirBuilder},
+    hash::{Hash, Hasher},
+    iter,
+    path::Path,
+    time::Instant,
+};
 
+use directories::ProjectDirs;
 use polynomial_optics::{Polynom4d, Polynomial};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, CommandEncoder, ComputePipeline, Device,
@@ -16,14 +24,84 @@ struct GpuPolynomials {
 }
 
 impl GpuPolynomials {
-    pub fn new(
+    /// reads from cache if found
+    fn check_cache(
         num_dots: usize,
         num_terms: usize,
         lens_state: &LensState,
-        device: &Device,
-    ) -> GpuPolynomials {
-        let mut polynomials = vec![];
+    ) -> Option<Vec<Polynomial<f64, 4>>> {
+        let mut hasher = DefaultHasher::new();
+        lens_state.actual_lens.hash(&mut hasher);
+        let hash = hasher.finish();
 
+        let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
+        let cache_dir = proj_dirs.config_dir().join(Path::new("poly_cache"));
+        if !cache_dir.is_dir() {
+            println!("creating poly_cache directory {:?}", cache_dir);
+            DirBuilder::new()
+                .recursive(true)
+                .create(cache_dir.clone())
+                .unwrap();
+        }
+
+        let path = cache_dir.join(format!("{:x}.poly", hash));
+        if path.exists() {
+            if let Ok(str) = std::fs::read_to_string(path) {
+                let (num_dots_read, num_terms_read, polynomials): (usize, usize, _) =
+                    match ron::de::from_str(str.as_str()) {
+                        Ok(lens) => lens,
+                        Err(_) => return None,
+                    };
+                if num_dots_read == num_dots && num_terms_read == num_terms {
+                    return Some(polynomials);
+                }
+                return None;
+            }
+        }
+        None
+    }
+
+    fn write_cache(
+        num_dots: usize,
+        num_terms: usize,
+        lens_state: &LensState,
+        polynomials: &Vec<Polynomial<f64, 4>>,
+    ) {
+        let mut hasher = DefaultHasher::new();
+        lens_state.actual_lens.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
+        let dir = proj_dirs.config_dir().join(Path::new("poly_cache"));
+        if !dir.is_dir() {
+            println!("creating lens directory {:?}", &dir);
+            DirBuilder::new().recursive(true).create(&dir).unwrap();
+        }
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&dir.join(Path::new(&format!("{:x}.poly", hash))))
+            .unwrap();
+        let pretty_config = ron::ser::PrettyConfig::new();
+        std::io::Write::write_all(
+            &mut file,
+            ron::ser::to_string_pretty(&(num_dots, num_terms, polynomials), pretty_config)
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
+        // handle errors
+        file.sync_all().unwrap();
+    }
+
+    fn compute_polynomials(
+        num_dots: usize,
+        num_terms: usize,
+        lens_state: &LensState,
+    ) -> Vec<Polynomial<f64, 4>> {
+        let mut polynomials = vec![];
         for which_ghost in 1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len() {
             let width = 1.;
             let mut points = vec![];
@@ -86,6 +164,31 @@ impl GpuPolynomials {
             let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
             polynomials.push(sparse_poly);
         }
+        polynomials
+    }
+
+    fn get_polynomials(
+        num_dots: usize,
+        num_terms: usize,
+        lens_state: &LensState,
+    ) -> Vec<Polynomial<f64, 4>> {
+        match Self::check_cache(num_dots, num_terms, lens_state) {
+            Some(polynomials) => polynomials,
+            None => {
+                let polynomials = Self::compute_polynomials(num_dots, num_terms, lens_state);
+                Self::write_cache(num_dots, num_terms, lens_state, &polynomials);
+                polynomials
+            }
+        }
+    }
+
+    pub fn new(
+        num_dots: usize,
+        num_terms: usize,
+        lens_state: &LensState,
+        device: &Device,
+    ) -> GpuPolynomials {
+        let polynomials = Self::get_polynomials(num_dots, num_terms, lens_state);
 
         let polynomial_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

@@ -6,6 +6,7 @@ use mathru::algebra::{
     },
 };
 use num::{traits::Zero, One};
+use serde::{Serialize, Deserialize};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
@@ -61,11 +62,13 @@ pow_f!(f64);
 /// };
 /// println!("{}", pol);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Monomial<N, const VARIABLES: usize> {
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Monomial<N, const VARIABLES: usize>
+{
     /// the multiplicative coefficient
     pub coefficient: N,
     /// the exponents of the variables in order
+    #[serde(with = "serde_arrays")]
     pub exponents: [usize; VARIABLES],
 }
 
@@ -215,7 +218,7 @@ impl<N, const VARIABLES: usize> Monomial<N, VARIABLES> {
 /// println!("{}", pol);
 /// println!("multiplied with itself: {}", &pol * &pol);
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Polynomial<N, const VARIABLES: usize> {
     pub terms: Vec<Monomial<N, VARIABLES>>,
 }
