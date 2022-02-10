@@ -36,13 +36,6 @@ impl GpuPolynomials {
 
         let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
         let cache_dir = proj_dirs.config_dir().join(Path::new("poly_cache"));
-        if !cache_dir.is_dir() {
-            println!("creating poly_cache directory {:?}", cache_dir);
-            DirBuilder::new()
-                .recursive(true)
-                .create(cache_dir.clone())
-                .unwrap();
-        }
 
         let path = cache_dir.join(format!("{:x}.poly", hash));
         if path.exists() {
@@ -58,6 +51,7 @@ impl GpuPolynomials {
                 return None;
             }
         }
+
         None
     }
 
