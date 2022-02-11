@@ -31,7 +31,7 @@ impl GpuPolynomials {
         lens_state: &LensState,
     ) -> Option<Vec<Polynomial<f64, 4>>> {
         let mut hasher = DefaultHasher::new();
-        lens_state.actual_lens.hash(&mut hasher);
+        (num_dots, num_terms, &lens_state.actual_lens).hash(&mut hasher);
         let hash = hasher.finish();
 
         let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
@@ -62,7 +62,7 @@ impl GpuPolynomials {
         polynomials: &Vec<Polynomial<f64, 4>>,
     ) {
         let mut hasher = DefaultHasher::new();
-        lens_state.actual_lens.hash(&mut hasher);
+        (num_dots, num_terms, &lens_state.actual_lens).hash(&mut hasher);
         let hash = hasher.finish();
 
         let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
