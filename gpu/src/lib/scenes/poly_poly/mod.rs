@@ -152,7 +152,7 @@ impl GpuPolynomials {
                     )
                 })
                 .collect::<Vec<_>>();
-            let polynom = Polynom4d::<_, 2>::fit(&filtered_points);
+            let polynom = Polynom4d::<_, 7>::fit(&filtered_points);
             println!("Fitting took {:?}", now.elapsed());
             println!("{}", polynom);
             let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
@@ -189,7 +189,7 @@ impl GpuPolynomials {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
+                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
@@ -199,7 +199,7 @@ impl GpuPolynomials {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
+                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -387,6 +387,7 @@ impl PolyPoly {
     fn convert_shader(
         device: &wgpu::Device,
         params_bind_group_layout: &BindGroupLayout,
+        polynomial_bind_group_layout: &BindGroupLayout,
         format: &TextureFormat,
         high_color_tex: &Texture,
     ) -> (RenderPipeline, BindGroup) {
@@ -430,7 +431,11 @@ impl PolyPoly {
         let conversion_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Conversion Pipeline Layout"),
-                bind_group_layouts: &[&conversion_bind_group_layout, params_bind_group_layout],
+                bind_group_layouts: &[
+                    &conversion_bind_group_layout,
+                    params_bind_group_layout,
+                    polynomial_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
         let conversion_render_pipeline = {
@@ -644,6 +649,10 @@ impl PolyPoly {
         config: &SurfaceConfiguration,
         lens_state: &LensState,
     ) -> Self {
+        let num_terms = 80;
+        let num_samples = 10000;
+        let polynomials = GpuPolynomials::new(num_samples, num_terms, lens_state, device);
+
         let format = wgpu::TextureFormat::Rgba16Float;
         let high_color_tex =
             Texture::create_color_texture(device, config, format, "high_color_tex");
@@ -654,17 +663,14 @@ impl PolyPoly {
             &lens_state.params_bind_group_layout,
             &lens_state.lens_bind_group_layout,
         );
-
+        
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
             &lens_state.params_bind_group_layout,
+            &polynomials.polynomial_bind_group_layout,
             &config.format,
             &high_color_tex,
         );
-
-        let num_terms = 12;
-        let num_samples = 100;
-        let polynomials = GpuPolynomials::new(num_samples, num_terms, lens_state, device);
 
         let dot_side_len = 2;
         let (compute_pipeline, compute_bind_group, compute_bind_group_layout, vertex_buffer) =
@@ -964,6 +970,7 @@ impl PolyPoly {
                 let (pipeline, bind_group) = Self::convert_shader(
                     device,
                     &lens_state.params_bind_group_layout,
+                    &self.polynomials.polynomial_bind_group_layout,
                     &self.conf_format,
                     &self.high_color_tex,
                 );
@@ -1306,6 +1313,7 @@ impl PolyPoly {
             rpass.set_pipeline(&self.conversion_render_pipeline);
             rpass.set_bind_group(0, &self.conversion_bind_group, &[]);
             rpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
+            rpass.set_bind_group(2, &self.polynomials.polynomial_bind_group, &[]);
             rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
             //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
