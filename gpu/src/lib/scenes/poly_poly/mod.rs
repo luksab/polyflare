@@ -4,6 +4,8 @@ use std::{
     hash::{Hash, Hasher},
     iter,
     path::Path,
+    sync::{Arc, Mutex},
+    thread,
     time::Instant,
 };
 
@@ -95,70 +97,80 @@ impl GpuPolynomials {
         num_terms: usize,
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
-        let mut polynomials = vec![];
-        for which_ghost in 1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len() {
-            let width = 1.;
-            let mut points = vec![];
-            let dots = lens_state.actual_lens.get_dots(
-                num_dots as u32,
-                cgmath::Vector3 {
-                    x: lens_state.pos_params[0] as f64,
-                    y: lens_state.pos_params[1] as f64,
-                    z: lens_state.pos_params[2] as f64,
-                },
-                which_ghost as u32,
-                lens_state.pos_params[8] as f64,
-                [width as f64, width as f64],
-            );
-            println!("dots: {}", dots.len());
-            for dot in dots.iter() {
-                if dot.strength.is_finite() {
-                    let point = (
-                        dot.init_pos[0],
-                        dot.init_pos[1],
-                        dot.init_pos[2],
-                        dot.init_pos[3],
-                        // dot.strength,
-                        dot.pos[0],
-                    );
-                    points.push(point);
-                }
-            }
-            let points = points; // make points immutable
-            println!("points: {}", points.len());
-            if dots.len() == 0 {
-                println!(
-                    "no dots, skipping {} at [{},{},{}]",
-                    which_ghost,
-                    lens_state.pos_params[0],
-                    lens_state.pos_params[1],
-                    lens_state.pos_params[2]
-                );
-                continue;
-            }
+        let polynomials = Arc::new(Mutex::new(vec![]));
+        let mut handles = vec![];
 
-            let now = Instant::now();
-            let filtered_points = points
-                // .clone()
-                .into_iter()
-                // .filter(|point| point.4.is_finite())
-                .map(|point| {
-                    (
-                        point.0 as f64,
-                        point.1 as f64,
-                        point.2 as f64,
-                        point.3 as f64,
-                        point.4 as f64,
-                    )
-                })
-                .collect::<Vec<_>>();
-            let polynom = Polynom4d::<_, 7>::fit(&filtered_points);
-            println!("Fitting took {:?}", now.elapsed());
-            println!("{}", polynom);
-            let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
-            polynomials.push(sparse_poly);
+        let pos_params = lens_state.pos_params.clone();
+        let lens = lens_state.actual_lens.clone();
+        for which_ghost in 1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len() {
+            let lens = lens.clone();
+            let polynomials = polynomials.clone();
+            handles.push(thread::spawn(move || {
+                let width = 1.;
+                let mut points = vec![];
+                let dots = lens.get_dots(
+                    num_dots as u32,
+                    cgmath::Vector3 {
+                        x: pos_params[0] as f64,
+                        y: pos_params[1] as f64,
+                        z: pos_params[2] as f64,
+                    },
+                    which_ghost as u32,
+                    pos_params[8] as f64,
+                    [width as f64, width as f64],
+                );
+                println!("dots: {}", dots.len());
+                for dot in dots.iter() {
+                    if dot.strength.is_finite() {
+                        let point = (
+                            dot.init_pos[0],
+                            dot.init_pos[1],
+                            dot.init_pos[2],
+                            dot.init_pos[3],
+                            // dot.strength,
+                            dot.pos[0],
+                        );
+                        points.push(point);
+                    }
+                }
+                let points = points; // make points immutable
+                println!("points: {}", points.len());
+                if dots.len() == 0 {
+                    println!(
+                        "no dots, skipping {} at [{},{},{}]",
+                        which_ghost, pos_params[0], pos_params[1], pos_params[2]
+                    );
+                    return;
+                }
+
+                let now = Instant::now();
+                let filtered_points = points
+                    // .clone()
+                    .into_iter()
+                    // .filter(|point| point.4.is_finite())
+                    .map(|point| {
+                        (
+                            point.0 as f64,
+                            point.1 as f64,
+                            point.2 as f64,
+                            point.3 as f64,
+                            point.4 as f64,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let polynom = Polynom4d::<_, 7>::fit(&filtered_points);
+                println!("Fitting took {:?}", now.elapsed());
+                println!("{}", polynom);
+                let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
+                polynomials.lock().unwrap().push(sparse_poly);
+            }));
         }
-        polynomials
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        Arc::try_unwrap(polynomials).unwrap().into_inner().unwrap()
     }
 
     fn get_polynomials(
@@ -663,7 +675,7 @@ impl PolyPoly {
             &lens_state.params_bind_group_layout,
             &lens_state.lens_bind_group_layout,
         );
-        
+
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
             device,
             &lens_state.params_bind_group_layout,
