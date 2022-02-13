@@ -1,4 +1,3 @@
-use itertools::iproduct;
 use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
 use mathru::algebra::linear::matrix::Transpose;
 use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
@@ -50,9 +49,9 @@ pow_u!(isize);
 pow_f!(f32);
 pow_f!(f64);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Polynom2d<N, const DEGREE: usize> {
-    pub coefficients: [[N; DEGREE]; DEGREE],
+    pub coefficients: Vec<N>,
 }
 
 impl<N: Copy + Zero + PartialOrd + Neg<Output = N>, const DEGREE: usize> Display
@@ -61,33 +60,54 @@ where
     N: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, &coefficients_x) in self.coefficients.iter().enumerate() {
-            for (j, &coefficient) in coefficients_x.iter().enumerate() {
-                if i != 0 || j != 0 {
-                    if coefficient >= N::zero() {
-                        write!(f, "+{}", coefficient)?
-                    } else {
-                        write!(f, "-{}", -coefficient)?
-                    }
+        let terms = Self::get_terms();
+        for (&coefficient, (i, j)) in self.coefficients.iter().zip(terms) {
+            if i != 0 || j != 0 {
+                if coefficient >= N::zero() {
+                    write!(f, "+{}", coefficient)?
                 } else {
-                    write!(f, "{}", coefficient)?
+                    write!(f, "-{}", -coefficient)?
                 }
+            } else {
+                write!(f, "{}", coefficient)?
+            }
 
-                if i == 1 {
-                    write!(f, "x")?
-                } else if i != 0 {
-                    write!(f, "x^{}", i)?
-                }
+            if i == 1 {
+                write!(f, "x")?
+            } else if i != 0 {
+                write!(f, "x^{}", i)?
+            }
 
-                if j == 1 {
-                    write!(f, "y")?
-                } else if j != 0 {
-                    write!(f, "y^{}", j)?
-                }
+            if j == 1 {
+                write!(f, "y")?
+            } else if j != 0 {
+                write!(f, "y^{}", j)?
             }
         }
 
         Ok(())
+    }
+}
+
+impl<N, const DEGREE: usize> Polynom2d<N, DEGREE> {
+    fn get_terms() -> Vec<(usize, usize)> {
+        let mut terms = vec![];
+        for i in 0..DEGREE {
+            for j in 0..DEGREE - i {
+                terms.push((i, j));
+            }
+        }
+        terms
+    }
+
+    fn get_num_terms() -> usize {
+        let mut terms = 0;
+        for i in 0..DEGREE {
+            for _ in 0..DEGREE - i {
+                terms += 1;
+            }
+        }
+        terms
     }
 }
 
@@ -109,12 +129,14 @@ impl<
     /// assert!(f == res);
     /// ```
     pub fn fit(points: &[(N, N, N)]) -> Polynom2d<N, DEGREE> {
-        let mut m = Matrix::<N>::zero(DEGREE * DEGREE, DEGREE * DEGREE);
-        let mut k = Vector::<N>::zero(DEGREE * DEGREE);
+        let terms = Self::get_terms();
+        let num_terms = Self::get_num_terms();
+        let mut m = Matrix::<N>::zero(num_terms, num_terms);
+        let mut k = Vector::<N>::zero(num_terms);
         for (iter, element) in m.iter_mut().enumerate() {
-            let (i, j) = (iter / (DEGREE * DEGREE), iter % (DEGREE * DEGREE));
-            let a = (i / DEGREE, i % DEGREE);
-            let b = (j / DEGREE, j % DEGREE);
+            let (i, j) = (iter / (num_terms), iter % (num_terms));
+            let a = terms[i];
+            let b = terms[j];
             // println!("i:{},j:{}, a:{:?}, b:{:?}", i, j, a, b);
             *element = points
                 .iter()
@@ -131,9 +153,9 @@ impl<
         // println!("m: {:?}", m);
         // println!("k: {:?}", k);
         let c = m.solve(&k).unwrap();
-        let mut coefficients = [[N::zero(); DEGREE]; DEGREE];
-        for (i, element) in c.iter().enumerate() {
-            coefficients[i / DEGREE][i % DEGREE] = *element;
+        let mut coefficients = Vec::with_capacity(num_terms);
+        for element in c.iter() {
+            coefficients.push(*element);
         }
         Polynom2d { coefficients }
     }
@@ -166,9 +188,9 @@ impl<
         result.sqrt()
     }
 
-    fn get_monomial(&self, i: usize, j: usize) -> crate::Monomial<N, 2> {
+    fn get_monomial(&self, i: usize, j: usize, coefficient: N) -> crate::Monomial<N, 2> {
         crate::Monomial {
-            coefficient: self.coefficients[i][j],
+            coefficient: coefficient,
             exponents: [i, j],
         }
     }
@@ -176,51 +198,55 @@ impl<
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
-    pub fn get_sparse(&self, points: &[(N, N, N)], terms: usize) -> crate::Polynomial<N, 2> {
+    pub fn get_sparse(
+        &self,
+        points: &[(N, N, N)],
+        num_max_terms: usize,
+    ) -> crate::Polynomial<N, 2> {
+        let terms = Self::get_terms();
+
         let mut phi = crate::Polynomial::<_, 2>::new(vec![]);
         let mut now = Instant::now();
         let mut counter = 0;
 
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                if now.elapsed().as_secs() > 0 {
-                    println!("{}: took {:?}", counter, now.elapsed());
-                    now = Instant::now();
-                }
-                counter += 1;
-
-                phi.terms.push(self.get_monomial(i, j));
-                let mut min = Self::dist(&phi, points);
-                let (mut min_i, mut min_j) = (i, j);
-                phi.terms.pop();
-                for k in 0..DEGREE {
-                    for l in 0..DEGREE {
-                        if !phi.terms.iter().any(|&mon| mon.exponents == [k, l]) {
-                            phi.terms.push(self.get_monomial(k, l));
-                            let new_min = Self::dist(&phi, points);
-                            phi.terms.pop();
-                            if new_min < min {
-                                min = new_min;
-                                min_i = k;
-                                min_j = l;
-                            }
-                        }
-                    }
-                }
-                if phi.terms.len() < terms {
-                    phi.terms.push(self.get_monomial(min_i, min_j));
-                } else {
-                    let mut term = self.get_monomial(min_i, min_j);
-                    for k in 0..phi.terms.len() {
-                        term = std::mem::replace(&mut phi.terms[k], term);
-                        let new_min = Self::dist(&phi, points);
-                        if new_min < min {
-                            break;
-                        }
-                    }
-                }
-                phi.fit(points)
+        for ((i, j), coefficient) in terms.iter().zip(self.coefficients.iter()) {
+            if now.elapsed().as_secs() > 0 {
+                println!("{}: took {:?}", counter, now.elapsed());
+                now = Instant::now();
             }
+            counter += 1;
+
+            phi.terms.push(self.get_monomial(*i, *j, *coefficient));
+            let mut min = Self::dist(&phi, points);
+            let (mut min_i, mut min_j, mut min_c) = (*i, *j, coefficient);
+            phi.terms.pop();
+            for ((k, l), inner_coefficient) in terms.iter().zip(self.coefficients.iter()) {
+                if !phi.terms.iter().any(|&mon| mon.exponents == [*k, *l]) {
+                    phi.terms
+                        .push(self.get_monomial(*k, *l, *inner_coefficient));
+                    let new_min = Self::dist(&phi, points);
+                    phi.terms.pop();
+                    if new_min < min {
+                        min = new_min;
+                        min_i = *k;
+                        min_j = *l;
+                        min_c = inner_coefficient;
+                    }
+                }
+            }
+            if phi.terms.len() < num_max_terms {
+                phi.terms.push(self.get_monomial(min_i, min_j, *min_c));
+            } else {
+                let mut term = self.get_monomial(min_i, min_j, *min_c);
+                for k in 0..phi.terms.len() {
+                    term = std::mem::replace(&mut phi.terms[k], term);
+                    let new_min = Self::dist(&phi, points);
+                    if new_min < min {
+                        break;
+                    }
+                }
+            }
+            phi.fit(points)
         }
         phi
     }
@@ -232,10 +258,8 @@ impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usiz
     /// Evaluate polynomial at a point
     pub fn eval(&self, x: N, y: N) -> N {
         let mut sum: N = N::zero();
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                sum += self.coefficients[i][j] * x.upow(i) * y.upow(j);
-            }
+        for ((i, j), coefficient) in Self::get_terms().iter().zip(self.coefficients.iter()) {
+            sum += *coefficient * x.upow(*i) * y.upow(*j);
         }
         sum
     }
@@ -270,11 +294,14 @@ impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom2d<N, DEGRE
     /// assert!(f + g == res);
     /// ```
     fn add(self, _rhs: Polynom2d<N, DEGREE>) -> Polynom2d<N, DEGREE> {
-        let mut coefficients = [[N::zero(); DEGREE]; DEGREE];
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                coefficients[i][j] = self.coefficients[i][j] + _rhs.coefficients[i][j];
-            }
+        let mut coefficients = Vec::with_capacity(Self::get_num_terms());
+        for ((self_coeff, rhs_coeff), new_coeff) in self
+            .coefficients
+            .iter()
+            .zip(_rhs.coefficients.iter())
+            .zip(coefficients.iter_mut())
+        {
+            *new_coeff = *self_coeff + *rhs_coeff;
         }
         Polynom2d { coefficients }
     }
@@ -300,11 +327,14 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
     /// assert!(f - g == res);
     /// ```
     fn sub(self, _rhs: Polynom2d<N, DEGREE>) -> Polynom2d<N, DEGREE> {
-        let mut coefficients = [[N::zero(); DEGREE]; DEGREE];
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                coefficients[i][j] = self.coefficients[i][j] - _rhs.coefficients[i][j];
-            }
+        let mut coefficients = Vec::with_capacity(Self::get_num_terms());
+        for ((self_coeff, rhs_coeff), new_coeff) in self
+            .coefficients
+            .iter()
+            .zip(_rhs.coefficients.iter())
+            .zip(coefficients.iter_mut())
+        {
+            *new_coeff = *self_coeff - *rhs_coeff;
         }
         Polynom2d { coefficients }
     }
@@ -312,20 +342,18 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
 
 impl<N: PartialEq + Copy, const DEGREE: usize> std::cmp::PartialEq for Polynom2d<N, DEGREE> {
     fn eq(&self, other: &Polynom2d<N, DEGREE>) -> bool {
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                if self.coefficients[i][j] != other.coefficients[i][j] {
-                    return false;
-                }
+        for (self_coeff, rhs_coeff) in self.coefficients.iter().zip(other.coefficients.iter()) {
+            if self_coeff != rhs_coeff {
+                return false;
             }
         }
         true
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Polynom4d<N, const DEGREE: usize> {
-    pub coefficients: [[[[N; DEGREE]; DEGREE]; DEGREE]; DEGREE],
+    pub coefficients: Vec<N>,
 }
 
 impl<N: Copy + Zero + PartialOrd + Neg<Output = N>, const DEGREE: usize> Display
@@ -334,49 +362,75 @@ where
     N: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, &coefficients_x) in self.coefficients.iter().enumerate() {
-            for (j, &coefficient_y) in coefficients_x.iter().enumerate() {
-                for (k, &coefficients_z) in coefficient_y.iter().enumerate() {
-                    for (l, &coefficient) in coefficients_z.iter().enumerate() {
-                        if i != 0 || j != 0 || k != 0 || l != 0 {
-                            if coefficient >= N::zero() {
-                                write!(f, "+{}", coefficient)?
-                            } else {
-                                write!(f, "-{}", -coefficient)?
-                            }
-                        } else {
-                            write!(f, "{}", coefficient)?
-                        }
-
-                        if i == 1 {
-                            write!(f, "x")?
-                        } else if i != 0 {
-                            write!(f, "x^{}", i)?
-                        }
-
-                        if j == 1 {
-                            write!(f, "y")?
-                        } else if j != 0 {
-                            write!(f, "y^{}", j)?
-                        }
-
-                        if k == 1 {
-                            write!(f, "z")?
-                        } else if k != 0 {
-                            write!(f, "z^{}", k)?
-                        }
-
-                        if l == 1 {
-                            write!(f, "w")?
-                        } else if l != 0 {
-                            write!(f, "w^{}", l)?
-                        }
-                    }
+        let terms = Self::get_terms();
+        for (&coefficient, (i, j, k, l)) in self.coefficients.iter().zip(terms) {
+            if i != 0 || j != 0 || k != 0 || l != 0 {
+                if coefficient >= N::zero() {
+                    write!(f, "+{}", coefficient)?
+                } else {
+                    write!(f, "-{}", -coefficient)?
                 }
+            } else {
+                write!(f, "{}", coefficient)?
+            }
+
+            if i == 1 {
+                write!(f, "x")?
+            } else if i != 0 {
+                write!(f, "x^{}", i)?
+            }
+
+            if j == 1 {
+                write!(f, "y")?
+            } else if j != 0 {
+                write!(f, "y^{}", j)?
+            }
+
+            if k == 1 {
+                write!(f, "z")?
+            } else if k != 0 {
+                write!(f, "z^{}", k)?
+            }
+
+            if l == 1 {
+                write!(f, "w")?
+            } else if l != 0 {
+                write!(f, "w^{}", l)?
             }
         }
 
         Ok(())
+    }
+}
+
+impl<N, const DEGREE: usize> Polynom4d<N, DEGREE> {
+    pub fn get_terms() -> Vec<(usize, usize, usize, usize)> {
+        let mut terms = vec![];
+
+        for i in 0..DEGREE {
+            for j in 0..DEGREE - i {
+                for k in 0..DEGREE - (i + j) {
+                    for l in 0..DEGREE - (i + j + k) {
+                        terms.push((i, j, k, l));
+                    }
+                }
+            }
+        }
+        terms
+    }
+
+    fn get_num_terms() -> usize {
+        let mut num_terms = 0;
+        for i in 0..DEGREE {
+            for j in 0..DEGREE - i {
+                for k in 0..DEGREE - (i + j) {
+                    for _ in 0..DEGREE - (i + j + k) {
+                        num_terms += 1;
+                    }
+                }
+            }
+        }
+        num_terms
     }
 }
 
@@ -407,9 +461,16 @@ impl<
         result.sqrt()
     }
 
-    fn get_monomial(&self, i: usize, j: usize, k: usize, l: usize) -> crate::Monomial<N, 4> {
+    fn get_monomial(
+        &self,
+        i: usize,
+        j: usize,
+        k: usize,
+        l: usize,
+        coefficient: N,
+    ) -> crate::Monomial<N, 4> {
         crate::Monomial {
-            coefficient: self.coefficients[i][j][k][l],
+            coefficient: coefficient,
             exponents: [i, j, k, l],
         }
     }
@@ -417,9 +478,15 @@ impl<
     /// # Orthogonal Matching Pursuit with replacement
     /// ```
     /// ```
-    pub fn get_sparse(&self, points: &[(N, N, N, N, N)], terms: usize, cheap: bool) -> crate::Polynomial<N, 4> {
+    pub fn get_sparse(
+        &self,
+        points: &[(N, N, N, N, N)],
+        num_max_terms: usize,
+        cheap: bool,
+    ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut now = Instant::now();
+        let terms = Self::get_terms();
 
         // for (counter, (((i, j), k), l)) in (0..DEGREE)
         //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
@@ -427,8 +494,10 @@ impl<
         //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
         //     .enumerate()
         // {
-        for (counter, _) in (0..(DEGREE * DEGREE * DEGREE * DEGREE)).enumerate() {
-            if counter > terms && cheap {
+        for (counter, (&(i, j, k, l), &coefficient)) in
+            terms.iter().zip(self.coefficients.iter()).enumerate()
+        {
+            if counter > num_max_terms && cheap {
                 break;
             }
 
@@ -440,10 +509,15 @@ impl<
             let mut min = Self::dist(&phi, points);
             // let mut min = points.iter().map(|p| p.4.upow(2)).sum::<N>().sqrt();
             print!("{}: {}", counter, min);
-            let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
-            for (m, n, o, p) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE) {
+            phi.terms.push(self.get_monomial(i, j, k, l, coefficient));
+            min = Self::dist(&phi, points);
+            let (mut min_i, mut min_j, mut min_k, mut min_l, mut min_c) = (i, j, k, l, coefficient);
+            phi.terms.pop();
+
+            for (&(m, n, o, p), &inner_coefficient) in terms.iter().zip(self.coefficients.iter()) {
                 if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
-                    phi.terms.push(self.get_monomial(m, n, o, p));
+                    phi.terms
+                        .push(self.get_monomial(m, n, o, p, inner_coefficient));
                     let new_min = Self::dist(&phi, points);
                     // println!("{} {} {} {} {}", m, n, o, p, new_min);
                     phi.terms.pop();
@@ -453,6 +527,7 @@ impl<
                         min_j = n;
                         min_k = o;
                         min_l = p;
+                        min_c = inner_coefficient;
                     }
                 }
             }
@@ -466,11 +541,11 @@ impl<
                 return phi;
             }
             println!(" {}", min);
-            if phi.terms.len() < terms {
+            if phi.terms.len() < num_max_terms {
                 phi.terms
-                    .push(self.get_monomial(min_i, min_j, min_k, min_l));
+                    .push(self.get_monomial(min_i, min_j, min_k, min_l, min_c));
             } else {
-                let mut term = self.get_monomial(min_i, min_j, min_k, min_l);
+                let mut term = self.get_monomial(min_i, min_j, min_k, min_l, min_c);
                 for k in 0..phi.terms.len() {
                     term = std::mem::replace(&mut phi.terms[k], term);
                     let new_min = Self::dist(&phi, points);
@@ -488,105 +563,6 @@ impl<
         println!("total time: {:?}", now.elapsed());
         phi
     }
-
-    pub fn get_full_sparse(
-        &self,
-        points: &[(N, N, N, N, N)],
-    ) -> crate::Polynomial<N, 4> {
-        let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
-        let now = Instant::now();
-
-        for (m, n, o, p) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE) {
-            let mut term = self.get_monomial(m, n, o, p);
-            term.coefficient = <N as num::One>::one();
-            phi.terms.push(term);
-            // println!("{} {} {} {} {}", m, n, o, p, new_min);
-        }
-
-        // println!("pre-fit: {}", phi);
-        phi.fit(points);
-        // println!("post-fit: {}", phi);
-
-        // println!("resulting polynomial: {:?}", phi);
-        println!("total time: {:?}", now.elapsed());
-        phi
-    }
-
-    /// # Orthogonal Matching Pursuit with replacement
-    /// ```
-    /// ```
-    pub fn get_sparse_cheap(
-        &self,
-        points: &[(N, N, N, N, N)],
-        terms: usize,
-    ) -> crate::Polynomial<N, 4> {
-        let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
-        if terms == 0 {
-            return phi;
-        }
-        let mut now = Instant::now();
-
-        for (counter, _) in (0..(DEGREE * DEGREE * DEGREE * DEGREE)).enumerate() {
-            if now.elapsed().as_secs() > 0 {
-                println!("{}: took {:?}", counter, now.elapsed());
-                now = Instant::now();
-            }
-
-            if counter > terms {
-                break;
-            }
-
-            let mut min = Self::dist(&phi, points);
-            // let mut min = points.iter().map(|p| p.4.upow(2)).sum::<N>().sqrt();
-            print!("{}: {}", counter, min);
-            let (mut min_i, mut min_j, mut min_k, mut min_l) = (0, 0, 0, 0);
-            for (m, n, o, p) in iproduct!(0..DEGREE, 0..DEGREE, 0..DEGREE, 0..DEGREE) {
-                if !phi.terms.iter().any(|&mon| mon.exponents == [m, n, o, p]) {
-                    phi.terms.push(self.get_monomial(m, n, o, p));
-                    let new_min = Self::dist(&phi, points);
-                    // println!("{} {} {} {} {}", m, n, o, p, new_min);
-                    phi.terms.pop();
-                    if new_min < min {
-                        min = new_min;
-                        min_i = m;
-                        min_j = n;
-                        min_k = o;
-                        min_l = p;
-                    }
-                }
-            }
-            if !phi
-                .terms
-                .iter()
-                .any(|&mon| mon.exponents == [min_i, min_j, min_k, min_l])
-            {
-                println!("\nNo better term found!!!");
-                phi.fit(points);
-                return phi;
-            }
-            println!(" {}", min);
-            if phi.terms.len() < terms {
-                phi.terms
-                    .push(self.get_monomial(min_i, min_j, min_k, min_l));
-            } else {
-                let mut term = self.get_monomial(min_i, min_j, min_k, min_l);
-                for k in 0..phi.terms.len() {
-                    term = std::mem::replace(&mut phi.terms[k], term);
-                    let new_min = Self::dist(&phi, points);
-                    if new_min < min {
-                        break;
-                    }
-                }
-            }
-            println!("pre-fit: {}", phi);
-            phi.fit(points);
-            println!("post-fit: {}", phi);
-        }
-
-        println!("resulting polynomial: {:?}", phi);
-        println!("total time: {:?}", now.elapsed());
-        phi
-    }
 }
 
 impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usize>
@@ -595,18 +571,9 @@ impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usiz
     /// Evaluate polynomial at a point
     pub fn eval(&self, x: N, y: N, z: N, w: N) -> N {
         let mut sum: N = N::zero();
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                for k in 0..DEGREE {
-                    for l in 0..DEGREE {
-                        sum += self.coefficients[i][j][k][l]
-                            * x.upow(i)
-                            * y.upow(j)
-                            * z.upow(k)
-                            * w.upow(l);
-                    }
-                }
-            }
+        let terms = Self::get_terms();
+        for (&(i, j, k, l), &coefficient) in terms.iter().zip(self.coefficients.iter()) {
+            sum += coefficient * x.upow(i) * y.upow(j) * z.upow(k) * w.upow(l);
         }
         sum
     }
@@ -640,9 +607,11 @@ impl<
     /// assert!(f == res);
     /// ```
     pub fn fit(points: &[(N, N, N, N, N)]) -> Polynom4d<N, DEGREE> {
+        let terms = Self::get_terms();
+        let num_terms = terms.len();
         println!("num of points: {}", points.len());
         let mut now = std::time::Instant::now();
-        let mut m = Matrix::<N>::zero(DEGREE * DEGREE * DEGREE * DEGREE, points.len());
+        let mut m = Matrix::<N>::zero(num_terms, points.len());
         let y = Vector::<N>::new_column(points.iter().map(|point| point.4).collect::<Vec<_>>());
         println!("init: {:?}", now.elapsed());
         now = std::time::Instant::now();
@@ -650,11 +619,10 @@ impl<
         // iter_mut is column first
         for (iter, element) in m.iter_mut().enumerate() {
             let (point, i) = (
-                iter / (DEGREE * DEGREE * DEGREE * DEGREE),
-                iter % (DEGREE * DEGREE * DEGREE * DEGREE),
+                iter / (num_terms),
+                iter % (num_terms),
             );
-            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
-            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
+            let a = terms[i];
             *element = (points[point].0).upow(a.0)
                 * (points[point].1).upow(a.1)
                 * (points[point].2).upow(a.2)
@@ -668,11 +636,9 @@ impl<
         let c = x.solve(&y).unwrap();
         println!("solve: {:?}", now.elapsed());
         now = std::time::Instant::now();
-        let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
-        for (i, element) in c.iter().enumerate() {
-            let (k_i, l_i) = (i / (DEGREE * DEGREE), i % (DEGREE * DEGREE));
-            let a = (k_i / DEGREE, k_i % DEGREE, l_i / DEGREE, l_i % DEGREE);
-            coefficients[a.0][a.1][a.2][a.3] = *element;
+        let mut coefficients = Vec::with_capacity(num_terms);
+        for element in c.iter() {
+            coefficients.push(*element);
         }
         println!("coefficients: {:?}", now.elapsed());
         Polynom4d { coefficients }
@@ -685,16 +651,14 @@ impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom4d<N, DEGRE
     type Output = Polynom4d<N, DEGREE>;
 
     fn add(self, _rhs: Polynom4d<N, DEGREE>) -> Polynom4d<N, DEGREE> {
-        let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                for k in 0..DEGREE {
-                    for l in 0..DEGREE {
-                        coefficients[i][j][k][l] =
-                            self.coefficients[i][j][k][l] + _rhs.coefficients[i][j][k][l];
-                    }
-                }
-            }
+        let mut coefficients = Vec::with_capacity(Self::get_num_terms());
+        for ((self_coeff, rhs_coeff), new_coeff) in self
+            .coefficients
+            .iter()
+            .zip(_rhs.coefficients.iter())
+            .zip(coefficients.iter_mut())
+        {
+            *new_coeff = *self_coeff + *rhs_coeff;
         }
         Polynom4d { coefficients }
     }
@@ -706,16 +670,14 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
     type Output = Polynom4d<N, DEGREE>;
 
     fn sub(self, _rhs: Polynom4d<N, DEGREE>) -> Polynom4d<N, DEGREE> {
-        let mut coefficients = [[[[N::zero(); DEGREE]; DEGREE]; DEGREE]; DEGREE];
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                for k in 0..DEGREE {
-                    for l in 0..DEGREE {
-                        coefficients[i][j][k][l] =
-                            self.coefficients[i][j][k][l] - _rhs.coefficients[i][j][k][l];
-                    }
-                }
-            }
+        let mut coefficients = Vec::with_capacity(Self::get_num_terms());
+        for ((self_coeff, rhs_coeff), new_coeff) in self
+            .coefficients
+            .iter()
+            .zip(_rhs.coefficients.iter())
+            .zip(coefficients.iter_mut())
+        {
+            *new_coeff = *self_coeff - *rhs_coeff;
         }
         Polynom4d { coefficients }
     }
@@ -723,15 +685,9 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
 
 impl<N: PartialEq + Copy, const DEGREE: usize> std::cmp::PartialEq for Polynom4d<N, DEGREE> {
     fn eq(&self, other: &Polynom4d<N, DEGREE>) -> bool {
-        for i in 0..DEGREE {
-            for j in 0..DEGREE {
-                for k in 0..DEGREE {
-                    for l in 0..DEGREE {
-                        if self.coefficients[i][j][k][l] != other.coefficients[i][j][k][l] {
-                            return false;
-                        }
-                    }
-                }
+        for (self_coeff, rhs_coeff) in self.coefficients.iter().zip(other.coefficients.iter()) {
+            if self_coeff != rhs_coeff {
+                return false;
             }
         }
         true
