@@ -125,7 +125,7 @@ fn clip_ray_poly(pos: vec2<f32>, num_edge: u32, size: f32) -> bool {
 }
 
 fn isNan( val: f32 ) -> bool {
-  if ( val < 0.0 || 0.0 < val || val == 0.0 ) {
+  if ( val < 0.0 || 0.0 <= val) {
     return false;
   } else {
     return true;
