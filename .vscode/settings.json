@@ -1,6 +1,5 @@
 {
     "nixEnvSelector.suggestion": false,
     "nixEnvSelector.nixFile": "${workspaceRoot}/shell.nix",
-    "cmake.configureOnOpen": false,
-    "rust-analyzer.checkOnSave.command": "clippy"
+    // "rust-analyzer.checkOnSave.command": "clippy"
 }
