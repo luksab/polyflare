@@ -41,10 +41,8 @@ pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue, p
 
     if let Ok(()) = pollster::block_on(buffer_future) {
         let mut data = buffer_slice.get_mapped_range().to_vec();
-        // BGR TO RGB
-        for chunk in data.chunks_mut(4) {
-            chunk.swap(0, 2);
-        }
+        // BGRa TO RGBa
+        data.chunks_mut(4).for_each(|chunk| chunk.swap(0, 2));
 
         let path = Path::new(path);
         let file = File::create(path).unwrap();
