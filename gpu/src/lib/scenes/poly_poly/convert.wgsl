@@ -6,6 +6,20 @@ struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
 };
 
+struct InitRay {
+  o: vec3<f32>;
+  wavelength: f32;
+  d: vec3<f32>;
+  strength: f32;
+};
+// static parameters for positions
+struct PosParams {
+  // the Ray to be modified as a base for ray tracing
+  init: InitRay;
+  // position of the sensor in the optical plane
+  sensor: f32;
+  width: f32;
+};
 
 struct SimParams {
   opacity: f32;
@@ -40,6 +54,7 @@ struct Polynomial {
 };
 
 [[group(1), binding(2)]] var<uniform> params : SimParams;
+[[group(1), binding(0)]] var<uniform> posParams : PosParams;
 
 [[group(2), binding(0)]] var<storage, read> terms : Polynomial;
 [[group(2), binding(1)]] var<uniform> polyParams : PolyParams;
@@ -106,18 +121,20 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var pos = vec2<f32>(in.clip_position.x - w/2., in.clip_position.y - h/2.) / ratio + 0.5;
     pos.x = clamp(pos.x, 0., 1.);
     pos.y = clamp(pos.y, 0., 1.);
+    pos = pos * posParams.width - posParams.width/2.;
     let sample = textureSample(t_diffuse, s_diffuse, pos);
     var bg = vec4<f32>(0.0,0.0,0.0,1.0);
 
     var bright = 0.;
     let num_polys = arrayLength(&terms.monomials) / polyParams.num_terms;
-    for (var i = u32(0); i < num_polys; i = i + u32(1)) {
-        let poly_res = eval(vec4<f32>(0., 0., pos.x, pos.y), i);
-        bright = bright + abs(poly_res);
-    }
-    // let bright = eval(vec4<f32>(0., 0., pos.x, pos.y), u32(0));
+    // for (var i = u32(0); i < num_polys; i = i + u32(1)) {
+    //     let poly_res = eval(vec4<f32>(0., 0., pos.x, pos.y), i);
+    //     bright = bright + abs(poly_res);
+    // }
+    // let bright = 100. * pos.x * pos.y;
+    let bright = eval(vec4<f32>(posParams.init.o.xy, pos.x, pos.y), u32(3));
 
     // let color = bg * (1.0 - sample.a) + sample;
-    let color = vec4<f32>( vec3<f32>(bright * 0.01), 1.);
+    let color = vec4<f32>( vec3<f32>(-bright * 0.01 * params.opacity, bright * 0.01 * params.opacity, 0.), 1.);
     return color;
 }
