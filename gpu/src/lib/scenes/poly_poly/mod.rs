@@ -111,8 +111,8 @@ impl GpuPolynomials {
                 let dots = lens.get_dots(
                     num_dots as u32,
                     cgmath::Vector3 {
-                        x: pos_params[0] as f64,
-                        y: pos_params[1] as f64,
+                        x: 0.,
+                        y: 0.,
                         z: pos_params[2] as f64,
                     },
                     which_ghost as u32,
