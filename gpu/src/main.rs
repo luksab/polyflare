@@ -226,6 +226,10 @@ fn main() {
                 let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) =
                     lens_ui.build_ui(&ui, &state.device, &state.queue);
 
+                if update_lens {
+                    poly_poly.update_poly(&state.device, &lens_ui);
+                }
+
                 // Render normally at background
                 poly_optics.update(&state.device, &lens_ui);
 
