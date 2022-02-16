@@ -105,79 +105,80 @@ impl GpuPolynomials {
         degree: usize,
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
+        let now = Instant::now();
         let polynomials = Arc::new(Mutex::new(vec![]));
         let mut handles = vec![];
 
         let pos_params = lens_state.pos_params.clone();
         let lens = lens_state.actual_lens.clone();
         for which_ghost in 1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len() {
-            let lens = lens.clone();
-            let polynomials = polynomials.clone();
-            handles.push(thread::spawn(move || {
-                let width = 1.;
-                let mut points = vec![];
-                let dots = lens.get_dots(
-                    num_dots as u32,
-                    cgmath::Vector3 {
-                        x: 0.,
-                        y: 0.,
-                        z: pos_params[2] as f64,
-                    },
-                    which_ghost as u32,
-                    pos_params[8] as f64,
-                    [width as f64, width as f64],
-                );
-                println!("dots: {}", dots.len());
-                for dot in dots.iter() {
-                    if dot.strength.is_finite() {
-                        let point = (
-                            dot.init_pos[0],
-                            dot.init_pos[1],
-                            dot.init_pos[2],
-                            dot.init_pos[3],
-                            // dot.strength,
-                            dot.pos[0],
-                        );
-                        points.push(point);
+            for dir_xy in 0..=1 {
+                let lens = lens.clone();
+                let polynomials = polynomials.clone();
+                handles.push(thread::spawn(move || {
+                    let width = 1.;
+                    let mut dots = vec![];
+                    while dots.len() < num_dots {
+                        dots.append(&mut lens.get_dots(
+                            num_dots as u32,
+                            cgmath::Vector3 {
+                                x: 0.,
+                                y: 0.,
+                                z: pos_params[2] as f64,
+                            },
+                            which_ghost as u32,
+                            pos_params[8] as f64,
+                            [width as f64, width as f64],
+                        ));
                     }
-                }
-                let points = points; // make points immutable
-                println!("points: {}", points.len());
-                if dots.len() == 0 {
-                    println!(
-                        "no dots, skipping {} at [{},{},{}]",
-                        which_ghost, pos_params[0], pos_params[1], pos_params[2]
-                    );
-                    return;
-                }
+                    println!("dots: {}", dots.len());
 
-                let now = Instant::now();
-                let filtered_points = points
-                    // .clone()
-                    .into_iter()
-                    // .filter(|point| point.4.is_finite())
-                    .map(|point| {
-                        (
-                            point.0 as f64,
-                            point.1 as f64,
-                            point.2 as f64,
-                            point.3 as f64,
-                            point.4 as f64,
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let polynom = Polynom4d::<_>::fit(&filtered_points, degree);
-                println!("Fitting took {:?}", now.elapsed());
-                println!("{}", polynom);
-                let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
-                polynomials.lock().unwrap().push(sparse_poly);
-            }));
+                    let mut points = vec![];
+                    for dot in dots.iter() {
+                        if dot.strength.is_finite() {
+                            let point = (
+                                dot.init_pos[0],
+                                dot.init_pos[1],
+                                dot.init_pos[2],
+                                dot.init_pos[3],
+                                // dot.strength,
+                                dot.pos[dir_xy],
+                            );
+                            points.push(point);
+                        }
+                    }
+                    let points = points; // make points immutable
+                    println!("points: {}", points.len());
+
+                    let now = Instant::now();
+                    let filtered_points = points
+                        // .clone()
+                        .into_iter()
+                        // .filter(|point| point.4.is_finite())
+                        .map(|point| {
+                            (
+                                point.0 as f64,
+                                point.1 as f64,
+                                point.2 as f64,
+                                point.3 as f64,
+                                point.4 as f64,
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let polynom = Polynom4d::<_>::fit(&filtered_points, degree);
+                    println!("Fitting took {:?}", now.elapsed());
+                    println!("{}", polynom);
+                    let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
+                    polynomials.lock().unwrap().push(sparse_poly);
+                }));
+            }
         }
 
         for handle in handles {
             handle.join().unwrap();
         }
 
+        println!("Computing polynomials took {:?}", now.elapsed());
         Arc::try_unwrap(polynomials).unwrap().into_inner().unwrap()
     }
 
@@ -673,9 +674,22 @@ impl PolyPoly {
         config: &SurfaceConfiguration,
         lens_state: &LensState,
     ) -> Self {
-        let num_terms = 80;
-        let num_samples = 10000;
-        let degree = 5;
+        let num_terms = 40;
+        let degree = 7;
+        let num_samples = 10 * {
+            let mut num_terms = 0;
+            for i in 0..=degree {
+                for j in 0..=degree - i {
+                    for k in 0..=degree - (i + j) {
+                        for _ in 0..=degree - (i + j + k) {
+                            num_terms += 1;
+                        }
+                    }
+                }
+            }
+            num_terms
+        };
+        println!("number of terms: {}", num_samples / 10);
         let polynomials = GpuPolynomials::new(num_samples, num_terms, degree, lens_state, device);
 
         let format = wgpu::TextureFormat::Rgba16Float;

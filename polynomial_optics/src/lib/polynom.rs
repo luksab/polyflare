@@ -352,17 +352,17 @@ impl<N: PartialEq + Copy, const DEGREE: usize> std::cmp::PartialEq for Polynom2d
 }
 
 #[derive(Debug, Clone)]
-pub struct Polynom4d<N, const DEGREE: usize> {
+pub struct Polynom4d<N> {
     pub coefficients: Vec<N>,
+    degree: usize,
 }
 
-impl<N: Copy + Zero + PartialOrd + Neg<Output = N>, const DEGREE: usize> Display
-    for Polynom4d<N, DEGREE>
+impl<N: Copy + Zero + PartialOrd + Neg<Output = N>> Display for Polynom4d<N>
 where
     N: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let terms = Self::get_terms();
+        let terms = self.get_terms();
         for (&coefficient, (i, j, k, l)) in self.coefficients.iter().zip(terms) {
             if i != 0 || j != 0 || k != 0 || l != 0 {
                 if coefficient >= N::zero() {
@@ -403,14 +403,14 @@ where
     }
 }
 
-impl<N, const DEGREE: usize> Polynom4d<N, DEGREE> {
-    pub fn get_terms() -> Vec<(usize, usize, usize, usize)> {
+impl<N> Polynom4d<N> {
+    pub fn get_terms(&self) -> Vec<(usize, usize, usize, usize)> {
         let mut terms = vec![];
 
-        for i in 0..DEGREE {
-            for j in 0..DEGREE - i {
-                for k in 0..DEGREE - (i + j) {
-                    for l in 0..DEGREE - (i + j + k) {
+        for i in 0..=self.degree {
+            for j in 0..=self.degree - i {
+                for k in 0..=self.degree - (i + j) {
+                    for l in 0..=self.degree - (i + j + k) {
                         terms.push((i, j, k, l));
                     }
                 }
@@ -419,12 +419,27 @@ impl<N, const DEGREE: usize> Polynom4d<N, DEGREE> {
         terms
     }
 
-    fn get_num_terms() -> usize {
+    fn get_terms_fn(degree: usize) -> Vec<(usize, usize, usize, usize)> {
+        let mut terms = vec![];
+
+        for i in 0..=degree {
+            for j in 0..=degree - i {
+                for k in 0..=degree - (i + j) {
+                    for l in 0..=degree - (i + j + k) {
+                        terms.push((i, j, k, l));
+                    }
+                }
+            }
+        }
+        terms
+    }
+
+    fn get_num_terms(&self) -> usize {
         let mut num_terms = 0;
-        for i in 0..DEGREE {
-            for j in 0..DEGREE - i {
-                for k in 0..DEGREE - (i + j) {
-                    for _ in 0..DEGREE - (i + j + k) {
+        for i in 0..=self.degree {
+            for j in 0..=self.degree - i {
+                for k in 0..=self.degree - (i + j) {
+                    for _ in 0..=self.degree - (i + j + k) {
                         num_terms += 1;
                     }
                 }
@@ -449,8 +464,7 @@ impl<
             + mathru::algebra::abstr::AbsDiffEq
             + mathru::elementary::Power
             + Copy,
-        const DEGREE: usize,
-    > Polynom4d<N, DEGREE>
+    > Polynom4d<N>
 {
     fn dist(phi: &crate::Polynomial<N, 4>, points: &[(N, N, N, N, N)]) -> N {
         let mut result = <N as num::Zero>::zero();
@@ -486,7 +500,7 @@ impl<
     ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut now = Instant::now();
-        let terms = Self::get_terms();
+        let terms = self.get_terms();
 
         // for (counter, (((i, j), k), l)) in (0..DEGREE)
         //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
@@ -565,13 +579,11 @@ impl<
     }
 }
 
-impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usize>
-    Polynom4d<N, DEGREE>
-{
+impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>> Polynom4d<N> {
     /// Evaluate polynomial at a point
     pub fn eval(&self, x: N, y: N, z: N, w: N) -> N {
         let mut sum: N = N::zero();
-        let terms = Self::get_terms();
+        let terms = self.get_terms();
         for (&(i, j, k, l), &coefficient) in terms.iter().zip(self.coefficients.iter()) {
             sum += coefficient * x.upow(i) * y.upow(j) * z.upow(k) * w.upow(l);
         }
@@ -580,11 +592,7 @@ impl<N: PowUsize + AddAssign + Zero + Copy + Mul<Output = N>, const DEGREE: usiz
 }
 
 #[allow(clippy::many_single_char_names)]
-impl<
-        N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq,
-        const DEGREE: usize,
-    > Polynom4d<N, DEGREE>
-{
+impl<N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq> Polynom4d<N> {
     /// polynomial regression
     /// ```
     /// use polynomial_optics::*;
@@ -606,8 +614,8 @@ impl<
     /// println!("{:?}", res);
     /// assert!(f == res);
     /// ```
-    pub fn fit(points: &[(N, N, N, N, N)]) -> Polynom4d<N, DEGREE> {
-        let terms = Self::get_terms();
+    pub fn fit(points: &[(N, N, N, N, N)], degree: usize) -> Polynom4d<N> {
+        let terms = Self::get_terms_fn(degree);
         let num_terms = terms.len();
         println!("num of points: {}", points.len());
         let mut now = std::time::Instant::now();
@@ -618,10 +626,7 @@ impl<
 
         // iter_mut is column first
         for (iter, element) in m.iter_mut().enumerate() {
-            let (point, i) = (
-                iter / (num_terms),
-                iter % (num_terms),
-            );
+            let (point, i) = (iter / (num_terms), iter % (num_terms));
             let a = terms[i];
             *element = (points[point].0).upow(a.0)
                 * (points[point].1).upow(a.1)
@@ -641,17 +646,19 @@ impl<
             coefficients.push(*element);
         }
         println!("coefficients: {:?}", now.elapsed());
-        Polynom4d { coefficients }
+        Polynom4d {
+            coefficients,
+            degree,
+        }
     }
 }
 
-impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom4d<N, DEGREE>>
-    for Polynom4d<N, DEGREE>
-{
-    type Output = Polynom4d<N, DEGREE>;
+impl<N: Add + Copy + Zero> std::ops::Add<Polynom4d<N>> for Polynom4d<N> {
+    type Output = Polynom4d<N>;
 
-    fn add(self, _rhs: Polynom4d<N, DEGREE>) -> Polynom4d<N, DEGREE> {
-        let mut coefficients = Vec::with_capacity(Self::get_num_terms());
+    fn add(self, _rhs: Polynom4d<N>) -> Polynom4d<N> {
+        assert!(self.degree == _rhs.degree);
+        let mut coefficients = Vec::with_capacity(self.get_num_terms());
         for ((self_coeff, rhs_coeff), new_coeff) in self
             .coefficients
             .iter()
@@ -660,17 +667,19 @@ impl<N: Add + Copy + Zero, const DEGREE: usize> std::ops::Add<Polynom4d<N, DEGRE
         {
             *new_coeff = *self_coeff + *rhs_coeff;
         }
-        Polynom4d { coefficients }
+        Polynom4d {
+            coefficients,
+            degree: self.degree,
+        }
     }
 }
 
-impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polynom4d<N, DEGREE>>
-    for Polynom4d<N, DEGREE>
-{
-    type Output = Polynom4d<N, DEGREE>;
+impl<N: Sub<Output = N> + Copy + Zero> std::ops::Sub<Polynom4d<N>> for Polynom4d<N> {
+    type Output = Polynom4d<N>;
 
-    fn sub(self, _rhs: Polynom4d<N, DEGREE>) -> Polynom4d<N, DEGREE> {
-        let mut coefficients = Vec::with_capacity(Self::get_num_terms());
+    fn sub(self, _rhs: Polynom4d<N>) -> Polynom4d<N> {
+        assert!(self.degree == _rhs.degree);
+        let mut coefficients = Vec::with_capacity(self.get_num_terms());
         for ((self_coeff, rhs_coeff), new_coeff) in self
             .coefficients
             .iter()
@@ -679,12 +688,16 @@ impl<N: Sub<Output = N> + Copy + Zero, const DEGREE: usize> std::ops::Sub<Polyno
         {
             *new_coeff = *self_coeff - *rhs_coeff;
         }
-        Polynom4d { coefficients }
+        Polynom4d {
+            coefficients,
+            degree: self.degree,
+        }
     }
 }
 
-impl<N: PartialEq + Copy, const DEGREE: usize> std::cmp::PartialEq for Polynom4d<N, DEGREE> {
-    fn eq(&self, other: &Polynom4d<N, DEGREE>) -> bool {
+impl<N: PartialEq + Copy> std::cmp::PartialEq for Polynom4d<N> {
+    fn eq(&self, other: &Polynom4d<N>) -> bool {
+        assert!(self.degree == other.degree);
         for (self_coeff, rhs_coeff) in self.coefficients.iter().zip(other.coefficients.iter()) {
             if self_coeff != rhs_coeff {
                 return false;

@@ -117,24 +117,24 @@ var s_diffuse: sampler;
 fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let w = params.window_width_scaled;
     let h = params.window_height_scaled;
-    let ratio = min(w,h);
+    let ratio = max(w,h);
     var pos = vec2<f32>(in.clip_position.x - w/2., in.clip_position.y - h/2.) / ratio + 0.5;
-    pos.x = clamp(pos.x, 0., 1.);
-    pos.y = clamp(pos.y, 0., 1.);
-    pos = pos * posParams.width - posParams.width/2.;
+    // pos.x = clamp(pos.x, 0., 1.);
+    // pos.y = clamp(pos.y, 0., 1.);
+    // pos = pos * posParams.width - posParams.width/2.;
     let sample = textureSample(t_diffuse, s_diffuse, pos);
     var bg = vec4<f32>(0.0,0.0,0.0,1.0);
 
-    var bright = 0.;
-    let num_polys = arrayLength(&terms.monomials) / polyParams.num_terms;
+    // var bright = 0.;
+    // let num_polys = arrayLength(&terms.monomials) / polyParams.num_terms;
     // for (var i = u32(0); i < num_polys; i = i + u32(1)) {
     //     let poly_res = eval(vec4<f32>(0., 0., pos.x, pos.y), i);
     //     bright = bright + abs(poly_res);
     // }
     // let bright = 100. * pos.x * pos.y;
-    let bright = eval(vec4<f32>(posParams.init.o.xy, pos.x, pos.y), u32(3));
+    // let bright = eval(vec4<f32>(posParams.init.o.xy, pos.x, pos.y), u32(0));
 
-    // let color = bg * (1.0 - sample.a) + sample;
-    let color = vec4<f32>( vec3<f32>(-bright * 0.01 * params.opacity, bright * 0.01 * params.opacity, 0.), 1.);
+    let color = bg * (1.0 - sample.a) + sample;
+    // let color = vec4<f32>( vec3<f32>(-bright * 0.01 * params.opacity, bright * 0.01 * params.opacity, 0.), 1.);
     return color;
 }
