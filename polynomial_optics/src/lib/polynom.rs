@@ -514,15 +514,18 @@ impl<
             if counter > num_max_terms && cheap {
                 break;
             }
-
-            if now.elapsed().as_secs() > 0 {
-                println!("{}: took {:?}", counter, now.elapsed());
-                now = Instant::now();
+            if cfg!(debug_assertions) {
+                if now.elapsed().as_secs() > 0 {
+                    println!("{}: took {:?}", counter, now.elapsed());
+                    now = Instant::now();
+                }
             }
 
             let mut min = Self::dist(&phi, points);
             // let mut min = points.iter().map(|p| p.4.upow(2)).sum::<N>().sqrt();
-            print!("{}: {}", counter, min);
+            if cfg!(debug_assertions) {
+                print!("{}: {}", counter, min);
+            }
             phi.terms.push(self.get_monomial(i, j, k, l, coefficient));
             min = Self::dist(&phi, points);
             let (mut min_i, mut min_j, mut min_k, mut min_l, mut min_c) = (i, j, k, l, coefficient);
@@ -554,7 +557,9 @@ impl<
                 phi.fit(points);
                 return phi;
             }
-            println!(" {}", min);
+            if cfg!(debug_assertions) {
+                println!(" {}", min);
+            }
             if phi.terms.len() < num_max_terms {
                 phi.terms
                     .push(self.get_monomial(min_i, min_j, min_k, min_l, min_c));
@@ -573,7 +578,9 @@ impl<
             // println!("post-fit: {}", phi);
         }
 
-        println!("resulting polynomial: {:?}", phi);
+        if cfg!(debug_assertions) {
+            println!("resulting polynomial: {:?}", phi);
+        }
         println!("total time: {:?}", now.elapsed());
         phi
     }

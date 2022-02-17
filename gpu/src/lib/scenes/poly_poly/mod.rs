@@ -166,7 +166,9 @@ impl GpuPolynomials {
 
                     let polynom = Polynom4d::<_>::fit(&filtered_points, degree);
                     println!("Fitting took {:?}", now.elapsed());
-                    println!("{}", polynom);
+                    if cfg!(config_assertions) {
+                        println!("{}", polynom);
+                    }
                     let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
                     sparse_poly
                 }));
@@ -241,7 +243,7 @@ impl GpuPolynomials {
             .map(|num| num as f32)
             .collect();
 
-        println!("poly_data: {:?}", poly_data);
+        // println!("poly_data: {:?}", poly_data);
 
         let polynomial_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&"Poly Buffer".to_string()),
@@ -689,7 +691,6 @@ impl PolyPoly {
             }
             num_terms
         };
-        println!("number of terms: {}", num_samples / 10);
         let polynomials = GpuPolynomials::new(num_samples, num_terms, degree, lens_state, device);
 
         let format = wgpu::TextureFormat::Rgba16Float;
