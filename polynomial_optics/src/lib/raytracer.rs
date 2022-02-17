@@ -639,7 +639,7 @@ pub struct Lens {
 impl Hash for Lens {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.elements.hash(state);
-        let mut v = self.sensor_dist.to_bits();
+        let v = self.sensor_dist.to_bits();
         v.hash(state);
     }
 }
