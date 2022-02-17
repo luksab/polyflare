@@ -4,7 +4,6 @@ use std::{
     hash::{Hash, Hasher},
     iter,
     path::Path,
-    sync::{Arc, Mutex},
     thread,
     time::Instant,
 };
@@ -106,7 +105,7 @@ impl GpuPolynomials {
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
         let now = Instant::now();
-        let polynomials = Arc::new(Mutex::new(vec![]));
+        let mut polynomials = vec![];
         let mut handles = vec![];
 
         let pos_params = lens_state.pos_params.clone();
@@ -114,7 +113,6 @@ impl GpuPolynomials {
         for which_ghost in 1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len() {
             for dir_xy in 0..=1 {
                 let lens = lens.clone();
-                let polynomials = polynomials.clone();
                 handles.push(thread::spawn(move || {
                     let width = 1.;
                     let mut dots = vec![];
@@ -165,21 +163,23 @@ impl GpuPolynomials {
                             )
                         })
                         .collect::<Vec<_>>();
+
                     let polynom = Polynom4d::<_>::fit(&filtered_points, degree);
                     println!("Fitting took {:?}", now.elapsed());
                     println!("{}", polynom);
                     let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
-                    polynomials.lock().unwrap().push(sparse_poly);
+                    sparse_poly
                 }));
             }
         }
 
         for handle in handles {
-            handle.join().unwrap();
+            polynomials.push(handle.join().unwrap());
         }
 
         println!("Computing polynomials took {:?}", now.elapsed());
-        Arc::try_unwrap(polynomials).unwrap().into_inner().unwrap()
+        // Arc::try_unwrap(polynomials).unwrap().into_inner().unwrap()
+        polynomials
     }
 
     fn get_polynomials(
