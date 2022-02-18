@@ -6,6 +6,9 @@ Polynomial_optics also contains the CPU code for raytracing though the lens syst
 
 All the GPU code is in the [gpu crate](https://github.com/luksab/polyflare/tree/master/gpu).
 
+# Thesis
+The thesis is available [here](https://github.com/luksab/thesis).
+
 ## Building
 You'll need [Rust](https://www.rust-lang.org/learn/get-started) and some additional dependencies on Linux, which could be installed by running
 ```
