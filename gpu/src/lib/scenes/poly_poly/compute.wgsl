@@ -447,7 +447,7 @@ fn eval(x: vec4<f32>, index: u32) -> f32 {
     var res = 0.;
     for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.a > 0.) {
                 if (i32(term.a) % 2 == 1 && x.x < 0.) {
@@ -488,7 +488,7 @@ fn eval_deriv(x: vec4<f32>, index: u32) -> vec4<f32> {
     // da
     for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.a > 1.) {
                 if (i32(term.a) % 2 == 1 && x.x < 0.) {
@@ -524,7 +524,7 @@ fn eval_deriv(x: vec4<f32>, index: u32) -> vec4<f32> {
     // db
     for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.a > 0.) {
                 if (i32(term.a) % 2 == 1 && x.x < 0.) {
@@ -560,7 +560,7 @@ fn eval_deriv(x: vec4<f32>, index: u32) -> vec4<f32> {
     // dc
     for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.a > 0.) {
                 if (i32(term.a) % 2 == 1 && x.x < 0.) {
@@ -596,7 +596,7 @@ fn eval_deriv(x: vec4<f32>, index: u32) -> vec4<f32> {
     // dd
     for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.a > 0.) {
                 if (i32(term.a) % 2 == 1 && x.x < 0.) {
@@ -637,7 +637,7 @@ fn eval_deriv_zw(x: vec4<f32>, index: u32) -> vec2<f32> {
     // dc
     for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.a > 0.) {
                 if (i32(term.a) % 2 == 1 && x.x < 0.) {
@@ -673,7 +673,7 @@ fn eval_deriv_zw(x: vec4<f32>, index: u32) -> vec2<f32> {
     // dd
     for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.a > 0.) {
                 if (i32(term.a) % 2 == 1 && x.x < 0.) {
@@ -716,7 +716,7 @@ fn eval_grad_zw(x: vec4<f32>, index: u32) -> f32 {
     // dc z
     for (var i = u32(poyly_index); i < polyParams.num_terms + poyly_index; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.c == 0.) {
                 term_res = 0.;
@@ -750,14 +750,14 @@ fn eval_grad_zw(x: vec4<f32>, index: u32) -> f32 {
                     }
                 }
             }
-            dz.x = term_res;
+            dz.x = dz.x + term_res;
         }
     }
 
     // dc w
     for (var i = u32(poyly_index) + polyParams.num_terms; i < u32(2) * polyParams.num_terms + poyly_index; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.c == 0.) {
                 term_res = 0.;
@@ -791,14 +791,14 @@ fn eval_grad_zw(x: vec4<f32>, index: u32) -> f32 {
                     }
                 }
             }
-            dz.y = term_res;
+            dz.y = dz.y + term_res;
         }
     }
 
     // dd z
     for (var i = u32(poyly_index); i < polyParams.num_terms + poyly_index; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.d == 0.) {
                 term_res = 0.;
@@ -832,14 +832,14 @@ fn eval_grad_zw(x: vec4<f32>, index: u32) -> f32 {
                     }
                 }
             }
-            dw.x = term_res;
+            dw.x = dw.x + term_res;
         }
     }
 
     // dd w
     for (var i = u32(poyly_index) + polyParams.num_terms; i < u32(2) * polyParams.num_terms + poyly_index; i = i + u32(1)) {
         let term = terms.monomials[i];
-        if (term.coefficient > 0. || term.coefficient < 0.) {
+        if (term.coefficient != 0.) {
             var term_res = term.coefficient;
             if (term.d == 0.) {
                 term_res = 0.;
@@ -873,11 +873,11 @@ fn eval_grad_zw(x: vec4<f32>, index: u32) -> f32 {
                     }
                 }
             }
-            dw.y = term_res;
+            dw.y = dw.y + term_res;
         }
     }
 
-    return dz.x * dw.y - dz.y * dw.x;
+    return 1. / abs(dz.x * dw.y - dz.y * dw.x);
 }
 
 fn applyPoly(ray: Ray) -> Ray {
@@ -929,6 +929,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
         // Apply the polynomial derivative as strength    
         ray.strength = ray.strength * eval_grad_zw(vec4<f32>(ray.o.xy, dir.xy), u32(ghost_num));
+        // ray.strength = ray.strength * eval(vec4<f32>(ray.o.xy, dir.xy), u32(ghost_num));
+        // ray.strength = 1.;
 
         for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
             let element = elements.el[ele];
