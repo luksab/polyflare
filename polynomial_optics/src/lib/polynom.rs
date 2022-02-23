@@ -497,6 +497,7 @@ impl<
         points: &[(N, N, N, N, N)],
         num_max_terms: usize,
         cheap: bool,
+        dont_inter_fit: bool,
     ) -> crate::Polynomial<N, 4> {
         let mut phi = crate::Polynomial::<_, 4>::new(vec![]);
         let mut now = Instant::now();
@@ -574,7 +575,9 @@ impl<
                 }
             }
             // println!("pre-fit: {}", phi);
-            phi.fit(points);
+            if !dont_inter_fit {
+                phi.fit(points);
+            }
             // println!("post-fit: {}", phi);
         }
 

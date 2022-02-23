@@ -169,7 +169,7 @@ impl GpuPolynomials {
                     if cfg!(config_assertions) {
                         println!("{}", polynom);
                     }
-                    let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true);
+                    let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true, true);
                     sparse_poly
                 }));
             }
