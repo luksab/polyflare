@@ -218,7 +218,7 @@ fn propagate_element(
             cy = position - radius;
         };
         let c = vec2<f32>(0., cy);
-        let o = vec2<f32>(ray.o.x,ray.o.z);
+        let o = vec2<f32>(ray.o.x, ray.o.z);
         let d = normalize(vec2<f32>(ray.d.x, ray.d.z));
         let delta = dot(d, o - c) * dot(d, o - c)
                     - (length(o - c) * length(o - c) - radius * radius);
@@ -905,12 +905,11 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         // modify both directions according to our index
         dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
         dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
-        dir = normalize(dir);
-        var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
-        ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
-
         // Apply the polynomial derivative as strength
-        ray.strength = ray.strength * pow(length(eval_grad_zw(vec4<f32>(ray.o.xy, dir.xy), u32(ghost_num))), 1.) * 0.75;        
+        let strength = pow(length(eval_grad_zw(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost))), 2.) * 0.75;
+        dir = normalize(dir);
+        var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, strength * str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
+        ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
 
         for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
             let element = elements.el[ele];
