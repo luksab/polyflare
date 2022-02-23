@@ -1,4 +1,9 @@
-use std::{fs::OpenOptions, io::Write, path::Path, hash::{Hash, Hasher}};
+use std::{
+    fs::OpenOptions,
+    hash::{Hash, Hasher},
+    io::Write,
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -1307,6 +1312,7 @@ impl Lens {
         which_ghost: u32,
         sensor_pos: f64,
         width: [f64; 2],
+        filter: bool,
     ) -> Vec<DrawRay> {
         // Pick an arbitrary number as seed.
         fastrand::seed(7);
@@ -1353,7 +1359,10 @@ impl Lens {
                         pos.y += fastrand::f64() * width_p - width_p / 2.;
                         let mut ray = Ray::new(pos, dir, [pos.x, pos.y, dir.x, dir.y], wavelength);
                         ray.ghost_num = ghost_num;
-                        rays.push(self.get_ghost_dot(i, j, ray, sensor_pos));
+                        let ray = self.get_ghost_dot(i, j, ray, sensor_pos);
+                        if !filter || ray.o.is_finite() {
+                            rays.push(ray);
+                        }
                     }
                 }
             }

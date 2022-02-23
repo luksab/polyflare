@@ -127,13 +127,14 @@ impl GpuPolynomials {
                             which_ghost as u32,
                             pos_params[8] as f64,
                             [width as f64, width as f64],
+                            true,
                         ));
                     }
                     println!("dots: {}", dots.len());
 
                     let mut points = vec![];
-                    for dot in dots.iter() {
-                        if dot.strength.is_finite() {
+                    for (i, dot) in dots.iter().enumerate() {
+                        if i < num_dots {
                             let point = (
                                 dot.init_pos[0],
                                 dot.init_pos[1],
