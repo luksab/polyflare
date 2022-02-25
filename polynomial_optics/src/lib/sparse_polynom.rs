@@ -97,12 +97,15 @@ impl<N: std::ops::Mul<Output = N>, const VARIABLES: usize> Mul for Monomial<N, V
     }
 }
 
-impl<N: std::cmp::PartialEq + One, const VARIABLES: usize> Display for Monomial<N, VARIABLES>
+impl<N: std::cmp::PartialEq + Zero + One, const VARIABLES: usize> Display for Monomial<N, VARIABLES>
 where
     N: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.coefficient != N::one() {
+        if self.coefficient == N::zero() {
+            return Ok(());
+        }
+        if self.coefficient != N::one() || self.exponents.iter().sum::<usize>() == 0 {
             write!(f, "{}", self.coefficient)?;
         }
         for (variable, &exponent) in self.exponents.iter().enumerate() {
@@ -278,7 +281,10 @@ where
         let mut iter = terms.iter();
         write!(f, "{}", iter.next().unwrap())?;
         for term in iter {
-            write!(f, " + {}", term)?;
+            let str = format!("{}", term);
+            if str.len() > 0 {
+                write!(f, " + {}", str)?;
+            }
         }
         Ok(())
     }
