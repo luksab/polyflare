@@ -13,6 +13,7 @@ fn main() {
 
     // pixmap.save_png("image.png").unwrap();
 
+    /*
     let f = Polynom2d {
         coefficients: [[3.0, 2.0], [1.0, 4.0]],
     };
@@ -31,6 +32,11 @@ fn main() {
     println!("f(x)+g(x)-g(x) = {}", f + g - g);
 
     assert_eq!(f, f + g - g);
+
+    */
+
+    let basis = LegendreBasis::new(4);
+    println!("basis = {}", basis);
 
     let part = Monomial {
         coefficient: 1.0,

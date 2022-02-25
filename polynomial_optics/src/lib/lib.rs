@@ -4,6 +4,9 @@ pub use sparse_polynom::*;
 pub mod polynom;
 pub use polynom::*;
 
+pub mod legendre;
+pub use legendre::*;
+
 pub mod raytracer;
 pub use raytracer::*;
 
