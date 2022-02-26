@@ -25,7 +25,7 @@ impl Display for LegendreBasis {
         // }
         // s.push_str("]");
         // write!(f, "{}", s)
-        
+
         for p in self.basis.iter() {
             s.push_str(&format!("{}", p));
             s.push_str(", \n");
@@ -48,7 +48,8 @@ impl LegendreBasis {
     }
 
     fn nkth(n: usize, k: usize) -> f64 {
-        (num::pow(2, n) * num::integer::binomial(n, k)) as f64
+        f64::sqrt((2. * n as f64 + 1.) / 2.)
+            * (num::pow(2, n) * num::integer::binomial(n, k)) as f64
             * LegendreBasis::extended_binomial_coefficient(((n + k - 1) as f64) / 2., n)
     }
 

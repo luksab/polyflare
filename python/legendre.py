@@ -42,7 +42,7 @@ class Poly:
 
     def __and__(self,b): # scalar product
         f = (self*b).antiDerive()
-        return 0.5*(f(1)-f(-1))
+        return (f(1)-f(-1))
 
     # def __repr__(self):
     #    return "Poly({})".format(self.coef)
