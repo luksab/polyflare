@@ -40,6 +40,34 @@ fn main() {
 
     println!("lut: {:?}", basis.get_luts(10));
 
+    for index in 0..Legendre4d::num_polys(3) {
+        let (i, j, k, l) = Legendre4d::poly_index_to_multi_index(index, 3).unwrap();
+        println!("index: {}, i: {}, j: {}, k: {}, l: {}", index, i, j, k, l);
+        println!(
+            "index: {}",
+            Legendre4d::poly_multi_index_to_index(i, j, k, l, 3).unwrap()
+        );
+    }
+
+    let points = vec![
+        (-1., -1., -1., -1., 0.),
+        (0., 0., 0., 0., 0.5),
+        (1., 1., 1., 1., 1.),
+    ];
+
+    let mut legendre = Legendre4d::new(1);
+
+    println!("legendre: {}", legendre);
+    legendre.fit(&points);
+    println!("legendre: {}", legendre);
+
+    for point in points {
+        println!("point: {:?}", point);
+        let point = (point.0, point.1, point.2, point.3);
+        println!("eval: {}", legendre.eval(&point));
+    }
+
+    return;
     let part = Monomial {
         coefficient: 1.0,
         exponents: [2, 4, 3],
@@ -68,7 +96,7 @@ fn main() {
         radius,
         properties: Properties::Glass(Glass {
             sellmeier: Sellmeier::bk7(),
-            coating: QuarterWaveCoating::none(),//optimal(1.5, 1.0, 0.5),
+            coating: QuarterWaveCoating::none(), //optimal(1.5, 1.0, 0.5),
             entry: true,
             outer_ior: Sellmeier::air(),
             spherical: true,
@@ -80,7 +108,7 @@ fn main() {
         radius,
         properties: Properties::Glass(Glass {
             sellmeier: Sellmeier::bk7(),
-            coating: QuarterWaveCoating::none(),//optimal(1.5, 1.0, 0.5),
+            coating: QuarterWaveCoating::none(), //optimal(1.5, 1.0, 0.5),
             entry: false,
             outer_ior: Sellmeier::air(),
             spherical: true,
