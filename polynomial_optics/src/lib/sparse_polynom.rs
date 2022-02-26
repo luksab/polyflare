@@ -6,7 +6,7 @@ use mathru::algebra::{
     },
 };
 use num::{traits::Zero, One};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
@@ -63,8 +63,7 @@ pow_f!(f64);
 /// println!("{}", pol);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Monomial<N, const VARIABLES: usize>
-{
+pub struct Monomial<N, const VARIABLES: usize> {
     /// the multiplicative coefficient
     pub coefficient: N,
     /// the exponents of the variables in order
@@ -287,6 +286,15 @@ where
             }
         }
         Ok(())
+    }
+}
+
+impl Polynomial<f64, 1> {
+    pub fn lut(&self, min: f64, max: f64, num: usize) -> Vec<f64> {
+        (0..num)
+            .map(|i| min + (max - min) * i as f64 / (num - 1) as f64)
+            .map(|x| self.eval([x]))
+            .collect()
     }
 }
 

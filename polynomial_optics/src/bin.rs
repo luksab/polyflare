@@ -38,6 +38,8 @@ fn main() {
     let basis = LegendreBasis::new(4);
     println!("basis = {}", basis);
 
+    println!("lut: {:?}", basis.get_luts(10));
+
     let part = Monomial {
         coefficient: 1.0,
         exponents: [2, 4, 3],

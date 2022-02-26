@@ -76,4 +76,12 @@ impl LegendreBasis {
         }
         LegendreBasis { degree, basis }
     }
+
+    pub fn get_luts(&self, size: usize) -> Vec<Vec<f64>> {
+        let mut luts = Vec::new();
+        for p in self.basis.iter() {
+            luts.push(p.lut(-1., 1., size));
+        }
+        luts
+    }
 }
