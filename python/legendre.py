@@ -1,5 +1,6 @@
 import numpy as np
 from itertools import product
+import matplotlib.pyplot as plt
 
 class Poly:
     def __init__(self,coef):
@@ -8,6 +9,8 @@ class Poly:
         self.coef=coef
 
     def __call__(self, x):
+        if isinstance(x,np.ndarray):
+            return np.sum(self.coef*x[:,np.newaxis]**np.arange(len(self.coef)),axis=1)
         return np.sum(self.coef*x**np.arange(len(self.coef)))
 
     def antiDerive(self):
@@ -75,6 +78,12 @@ gramSchmidt(basis)
 print(basis)
 for i in range(N):
     print([round(basis[i]&basis[j], 4) for j in range(N)])
+
+X=np.linspace(-1,1,1000)
+for i in range(N):
+    plt.plot(X, basis[i](X))
+
+plt.savefig('legendre.svg')
 
 #types: x: 4d input; i,j,k,l: indices of the basis polynomials
 # total poly: coefficents onto i,j,k,l
