@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::fmt::{Display, Formatter};
 
 use crate::{Monomial, Polynomial};
@@ -92,26 +93,57 @@ impl LegendreBasis {
         points: &[(f64, f64, f64, f64, f64)],
         index: (usize, usize, usize, usize),
     ) -> f64 {
-        let mut sum = 0.;
         let (i, j, k, l) = index;
-        for point in points {
-            sum += point.4
-                * self.basis[i].eval([point.0])
-                * self.basis[j].eval([point.1])
-                * self.basis[k].eval([point.2])
-                * self.basis[l].eval([point.3]);
-            println!("sum: {}", sum);
-        }
-        todo!("find correct normalization");
-        sum / points.len() as f64 * f64::powf(2., 4.)
+        points
+            .par_iter()
+            .map(|p| {
+                p.4 * self.basis[i].eval([p.0])
+                    * self.basis[j].eval([p.1])
+                    * self.basis[k].eval([p.2])
+                    * self.basis[l].eval([p.3])
+            })
+            .sum::<f64>()
+            / points.len() as f64
+            * 16.
+        // * 5.333333333333333
+    }
+
+    pub fn sqare(
+        &self,
+        points: &[(f64, f64, f64, f64, f64)],
+        index: (usize, usize, usize, usize),
+    ) -> f64 {
+        let (i, j, k, l) = index;
+        points
+            .par_iter()
+            .map(|p| {
+                self.basis[i].eval([p.0])
+                    * self.basis[j].eval([p.1])
+                    * self.basis[k].eval([p.2])
+                    * self.basis[l].eval([p.3])
+                    * self.basis[i].eval([p.0])
+                    * self.basis[j].eval([p.1])
+                    * self.basis[k].eval([p.2])
+                    * self.basis[l].eval([p.3])
+            })
+            .sum::<f64>()
+            / points.len() as f64
+            * 16.
+        // * 5.333333333333333
     }
 }
 
 impl Legendre4d {
     pub fn new(degree: usize) -> Legendre4d {
         let mut coefficiencts = vec![];
-        for _ in 0..=degree {
-            coefficiencts.push(1.);
+        for i in 0..=degree {
+            for j in 0..=degree - i {
+                for k in 0..=degree - i - j {
+                    for _ in 0..=degree - i - j - k {
+                        coefficiencts.push(1.);
+                    }
+                }
+            }
         }
         Legendre4d {
             coefficiencts,
@@ -178,25 +210,48 @@ impl Legendre4d {
     }
 
     pub fn fit(&mut self, points: &[(f64, f64, f64, f64, f64)]) {
+        // let _ = (0..Legendre4d::num_polys(self.degree))
+        // .into_iter()
+        // .map(|i| {
+        //     let multi_index = Legendre4d::poly_index_to_multi_index(i, self.degree).unwrap();
+        //     println!("[{:?}]: {}", multi_index, self.basis.sqare(points, multi_index));
+        // }).collect::<Vec<_>>();
+
         self.coefficiencts = (0..Legendre4d::num_polys(self.degree))
+            .into_par_iter()
             .map(|i| {
-                let i = Legendre4d::poly_index_to_multi_index(i, self.degree).unwrap();
-                self.basis.integrate_over_vec(points, i)
+                let multi_index = Legendre4d::poly_index_to_multi_index(i, self.degree).unwrap();
+                self.basis.integrate_over_vec(points, multi_index)
             })
             .collect();
     }
 
     pub fn eval(&self, x: &(f64, f64, f64, f64)) -> f64 {
-        let mut sum = 0.;
-        for (i, c) in self.coefficiencts.iter().enumerate() {
-            let (i, j, k, l) = Legendre4d::poly_index_to_multi_index(i, self.degree).unwrap();
-            sum += c
-                * self.basis.basis[i].eval([x.0])
-                * self.basis.basis[j].eval([x.1])
-                * self.basis.basis[k].eval([x.2])
-                * self.basis.basis[l].eval([x.3]);
-        }
-        sum
+        self.coefficiencts
+            .par_iter()
+            .enumerate()
+            .map(|(index, c)| {
+                let (i, j, k, l) =
+                    Legendre4d::poly_index_to_multi_index(index, self.degree).unwrap();
+                c * self.basis.basis[i].eval([x.0])
+                    * self.basis.basis[j].eval([x.1])
+                    * self.basis.basis[k].eval([x.2])
+                    * self.basis.basis[l].eval([x.3])
+            })
+            .sum::<f64>()
+    }
+
+    pub fn make_sparse(&mut self, size: usize) {
+        let mut coefficients = self.coefficiencts.clone();
+        coefficients.sort_by(|a, b| a.abs().partial_cmp(&b.abs()).unwrap());
+        println!("{:?}", coefficients);
+        self.coefficiencts
+            .iter_mut()
+            .filter(|c| c.abs() <= coefficients[coefficients.len() - 1 - size].abs())
+            .for_each(|c| *c = 0.);
+        println!("{:?}", self.coefficiencts);
+        // for_each(|c| *c = 0.);
+        // coefficients[size];
     }
 }
 

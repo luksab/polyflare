@@ -1,3 +1,4 @@
+use rand::seq::SliceRandom;
 use tiny_skia::*;
 
 mod line;
@@ -40,31 +41,70 @@ fn main() {
 
     println!("lut: {:?}", basis.get_luts(10));
 
-    for index in 0..Legendre4d::num_polys(3) {
-        let (i, j, k, l) = Legendre4d::poly_index_to_multi_index(index, 3).unwrap();
-        println!("index: {}, i: {}, j: {}, k: {}, l: {}", index, i, j, k, l);
-        println!(
-            "index: {}",
-            Legendre4d::poly_multi_index_to_index(i, j, k, l, 3).unwrap()
-        );
-    }
+    // for index in 0..Legendre4d::num_polys(3) {
+    //     let (i, j, k, l) = Legendre4d::poly_index_to_multi_index(index, 3).unwrap();
+    //     println!("index: {}, i: {}, j: {}, k: {}, l: {}", index, i, j, k, l);
+    //     println!(
+    //         "index: {}",
+    //         Legendre4d::poly_multi_index_to_index(i, j, k, l, 3).unwrap()
+    //     );
+    // }
 
-    let points = vec![
-        (-1., -1., -1., -1., 0.),
-        (0., 0., 0., 0., 0.5),
-        (1., 1., 1., 1., 1.),
-    ];
+    // let points = vec![
+    //     (-1., -1., -1., -1., 0.),
+    //     (0., 0., 0., 0., 0.5),
+    //     (1., 1., 1., 1., 1.),
+    // ];
 
-    let mut legendre = Legendre4d::new(1);
+    let side_len = 25;
+    // all possibilities from -1 to 1
+    let points = itertools::iproduct!((0..side_len), (0..side_len), (0..side_len), (0..side_len))
+        .map(|(i, j, k, l)| {
+            // let x = i as f64 / (side_len - 1) as f64 * 2. - 1.;
+            // let y = j as f64 / (side_len - 1) as f64 * 2. - 1.;
+            // let z = k as f64 / (side_len - 1) as f64 * 2. - 1.;
+            // let w = l as f64 / (side_len - 1) as f64 * 2. - 1.;
+            let x = (i as f64 + 0.5) / (side_len) as f64 * 2. - 1.;
+            let y = (j as f64 + 0.5) / (side_len) as f64 * 2. - 1.;
+            let z = (k as f64 + 0.5) / (side_len) as f64 * 2. - 1.;
+            let w = (l as f64 + 0.5) / (side_len) as f64 * 2. - 1.;
+            // randomly select points from -1 to 1: way better than just a grid
+            // let x = rand::random::<f64>() * 2. - 1.;
+            // let y = rand::random::<f64>() * 2. - 1.;
+            // let z = rand::random::<f64>() * 2. - 1.;
+            // let w = rand::random::<f64>() * 2. - 1.;
+            (x, y, z, w, (x*x+y*y).sqrt()*z*w)
+        })
+        .collect::<Vec<_>>();
+
+    println!("points: {:?}", points.len());
+
+    let mut legendre = Legendre4d::new(4);
 
     println!("legendre: {}", legendre);
     legendre.fit(&points);
     println!("legendre: {}", legendre);
 
-    for point in points {
+    // iterate over 10 randomly selected points
+    for point in points.choose_multiple(&mut rand::thread_rng(), 10) {
         println!("point: {:?}", point);
         let point = (point.0, point.1, point.2, point.3);
         println!("eval: {}", legendre.eval(&point));
+    }
+
+    for point in points.choose_multiple(&mut rand::thread_rng(), 10) {
+        // println!("point: {:?}", point);
+        let eval = legendre.eval(&(point.0, point.1, point.2, point.3));
+        println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
+    }
+
+    println!("making sparse");
+    legendre.make_sparse(5);
+
+    for point in points.choose_multiple(&mut rand::thread_rng(), 10) {
+        // println!("point: {:?}", point);
+        let eval = legendre.eval(&(point.0, point.1, point.2, point.3));
+        println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
     }
 
     return;
