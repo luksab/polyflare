@@ -10,6 +10,12 @@ pub struct Legendre4d {
     degree: usize,
 }
 
+pub struct SparseLegendre4d {
+    coefficiencts: Vec<(f64, (usize, usize, usize, usize))>,
+    basis: LegendreBasis,
+    degree: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct LegendreBasis {
     degree: usize,
@@ -226,6 +232,25 @@ impl Legendre4d {
             .collect();
     }
 
+    pub fn error(&self, points: &[(f64, f64, f64, f64, f64)]) -> f64 {
+        (points
+            .par_iter()
+            .map(|p| (p.4 - self.eval(&(p.0, p.1, p.2, p.3))).powi(2))
+            .sum::<f64>()
+            / points.len() as f64)
+            .sqrt()
+    }
+
+    pub fn approx_error(&self, points: &[(f64, f64, f64, f64, f64)], num_samples: usize) -> f64 {
+        let offset = rand::Rng::gen_range(&mut rand::thread_rng(), 0..points.len() - num_samples);
+        (points[offset..offset + num_samples]
+            .par_iter()
+            .map(|p| (p.4 - self.eval(&(p.0, p.1, p.2, p.3))).powi(2))
+            .sum::<f64>()
+            / num_samples as f64)
+            .sqrt()
+    }
+
     pub fn eval(&self, x: &(f64, f64, f64, f64)) -> f64 {
         self.coefficiencts
             .par_iter()
@@ -253,6 +278,28 @@ impl Legendre4d {
         // for_each(|c| *c = 0.);
         // coefficients[size];
     }
+
+    pub fn get_sparse(&self, size: usize) -> SparseLegendre4d {
+        let mut coefficients = self.coefficiencts.clone();
+        coefficients.sort_by(|a, b| a.abs().partial_cmp(&b.abs()).unwrap());
+        let coefficiencts = self
+            .coefficiencts
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.abs() > coefficients[coefficients.len() - 1 - size].abs())
+            .map(|(i, c)| {
+                (
+                    *c,
+                    Legendre4d::poly_index_to_multi_index(i, self.degree).unwrap(),
+                )
+            })
+            .collect();
+        SparseLegendre4d {
+            degree: self.degree,
+            coefficiencts,
+            basis: self.basis.clone(),
+        }
+    }
 }
 
 impl Display for Legendre4d {
@@ -270,5 +317,75 @@ impl Display for Legendre4d {
             ));
         }
         write!(f, "{}", s.join(" + "))
+    }
+}
+
+impl SparseLegendre4d {
+    pub fn eval(&self, x: &(f64, f64, f64, f64)) -> f64 {
+        self.coefficiencts
+            .par_iter()
+            .map(|(c, (i, j, k, l))| {
+                c * self.basis.basis[*i].eval([x.0])
+                    * self.basis.basis[*j].eval([x.1])
+                    * self.basis.basis[*k].eval([x.2])
+                    * self.basis.basis[*l].eval([x.3])
+            })
+            .sum::<f64>()
+    }
+
+    pub fn error(&self, points: &[(f64, f64, f64, f64, f64)]) -> f64 {
+        (points
+            .par_iter()
+            .map(|p| (p.4 - self.eval(&(p.0, p.1, p.2, p.3))).powi(2))
+            .sum::<f64>()
+            / points.len() as f64)
+            .sqrt()
+    }
+
+    pub fn approx_error(&self, points: &[(f64, f64, f64, f64, f64)], num_samples: usize) -> f64 {
+        let offset = rand::Rng::gen_range(&mut rand::thread_rng(), 0..points.len() - num_samples);
+        (points[offset..offset + num_samples]
+            .par_iter()
+            .map(|p| (p.4 - self.eval(&(p.0, p.1, p.2, p.3))).powi(2))
+            .sum::<f64>()
+            / num_samples as f64)
+            .sqrt()
+    }
+
+    /// fit using gradient descent
+    /// at first, each coefficient is fit on its own
+    /// then we fit all coefficients together in a second pass
+    pub fn fit(&mut self, points: &[(f64, f64, f64, f64, f64)]) {
+        let num_samples = 1000;
+        let points = &points[0..num_samples];
+        let num_loop = 200;
+        let delta = 0.00001;
+        let gamma = 5.0;
+        let mut break_counter = 0;
+        for index in 0..self.coefficiencts.len() {
+            for _ in 0..num_loop {
+                let old_error = self.error(points);//self.approx_error(points, num_samples);
+                let coeffiecient = self.coefficiencts[index].0;
+                self.coefficiencts[index].0 += delta;
+                let new_error = self.error(points);//self.approx_error(points, num_samples);
+                self.coefficiencts[index].0 = coeffiecient;
+
+                let grad = (new_error - old_error) / delta;
+                // println!("grad: {}", grad);
+                if grad.abs() < 1e-5 {
+                    // println!("grad: {}\n\n", grad);
+                    break_counter += 1;
+                    break;
+                }
+                self.coefficiencts[index].0 -= gamma * grad;
+                // println!(
+                //     "error: {} -> {}",
+                //     old_error, new_error
+                // );
+                // println!("new error: {}", self.error(points));//self.approx_error(points, num_samples));
+            }
+        }
+        println!("break counter: {} not broken: {}", break_counter, num_samples - break_counter);
+
     }
 }
