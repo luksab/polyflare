@@ -342,8 +342,8 @@ impl SparseLegendre4d {
             .sqrt()
     }
 
-    pub fn approx_error(&self, points: &[(f64, f64, f64, f64, f64)], num_samples: usize) -> f64 {
-        let offset = rand::Rng::gen_range(&mut rand::thread_rng(), 0..points.len() - num_samples);
+    pub fn approx_error(&self, points: &[(f64, f64, f64, f64, f64)], num_samples: usize, offset: usize) -> f64 {
+        
         (points[offset..offset + num_samples]
             .par_iter()
             .map(|p| (p.4 - self.eval(&(p.0, p.1, p.2, p.3))).powi(2))
@@ -357,17 +357,17 @@ impl SparseLegendre4d {
     /// then we fit all coefficients together in a second pass
     pub fn fit(&mut self, points: &[(f64, f64, f64, f64, f64)]) {
         let num_samples = 1000;
-        let points = &points[0..num_samples];
         let num_loop = 200;
         let delta = 0.00001;
         let gamma = 5.0;
         let mut break_counter = 0;
         for index in 0..self.coefficiencts.len() {
             for _ in 0..num_loop {
-                let old_error = self.error(points);//self.approx_error(points, num_samples);
+                let offset = rand::Rng::gen_range(&mut rand::thread_rng(), 0..points.len() - num_samples);
+                let old_error = self.approx_error(points, num_samples, offset);
                 let coeffiecient = self.coefficiencts[index].0;
                 self.coefficiencts[index].0 += delta;
-                let new_error = self.error(points);//self.approx_error(points, num_samples);
+                let new_error = self.approx_error(points, num_samples, offset);
                 self.coefficiencts[index].0 = coeffiecient;
 
                 let grad = (new_error - old_error) / delta;
