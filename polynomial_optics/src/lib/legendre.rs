@@ -1,5 +1,8 @@
+use itertools::Itertools;
+use rand::Rng;
 use rayon::prelude::*;
 use std::fmt::{Display, Formatter};
+use std::io::prelude::*;
 
 use crate::{Monomial, Polynomial};
 
@@ -286,7 +289,10 @@ impl Legendre4d {
             .coefficiencts
             .iter()
             .enumerate()
-            .filter(|(_, c)| c.abs() > coefficients[coefficients.len() - 1 - size].abs())
+            .filter(|(_, c)| {
+                coefficients.len() == size
+                    || c.abs() > coefficients[coefficients.len() - 1 - size].abs()
+            })
             .map(|(i, c)| {
                 (
                     *c,
@@ -342,8 +348,12 @@ impl SparseLegendre4d {
             .sqrt()
     }
 
-    pub fn approx_error(&self, points: &[(f64, f64, f64, f64, f64)], num_samples: usize, offset: usize) -> f64 {
-        
+    pub fn approx_error(
+        &self,
+        points: &[(f64, f64, f64, f64, f64)],
+        num_samples: usize,
+        offset: usize,
+    ) -> f64 {
         (points[offset..offset + num_samples]
             .par_iter()
             .map(|p| (p.4 - self.eval(&(p.0, p.1, p.2, p.3))).powi(2))
@@ -352,18 +362,31 @@ impl SparseLegendre4d {
             .sqrt()
     }
 
+    fn format_coefficients(&self) -> String {
+        self.coefficiencts
+            .iter()
+            .map(|(c, i)| c.to_string())
+            .join(", ")
+    }
+
     /// fit using gradient descent
     /// at first, each coefficient is fit on its own
     /// then we fit all coefficients together in a second pass
     pub fn fit(&mut self, points: &[(f64, f64, f64, f64, f64)]) {
         let num_samples = 1000;
-        let num_loop = 200;
+        let num_loop = 1000;
         let delta = 0.00001;
         let gamma = 5.0;
         let mut break_counter = 0;
+        let momentum_multiplier = 0.5;
+        let mut rng = rand::thread_rng();
+        // first step: fit each coefficient on its own
         for index in 0..self.coefficiencts.len() {
+            let mut momentum = 0.0;
+            let mut min_error = f64::INFINITY;
+
             for _ in 0..num_loop {
-                let offset = rand::Rng::gen_range(&mut rand::thread_rng(), 0..points.len() - num_samples);
+                let offset = rng.gen_range(0..points.len() - num_samples);
                 let old_error = self.approx_error(points, num_samples, offset);
                 let coeffiecient = self.coefficiencts[index].0;
                 self.coefficiencts[index].0 += delta;
@@ -371,12 +394,22 @@ impl SparseLegendre4d {
                 self.coefficiencts[index].0 = coeffiecient;
 
                 let grad = (new_error - old_error) / delta;
+                // if new_error.abs() < min_error {
+                //     min_error = new_error.abs();
+                // }
+                // if new_error > 2. * grad + min_error {
+                //     println!("error diverging, is {}", new_error);
+                //     break_counter += 1;
+                //     break;
+                // }
                 // println!("grad: {}", grad);
                 if grad.abs() < 1e-5 {
                     // println!("grad: {}\n\n", grad);
                     break_counter += 1;
                     break;
                 }
+                // momentum = gamma * grad + momentum_multiplier * momentum;
+                // self.coefficiencts[index].0 -= momentum;
                 self.coefficiencts[index].0 -= gamma * grad;
                 // println!(
                 //     "error: {} -> {}",
@@ -385,7 +418,67 @@ impl SparseLegendre4d {
                 // println!("new error: {}", self.error(points));//self.approx_error(points, num_samples));
             }
         }
-        println!("break counter: {} not broken: {}", break_counter, num_samples - break_counter);
+        println!(
+            "break counter: {} not broken: {}",
+            break_counter,
+            num_samples - break_counter
+        );
 
+        println!("error after step 1: {}", self.error(points));
+
+        // second step: fit all coefficients together
+        let mut grad = vec![0.0; self.coefficiencts.len()];
+        let delta = 0.0000001;
+        let num_samples = 5000;
+        let mut gamma = 1.;
+        let offset = rng.gen_range(0..points.len() - num_samples);
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            // .append(true)
+            .open("python/coefficients.csv")
+            .unwrap();
+        let old_coefficients = self.coefficiencts.clone();
+        let momentum_multiplier = 0.9;
+        let mut gamma = vec![5.0; self.coefficiencts.len()];
+        for _ in 0..500 {
+            let old_error = self.approx_error(points, num_samples, offset);
+            writeln!(file, "{}, {}", old_error, self.format_coefficients()).unwrap();
+
+            println!("error: {}", old_error);
+            for index in 0..self.coefficiencts.len() {
+                let coeffiecient = self.coefficiencts[index].0;
+                // let delta = self.coefficiencts[index].0 * delta;
+                self.coefficiencts[index].0 += delta;
+                let new_error = self.approx_error(points, num_samples, offset);
+                self.coefficiencts[index].0 = coeffiecient;
+
+                let old_grad = grad[index];
+                grad[index] = gamma[index] * (new_error - old_error) / delta
+                    + momentum_multiplier * old_grad;
+                if old_grad.signum() * grad[index].signum() < 0. {
+                    gamma[index] *= 0.5;
+                }
+
+                // grad[index] = (new_error - old_error) / delta;
+            }
+
+            self.coefficiencts
+                .iter_mut()
+                .zip(grad.iter())
+                .for_each(|(c, g)| {
+                    c.0 -= g;
+                });
+            // self.coefficiencts
+            //     .par_iter_mut()
+            //     .zip(old_coefficients.par_iter())
+            //     .filter(|(c, o)| c.0 > 10. * o.0)
+            //     .for_each(|(c, o)| {
+            //         c.0 = o.0;
+            //     });
+        }
+
+        println!("error after step 2: {}", self.error(points));
     }
 }
