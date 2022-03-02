@@ -97,7 +97,74 @@ impl LegendreBasis {
         luts
     }
 
-    fn integrate_over_vec(
+    fn nth_one(n: usize) -> Polynomial<f64, 1> {
+        let mut terms = vec![];
+
+        for k in 0..=n {
+            let monomial = Monomial {
+                coefficient: if k == n { 1. } else { 0. },
+                exponents: [k],
+            };
+            terms.push(monomial);
+        }
+
+        Polynomial::new(terms)
+    }
+    /// creates a LegendreBasis using gram-schmidt orthogonalization
+    /// on the given grid
+    ///
+    /// def gramSchmidt(basis):
+    ///   for i in range(len(basis)):
+    ///     for j in range(i):
+    ///       basis[i] -= basis[j]*(basis[j]&basis[i])
+    ///     basis[i] *= 1/np.sqrt(basis[i]&basis[i])
+    pub fn new_from_grid(
+        degree: usize,
+        num_points: usize,
+        range: std::ops::Range<f64>,
+    ) -> LegendreBasis {
+        let mut basis = vec![];
+        for n in 0..=degree {
+            basis.push(LegendreBasis::nth_one(n));
+        }
+
+        println!(
+            "basis: {}",
+            LegendreBasis {
+                degree: num_points,
+                basis: basis.clone(),
+            }
+        );
+
+        for i in 0..basis.len() {
+            // println!("norm: {}", basis[i].integrate(range.clone(), num_points, &basis[i]));
+            for j in 0..i {
+                basis[i] = &basis[i]
+                    - &(&(&basis[j] * basis[j].integrate(range.clone(), num_points, &basis[i])));
+            }
+            let norm = basis[i].integrate(range.clone(), num_points, &basis[i]);
+            basis[i] = &basis[i] / norm.sqrt();
+            println!("norm: {}", norm);
+        }
+
+        for i in 0..basis.len() {
+            for j in 0..basis.len() {
+                println!(
+                    "{} {} {}",
+                    i,
+                    j,
+                    basis[i].integrate(range.clone(), num_points, &basis[j])
+                );
+            }
+        }
+
+        LegendreBasis {
+            degree: num_points,
+            basis,
+        }
+    }
+
+    fn integrate_over_vec4d(
         &self,
         points: &[(f64, f64, f64, f64, f64)],
         index: (usize, usize, usize, usize),
@@ -117,7 +184,32 @@ impl LegendreBasis {
         // * 5.333333333333333
     }
 
-    pub fn sqare(
+    pub fn integrate_4d(
+        &self,
+        points: &[(f64, f64, f64, f64, f64)],
+        index1: (usize, usize, usize, usize),
+        index2: (usize, usize, usize, usize),
+    ) -> f64 {
+        let (i, j, k, l) = index1;
+        let (i2, j2, k2, l2) = index2;
+        points
+            .par_iter()
+            .map(|p| {
+                self.basis[i].eval([p.0])
+                    * self.basis[j].eval([p.1])
+                    * self.basis[k].eval([p.2])
+                    * self.basis[l].eval([p.3])
+                    * self.basis[i2].eval([p.0])
+                    * self.basis[j2].eval([p.1])
+                    * self.basis[k2].eval([p.2])
+                    * self.basis[l2].eval([p.3])
+            })
+            .sum::<f64>()
+            / points.len() as f64
+            * 16.
+    }
+
+    pub fn square4d(
         &self,
         points: &[(f64, f64, f64, f64, f64)],
         index: (usize, usize, usize, usize),
@@ -143,8 +235,9 @@ impl LegendreBasis {
 }
 
 impl Legendre4d {
-    pub fn new(degree: usize) -> Legendre4d {
+    pub fn new(basis: LegendreBasis) -> Legendre4d {
         let mut coefficiencts = vec![];
+        let degree = basis.degree;
         for i in 0..=degree {
             for j in 0..=degree - i {
                 for k in 0..=degree - i - j {
@@ -156,7 +249,7 @@ impl Legendre4d {
         }
         Legendre4d {
             coefficiencts,
-            basis: LegendreBasis::new(degree),
+            basis,
             degree,
         }
     }
@@ -218,6 +311,7 @@ impl Legendre4d {
         None
     }
 
+    /// fit under the assumption that the basis is orthonomal
     pub fn fit(&mut self, points: &[(f64, f64, f64, f64, f64)]) {
         // let _ = (0..Legendre4d::num_polys(self.degree))
         // .into_iter()
@@ -230,7 +324,7 @@ impl Legendre4d {
             .into_par_iter()
             .map(|i| {
                 let multi_index = Legendre4d::poly_index_to_multi_index(i, self.degree).unwrap();
-                self.basis.integrate_over_vec(points, multi_index)
+                self.basis.integrate_over_vec4d(points, multi_index)
             })
             .collect();
     }
@@ -380,6 +474,7 @@ impl SparseLegendre4d {
         let mut break_counter = 0;
         let momentum_multiplier = 0.5;
         let mut rng = rand::thread_rng();
+        let now = std::time::Instant::now();
         // first step: fit each coefficient on its own
         for index in 0..self.coefficiencts.len() {
             let mut momentum = 0.0;
@@ -418,6 +513,7 @@ impl SparseLegendre4d {
                 // println!("new error: {}", self.error(points));//self.approx_error(points, num_samples));
             }
         }
+        println!("first step took {}ms", now.elapsed().as_millis());
         println!(
             "break counter: {} not broken: {}",
             break_counter,
@@ -441,7 +537,8 @@ impl SparseLegendre4d {
             .unwrap();
         let old_coefficients = self.coefficiencts.clone();
         let momentum_multiplier = 0.9;
-        let mut gamma = vec![5.0; self.coefficiencts.len()];
+        let mut gamma = vec![10.0; self.coefficiencts.len()];
+        let now = std::time::Instant::now();
         for _ in 0..500 {
             let old_error = self.approx_error(points, num_samples, offset);
             writeln!(file, "{}, {}", old_error, self.format_coefficients()).unwrap();
@@ -455,13 +552,11 @@ impl SparseLegendre4d {
                 self.coefficiencts[index].0 = coeffiecient;
 
                 let old_grad = grad[index];
-                grad[index] = gamma[index] * (new_error - old_error) / delta
-                    + momentum_multiplier * old_grad;
+                grad[index] =
+                    gamma[index] * (new_error - old_error) / delta + momentum_multiplier * old_grad;
                 if old_grad.signum() * grad[index].signum() < 0. {
                     gamma[index] *= 0.5;
                 }
-
-                // grad[index] = (new_error - old_error) / delta;
             }
 
             self.coefficiencts
@@ -478,6 +573,8 @@ impl SparseLegendre4d {
             //         c.0 = o.0;
             //     });
         }
+
+        println!("second step took: {}ms", now.elapsed().as_millis());
 
         println!("error after step 2: {}", self.error(points));
     }

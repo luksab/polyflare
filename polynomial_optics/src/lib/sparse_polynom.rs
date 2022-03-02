@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use mathru::algebra::{
     abstr::{AbsDiffEq, Field, Scalar},
     linear::{
@@ -6,11 +7,14 @@ use mathru::algebra::{
     },
 };
 use num::{traits::Zero, One};
+use rand::Rng;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::io::prelude::*;
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg},
+    ops::{Add, AddAssign, Div, Mul, MulAssign, Neg},
 };
 
 pub trait PowUsize {
@@ -91,6 +95,23 @@ impl<N: std::ops::Mul<Output = N>, const VARIABLES: usize> Mul for Monomial<N, V
         }
         Monomial {
             coefficient: self.coefficient * rhs.coefficient,
+            exponents,
+        }
+    }
+}
+
+impl<'a, N: Copy + PartialOrd + AddAssign + std::ops::Mul<Output = N>, const VARIABLES: usize>
+    std::ops::Mul<N> for &'a Monomial<N, VARIABLES>
+{
+    type Output = Monomial<N, VARIABLES>;
+
+    fn mul(self, rhs: N) -> Self::Output {
+        let mut exponents = self.exponents;
+        for i in 0..VARIABLES {
+            exponents[i] = self.exponents[i];
+        }
+        Monomial {
+            coefficient: self.coefficient * rhs,
             exponents,
         }
     }
@@ -265,6 +286,34 @@ impl<const VARIABLES: usize> Polynomial<f64, VARIABLES> {
     }
 }
 
+impl Polynomial<f64, 1> {
+    pub fn integrate(
+        &self,
+        range: std::ops::Range<f64>,
+        num_points: usize,
+        other: &Polynomial<f64, 1>,
+    ) -> f64 {
+        (0..num_points)
+            .into_par_iter()
+            .map(|i| {
+                range.start + (i as f64) * (range.end - range.start) / (num_points - 1) as f64
+                // - (range.end - range.start) / 2.0
+            })
+            // .map(|x| {
+            //     println!("x={}", x);
+            //     x
+            // })
+            // .map(|p| {
+            //     println!("{}  {}", self.eval([p]), other.eval([p]));
+            //     p
+            // })
+            .map(|p| self.eval([p]) * other.eval([p]))
+            .sum::<f64>()
+            * (range.end - range.start)
+            / num_points as f64
+    }
+}
+
 impl<N: Copy + Zero + One + PartialOrd + Neg<Output = N>, const VARIABLES: usize> Display
     for Polynomial<N, VARIABLES>
 where
@@ -410,6 +459,88 @@ impl<'a, 'b, N: Add + Copy + Zero + PartialOrd, const VARIABLES: usize>
     }
 }
 
+impl<N: Neg<Output = N> + Copy, const VARIABLES: usize> std::ops::Neg for Polynomial<N, VARIABLES> {
+    type Output = Polynomial<N, VARIABLES>;
+
+    fn neg(self) -> Polynomial<N, VARIABLES> {
+        let mut terms = self.terms.clone();
+        for term in &mut terms {
+            term.coefficient = -term.coefficient;
+        }
+        Polynomial { terms: self.terms }
+    }
+}
+
+impl<
+        'a,
+        'b,
+        N: std::ops::Sub<Output = N> + Copy + Zero + PartialOrd + Neg<Output = N>,
+        const VARIABLES: usize,
+    > std::ops::Sub<&'a Polynomial<N, VARIABLES>> for &'b Polynomial<N, VARIABLES>
+{
+    type Output = Polynomial<N, VARIABLES>;
+
+    fn sub(self, other: &'a Polynomial<N, VARIABLES>) -> Polynomial<N, VARIABLES> {
+        let mut result = Vec::new();
+        let mut cur_iter = self.terms.iter().peekable();
+        let mut other_iter = other.terms.iter().peekable();
+        // Since both polynomials are sorted, iterate over them in ascending order,
+        // combining any common terms
+        loop {
+            // Peek at iterators to decide which to take from
+            let which = match (cur_iter.peek(), other_iter.peek()) {
+                (Some(cur), Some(other)) => Some((cur).partial_cmp(other).expect("NaN :(")),
+                (Some(_), None) => Some(Ordering::Less),
+                (None, Some(_)) => Some(Ordering::Greater),
+                (None, None) => None,
+            };
+            // Push the smallest element to the `result` coefficient vec
+            let smallest = match which {
+                Some(Ordering::Less) => *cur_iter.next().unwrap(),
+                Some(Ordering::Equal) => {
+                    let other = other_iter.next().unwrap();
+                    let cur = cur_iter.next().unwrap();
+                    Monomial {
+                        coefficient: cur.coefficient - other.coefficient,
+                        exponents: cur.exponents,
+                    }
+                }
+                Some(Ordering::Greater) => {
+                    let mut res = *other_iter.next().unwrap();
+                    res.coefficient = -res.coefficient;
+                    res
+                }
+                None => break,
+            };
+            result.push(smallest);
+        }
+        // Remove any zero terms
+        result.retain(|c| !c.coefficient.is_zero());
+        Polynomial { terms: result }
+    }
+}
+
+impl<
+        'a,
+        'b,
+        N: std::ops::Sub<Output = N> + Copy + Zero + PartialOrd + Div<Output = N>,
+        const VARIABLES: usize,
+    > std::ops::Div<N> for &'b Polynomial<N, VARIABLES>
+{
+    type Output = Polynomial<N, VARIABLES>;
+
+    fn div(self, other: N) -> Polynomial<N, VARIABLES> {
+        let mut result = Vec::new();
+        for term in &self.terms {
+            result.push(Monomial {
+                coefficient: term.coefficient / other,
+                exponents: term.exponents,
+            });
+        }
+        Polynomial { terms: result }
+    }
+}
+
 impl<
         'a,
         'b,
@@ -432,6 +563,26 @@ impl<
                 }
             }
         }
+        Polynomial::consolidate_terms(&mut terms);
+        Polynomial { terms }
+    }
+}
+
+impl<'a, N: Copy + PartialOrd + AddAssign + std::ops::Mul<Output = N>, const VARIABLES: usize>
+    std::ops::Mul<N> for &'a Polynomial<N, VARIABLES>
+{
+    type Output = Polynomial<N, VARIABLES>;
+
+    fn mul(self, rhs: N) -> Self::Output {
+        let mut terms = Vec::with_capacity(self.terms.len());
+        // Be conservative about truncation. User can always re-truncate later
+        // result.trunc_degree = max(trunc_degree, rhs.trunc_degree);
+        let trunc_degree = 50;
+        for i in 0..self.terms.len() {
+            let product = (&self.terms[i]) * rhs;
+            terms.push(product);
+        }
+
         Polynomial::consolidate_terms(&mut terms);
         Polynomial { terms }
     }
@@ -515,6 +666,81 @@ impl<
         let c = x.solve(&y).unwrap();
         for (term, c) in self.terms.iter_mut().zip(c.iter()) {
             term.coefficient = *c;
+        }
+    }
+}
+
+impl Polynomial<f64, 4> {
+    pub fn approx_error(
+        &self,
+        points: &[(f64, f64, f64, f64, f64)],
+        num_samples: usize,
+        offset: usize,
+    ) -> f64 {
+        (points[offset..offset + num_samples]
+            .par_iter()
+            .map(|p| (p.4 - self.eval([p.0, p.1, p.2, p.3])).powi(2))
+            .sum::<f64>()
+            / num_samples as f64)
+            .sqrt()
+    }
+
+    fn format_coefficients(&self) -> String {
+        self.terms
+            .iter()
+            .map(|monim| monim.coefficient.to_string())
+            .join(", ")
+    }
+
+    pub fn gradient_descent(&mut self, points: &[(f64, f64, f64, f64, f64)]) {
+        let mut rng = rand::thread_rng();
+        let num_samples = 10000;
+        let momentum_multiplier = 0.9;
+        let delta = 0.0000001;
+        let mut gamma = vec![1.0; self.terms.len()];
+        let mut grad = vec![0.0; self.terms.len()];
+        let now = std::time::Instant::now();
+        println!("error = {}", self.approx_error(points, num_samples, 0));
+        self.fit(points);
+        println!("error = {}", self.approx_error(points, num_samples, 0));
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            // .append(true)
+            .open("python/coefficients sparse.csv")
+            .unwrap();
+        let offset = rng.gen_range(0..points.len() - num_samples);
+        for _ in 0..500 {
+            let old_error = self.approx_error(points, num_samples, offset);
+            writeln!(file, "{}, {}", old_error, self.format_coefficients()).unwrap();
+
+            println!("error: {}", old_error);
+            for index in 0..self.terms.len() {
+                let coeffiecient = self.terms[index].coefficient;
+                // let delta = self.coefficiencts[index].0 * delta;
+                self.terms[index].coefficient += delta;
+                let new_error = self.approx_error(points, num_samples, offset);
+                self.terms[index].coefficient = coeffiecient;
+
+                let old_grad = grad[index];
+                grad[index] =
+                    gamma[index] * ((new_error - old_error) / delta + momentum_multiplier * old_grad);
+                if old_grad.signum() * grad[index].signum() < 0. {
+                    gamma[index] *= 0.5;
+                }
+            }
+
+            self.terms.iter_mut().zip(grad.iter()).for_each(|(c, g)| {
+                c.coefficient -= g;
+            });
+            // self.coefficiencts
+            //     .par_iter_mut()
+            //     .zip(old_coefficients.par_iter())
+            //     .filter(|(c, o)| c.0 > 10. * o.0)
+            //     .for_each(|(c, o)| {
+            //         c.0 = o.0;
+            //     });
         }
     }
 }

@@ -447,6 +447,24 @@ impl<N> Polynom4d<N> {
         }
         num_terms
     }
+
+    fn get_index(&self, i: usize, j: usize, k: usize, l: usize) -> usize {
+        let mut index = 0;
+        for m in 0..=self.degree {
+            for n in 0..=self.degree - m {
+                for o in 0..=self.degree - (m + n) {
+                    for p in 0..=self.degree - (m + n + o) {
+                        if m == i && n == j && o == k && p == l {
+                            return index;
+                        }
+                        index += 1;
+                    }
+                }
+            }
+        }
+        println!("did not find index {} {} {} {}", i, j, k, l);
+        return 10000000;
+    }
 }
 
 impl<
@@ -586,6 +604,39 @@ impl<
         }
         println!("total time: {:?}", now.elapsed());
         phi
+    }
+
+    pub fn get_sparse_dumb(
+        &self,
+        points: &[(N, N, N, N, N)],
+        num_max_terms: usize,
+    ) -> crate::Polynomial<N, 4> {
+        let mut res = crate::Polynomial::<_, 4>::new(vec![]);
+        let mut terms = self.get_terms();
+        println!("got {} terms", terms.len());
+
+        terms.sort_by(|a, b| {
+            self.coefficients[self.get_index(b.0, b.1, b.2, b.3)]
+                .abs()
+                .partial_cmp(&self.coefficients[self.get_index(a.0, a.1, a.2, a.3)].abs())
+                .unwrap()
+        });
+
+        // terms.iter().for_each(|(i, j, k, l)| {
+        //     println!("{}", self.coefficients[self.get_index(*i, *j, *k, *l)]);
+        // });
+
+        for &(i, j, k, l) in terms.iter().take(num_max_terms) {
+            let coefficient = self.coefficients[self.get_index(i, j, k, l)];
+            res.terms.push(self.get_monomial(i, j, k, l, coefficient));
+        }
+
+        println!("went {} terms", res.terms.len());
+
+        if cfg!(debug_assertions) {
+            println!("resulting polynomial: {:?}", res);
+        }
+        res
     }
 }
 
