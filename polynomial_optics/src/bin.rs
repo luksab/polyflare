@@ -37,6 +37,7 @@ fn main() {
     */
 
     let basis = LegendreBasis::new(4);
+    let basis = LegendreBasis::new_from_grid(3, 1000, -1.0..1.0);
     println!("basis = {}", basis);
 
     println!("lut: {:?}", basis.get_luts(10));
@@ -58,8 +59,8 @@ fn main() {
 
     let side_len = 25;
     // all possibilities from -1 to 1
-    let points = itertools::iproduct!((0..side_len), (0..side_len), (0..side_len), (0..side_len))
-        .map(|(i, j, k, l)| {
+    let points = iexp!(0..side_len, 4)
+        .map(|[i, j, k, l]| {
             // let x = i as f64 / (side_len - 1) as f64 * 2. - 1.;
             // let y = j as f64 / (side_len - 1) as f64 * 2. - 1.;
             // let z = k as f64 / (side_len - 1) as f64 * 2. - 1.;
@@ -73,13 +74,13 @@ fn main() {
             // let y = rand::random::<f64>() * 2. - 1.;
             // let z = rand::random::<f64>() * 2. - 1.;
             // let w = rand::random::<f64>() * 2. - 1.;
-            (x, y, z, w, (x*x+y*y).sqrt()*z*w)
+            (x, y, z, w, (x * x + y * y).sqrt() * z * w)
         })
         .collect::<Vec<_>>();
 
     println!("points: {:?}", points.len());
 
-    let mut legendre = Legendre4d::new(4);
+    let mut legendre = Legendre4d::new(LegendreBasis::new(4));
 
     println!("legendre: {}", legendre);
     legendre.fit(&points);

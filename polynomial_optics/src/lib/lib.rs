@@ -12,3 +12,6 @@ pub use raytracer::*;
 
 pub mod raytracer_autodiff;
 pub use raytracer_autodiff::*;
+
+pub mod iexp;
+pub use iexp::*;
