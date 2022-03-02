@@ -2,6 +2,8 @@ use mathru::algebra::abstr::{AbsDiffEq, Field, Scalar};
 use mathru::algebra::linear::matrix::Transpose;
 use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
 use num::traits::Zero;
+use rand::prelude::IteratorRandom;
+use rand::Rng;
 use std::time::Instant;
 use std::vec;
 use std::{
@@ -636,6 +638,94 @@ impl<
         if cfg!(debug_assertions) {
             println!("resulting polynomial: {:?}", res);
         }
+        res
+    }
+}
+
+impl Polynom4d<f64> {
+    fn temp_to_size(num_terms: usize, temp: f64) -> usize {
+        let t = temp / (temp + 1.0);
+        std::cmp::min(num_terms, (t * num_terms as f64).ceil() as usize).max(1)
+    }
+
+    pub fn simulated_annealing(
+        &self,
+        points: &[(f64, f64, f64, f64, f64)],
+        num_terms: usize,
+    ) -> crate::Polynomial<f64, 4> {
+        // let num_terms = 5;
+
+        let num_samples = 1000;
+
+        let mut rng = rand::thread_rng();
+        let mut res = crate::Polynomial::<_, 4>::new(vec![]);
+        let mut terms = self
+            .get_terms()
+            .iter()
+            .zip(self.coefficients.iter())
+            .map(|(exp, &coefficient)| crate::Monomial {
+                coefficient,
+                exponents: [exp.0, exp.1, exp.2, exp.3],
+            })
+            .collect::<Vec<_>>();
+
+        (0..terms.len())
+            .choose_multiple(&mut rng, num_terms)
+            .iter()
+            .enumerate()
+            .for_each(|(num_removed, &i)| {
+                // subtract the number of removed terms to stay in bounds
+                res.terms.push(terms.swap_remove(i - num_removed));
+            });
+
+        // crate::iexp!(0..10, 4).into_par_iter().map(|[x, y, z, w]| x+y+z+w ).sum();
+
+        // let mut offset = rng.gen_range(0..points.len() - num_samples);
+        let offset = 0;
+        let mut error = res.approx_error(points, num_samples, offset);
+        let mut temp = 10.0;
+        while error > 0.01 {
+            let num_swap = Polynom4d::temp_to_size(num_terms, temp);
+            println!("swapping {} terms", num_swap);
+            let swapped = (0..res.terms.len())
+                .choose_multiple(&mut rng, num_swap)
+                .iter()
+                .map(|&i| {
+                    let rand = rng.gen_range(0..terms.len());
+                    std::mem::swap(&mut res.terms[i], &mut terms[rand]);
+                    (i, rand)
+                })
+                .collect::<Vec<_>>();
+
+            // let old_terms = res.terms.clone();
+            // for _ in 0..Polynom4d::temp_to_size(num_terms, temp) {
+            //     let index = rng.gen_range(0..indicies.len());
+            //     let other_index = rng.gen_range(0..other_indicies.len());
+
+            //     res.terms[index] = terms[other_indicies[other_index]].clone();
+            // }
+
+            // offset = rng.gen_range(0..points.len() - num_samples);
+            res.fit(points);
+            let new_error = res.approx_error(points, num_samples, offset);
+            println!("{} {}", error, new_error);
+            if new_error < error {
+                error = new_error;
+                temp *= 0.9;
+            } else {
+                let prob = 1.0;//(error - new_error) / temp;
+                if rng.gen::<f64>() < prob {
+                    println!("swap back");
+                    // swap back - reversed in case we swapped back into the other list
+                    swapped.iter().rev().for_each(|&(i, j)| {
+                        std::mem::swap(&mut res.terms[i], &mut terms[j]);
+                    });
+                    // res.terms = old_terms;
+                    println!("error: {}", res.approx_error(points, num_samples, offset));
+                }
+            }
+        }
+
         res
     }
 }
