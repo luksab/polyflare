@@ -644,19 +644,26 @@ impl<
 
 impl Polynom4d<f64> {
     fn temp_to_size(num_terms: usize, temp: f64) -> usize {
-        let t = temp / (temp + 1.0);
-        std::cmp::min(num_terms, (t * num_terms as f64).ceil() as usize).max(1)
+        // let t = temp / (temp + 1.0);
+        let t = temp.powi(3);
+        std::cmp::min(num_terms, (t * num_terms as f64) as usize).max(1)
+    }
+
+    fn acceptance_probability(old_error: f64, error: f64, temp: f64) -> f64 {
+        if error < old_error {
+            1.0
+        } else {
+            f64::exp(-((error - old_error) * 100.) / temp)
+        }
     }
 
     pub fn simulated_annealing(
         &self,
         points: &[(f64, f64, f64, f64, f64)],
         num_terms: usize,
+        num_samples: usize,
+        num_iterations: usize,
     ) -> crate::Polynomial<f64, 4> {
-        // let num_terms = 5;
-
-        let num_samples = 1000;
-
         let mut rng = rand::thread_rng();
         let mut res = crate::Polynomial::<_, 4>::new(vec![]);
         let mut terms = self
@@ -680,11 +687,13 @@ impl Polynom4d<f64> {
 
         // crate::iexp!(0..10, 4).into_par_iter().map(|[x, y, z, w]| x+y+z+w ).sum();
 
-        // let mut offset = rng.gen_range(0..points.len() - num_samples);
-        let offset = 0;
-        let mut error = res.approx_error(points, num_samples, offset);
-        let mut temp = 10.0;
-        while error > 0.01 {
+        // let offset = 0;
+        let mut error = res.approx_error(points, num_samples, 0);
+        for i in 0..num_iterations {
+            let offset = rng.gen_range(0..points.len() - num_samples);
+            let now = Instant::now();
+            let temp = (num_iterations - i) as f64 / num_iterations as f64;
+            println!("temp: {}", temp);
             let num_swap = Polynom4d::temp_to_size(num_terms, temp);
             println!("swapping {} terms", num_swap);
             let swapped = (0..res.terms.len())
@@ -696,35 +705,41 @@ impl Polynom4d<f64> {
                     (i, rand)
                 })
                 .collect::<Vec<_>>();
+            println!("swapping took {:?}", now.elapsed());
+            let now = Instant::now();
 
-            // let old_terms = res.terms.clone();
-            // for _ in 0..Polynom4d::temp_to_size(num_terms, temp) {
-            //     let index = rng.gen_range(0..indicies.len());
-            //     let other_index = rng.gen_range(0..other_indicies.len());
+            res.fit(&points[offset..offset + num_samples]);
+            println!("fitting took {:?}", now.elapsed());
+            let now = Instant::now();
 
-            //     res.terms[index] = terms[other_indicies[other_index]].clone();
-            // }
-
-            // offset = rng.gen_range(0..points.len() - num_samples);
-            res.fit(points);
             let new_error = res.approx_error(points, num_samples, offset);
+            println!("error calc took {:?}", now.elapsed());
+            let now = Instant::now();
             println!("{} {}", error, new_error);
             if new_error < error {
                 error = new_error;
-                temp *= 0.9;
             } else {
-                let prob = 1.0;//(error - new_error) / temp;
-                if rng.gen::<f64>() < prob {
+                let probability = Polynom4d::acceptance_probability(error, new_error, temp);
+                println!("acceptance probability: {}", probability);
+                if rng.gen::<f64>() > probability {
                     println!("swap back");
                     // swap back - reversed in case we swapped back into the other list
                     swapped.iter().rev().for_each(|&(i, j)| {
                         std::mem::swap(&mut res.terms[i], &mut terms[j]);
                     });
-                    // res.terms = old_terms;
-                    println!("error: {}", res.approx_error(points, num_samples, offset));
+                } else {
+                    error = new_error;
                 }
             }
+            println!("the rest took {:?}", now.elapsed());
+            let now = Instant::now();
         }
+        res.fit(points);
+        println!(
+            "actual error = {} error = {}",
+            res.error(points),
+            res.approx_error(points, num_samples, 0)
+        );
 
         res
     }

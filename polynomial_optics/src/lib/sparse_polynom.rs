@@ -685,6 +685,18 @@ impl Polynomial<f64, 4> {
             .sqrt()
     }
 
+    pub fn error(
+        &self,
+        points: &[(f64, f64, f64, f64, f64)],
+    ) -> f64 {
+        (points
+            .par_iter()
+            .map(|p| (p.4 - self.eval([p.0, p.1, p.2, p.3])).powi(2))
+            .sum::<f64>()
+            / points.len() as f64)
+            .sqrt()
+    }
+
     fn format_coefficients(&self) -> String {
         self.terms
             .iter()
@@ -692,7 +704,7 @@ impl Polynomial<f64, 4> {
             .join(", ")
     }
 
-    pub fn gradient_descent(&mut self, points: &[(f64, f64, f64, f64, f64)]) {
+    pub fn gradient_descent(&mut self, points: &[(f64, f64, f64, f64, f64)], num_iterations: usize) {
         let mut rng = rand::thread_rng();
         let num_samples = 10000;
         let momentum_multiplier = 0.9;
@@ -711,7 +723,7 @@ impl Polynomial<f64, 4> {
             .open("python/coefficients sparse.csv")
             .unwrap();
         let offset = rng.gen_range(0..points.len() - num_samples);
-        for _ in 0..500 {
+        for _ in 0..num_iterations {
             let old_error = self.approx_error(points, num_samples, offset);
             writeln!(file, "{}, {}", old_error, self.format_coefficients()).unwrap();
 
@@ -724,8 +736,8 @@ impl Polynomial<f64, 4> {
                 self.terms[index].coefficient = coeffiecient;
 
                 let old_grad = grad[index];
-                grad[index] =
-                    gamma[index] * ((new_error - old_error) / delta + momentum_multiplier * old_grad);
+                grad[index] = gamma[index]
+                    * ((new_error - old_error) / delta + momentum_multiplier * old_grad);
                 if old_grad.signum() * grad[index].signum() < 0. {
                     gamma[index] *= 0.5;
                 }

@@ -165,12 +165,111 @@ impl GpuPolynomials {
                         })
                         .collect::<Vec<_>>();
 
+                    // let mut file = std::fs::OpenOptions::new()
+                    //     .write(true)
+                    //     .create(true)
+                    //     .truncate(true)
+                    //     // .append(true)
+                    //     .open("python/points.csv")
+                    //     .unwrap();
+
+                    // writeln!(file, "x, y, z, w, out").unwrap();
+                    // for point in filtered_points.iter() {
+                    //     writeln!(file, "{}, {}, {}, {}, {}", point.0, point.1, point.2, point.3, point.4).unwrap();
+                    // }
+
+                    // let basis =
+                    //     polynomial_optics::LegendreBasis::new_from_grid(degree, num_dots, -1.0..1.);
+                    // let basis = polynomial_optics::LegendreBasis::new(degree);
+
+                    // for i in 0..polynomial_optics::Legendre4d::num_polys(degree) {
+                    //     for j in 0..polynomial_optics::Legendre4d::num_polys(degree) {
+                    //         let index =
+                    //             polynomial_optics::Legendre4d::poly_index_to_multi_index(i, degree)
+                    //                 .unwrap();
+                    //         let index2 =
+                    //             polynomial_optics::Legendre4d::poly_index_to_multi_index(j, degree)
+                    //                 .unwrap();
+                    //         let a = basis.integrate_4d(&filtered_points, index, index2);
+                    //         println!("{:2} {:2} {:2.5}", i, j, a);
+                    //     }
+                    // }
+
+                    // todo!();
+
+                    // let mut legendre = polynomial_optics::Legendre4d::new(basis);
+                    // legendre.fit(&filtered_points);
+
+                    // let mut sum = 0.;
+                    // for point in &filtered_points{
+                    //     // println!("point: {:?}", point);
+                    //     let eval = legendre.eval(&(point.0, point.1, point.2, point.3));
+                    //     sum += (point.4 - eval).powi(2);
+                    //     // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
+                    // }
+                    // println!("lg error: {}", (sum / filtered_points.len() as f64).sqrt());
+                    // println!(
+                    //     "lg error: {}",
+                    //     legendre.approx_error(&filtered_points, 10000)
+                    // );
+
+                    // let mut sparse_legendre = legendre.get_sparse(num_terms);
+                    // println!(
+                    //     "ls error: {}",
+                    //     sparse_legendre.approx_error(&filtered_points, 10000, 0)
+                    // );
+
+                    // sparse_legendre.fit(&filtered_points);
+                    // println!(
+                    //     "actual ls error: {}",
+                    //     sparse_legendre.error(&filtered_points)
+                    // );
+                    // for samples in [1, 10, 100, 1000, 10000, 100000] {
+                    //     let now = Instant::now();
+                    //     let e = legendre.approx_error(&filtered_points, samples);
+                    //     println!(
+                    //         "{:6} lg error: {:1.6} in {}us",
+                    //         samples,
+                    //         e,
+                    //         now.elapsed().as_micros()
+                    //     );
+                    // }
+
                     let polynom = Polynom4d::<_>::fit(&filtered_points, degree);
                     println!("Fitting took {:?}", now.elapsed());
+
+                    let mut sum = 0.;
+                    for point in &filtered_points {
+                        let eval = polynom.eval(point.0, point.1, point.2, point.3);
+                        sum += (point.4 - eval).powi(2);
+                        // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
+                    }
+                    println!("de error: {}", (sum / filtered_points.len() as f64).sqrt());
+
                     if cfg!(config_assertions) {
                         println!("{}", polynom);
                     }
-                    let sparse_poly = polynom.get_sparse(&filtered_points, num_terms, true, true);
+                    // let mut sparse_poly =
+                    //     polynom.get_sparse(&filtered_points, num_terms, true, true);
+
+                    // let mut sparse_poly = polynom.get_sparse_dumb(&filtered_points, num_terms);
+
+                    let sparse_poly =
+                        polynom.simulated_annealing(&filtered_points, num_terms, 10000, 1000);
+
+                    println!("sparse_poly len: {}", sparse_poly.terms.len());
+
+                    sum = 0.;
+                    for point in &filtered_points {
+                        let eval = sparse_poly.eval([point.0, point.1, point.2, point.3]);
+                        sum += (point.4 - eval).powi(2);
+                        // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
+                    }
+                    println!("sp error: {}", (sum / filtered_points.len() as f64).sqrt());
+
+                    // gradient descent is just worse than fit
+                    // sparse_poly.gradient_descent(&filtered_points, 100);
+                    println!("actual error: {}", sparse_poly.error(&filtered_points));
                     sparse_poly
                 }));
             }
