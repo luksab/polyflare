@@ -5,6 +5,8 @@ use std::{
     path::Path,
 };
 
+use itertools::iproduct;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use cgmath::{num_traits::Pow, prelude::*, Vector2, Vector3};
@@ -1303,6 +1305,96 @@ impl Lens {
             }
         }
         ray
+    }
+
+    pub fn get_dots_grid(
+        &self,
+        side_len: u32,
+        pos: Vector3<f64>,
+        which_ghost: u32,
+        sensor_pos: f64,
+        width: [f64; 2],
+        filter: bool,
+    ) -> Vec<DrawRay> {
+        // Pick an arbitrary number as seed.
+        fastrand::seed(7);
+        // let rays = self.get_paths(
+        //     num::integer::Roots::sqrt(&(num_rays * 1000)),
+        //     center_pos,
+        //     direction,
+        //     draw_mode,
+        //     which_ghost,
+        // );
+
+        let center_dir = self.get_center_dir(pos);
+        println!("center dir: {:?}", center_dir);
+
+        let mut rays = vec![];
+
+        let width_d = width[0];
+        let width_p = width[1];
+        // if draw_mode & 1 > 0 {
+        let mut ghost_num = 0;
+        for i in 0..self.elements.len() - 1 {
+            for j in i + 1..self.elements.len() {
+                ghost_num += 1;
+                if ghost_num == which_ghost {
+                    rays.append(
+                        &mut iproduct!(0..side_len, 0..side_len, 0..side_len, 0..side_len)
+                            .into_iter()
+                            .par_bridge()
+                            .filter_map(|(x, y, z, w)| {
+                                // let wave_num = 1;
+                                // let ray_num = ray_num_x * num_rays + ray_num_y;
+                                // let wavelen = (ray_num % wave_num) as f64;
+                                // let start_wavelen = 0.38;
+                                // let end_wavelen = 0.78;
+                                // let wavelength = start_wavelen
+                                //     + wavelen * ((end_wavelen - start_wavelen) / (wave_num as f64));
+                                let (x, y, z, w) = (
+                                    x as f64 / side_len as f64,
+                                    y as f64 / side_len as f64,
+                                    z as f64 / side_len as f64,
+                                    w as f64 / side_len as f64,
+                                );
+                                let wavelength = 0.5;
+
+                                // make new ray
+                                let mut dir = center_dir;
+                                // dir.x += ray_num_x as f64 / (num_rays as f64) * width - width / 2.;
+                                // dir.y += ray_num_y as f64 / (num_rays as f64) * width - width / 2.;
+                                dir.x += x * width_d - width_d / 2.;
+                                dir.y += y * width_d - width_d / 2.;
+
+                                let mut pos = pos;
+                                pos.x += z * width_p - width_p / 2.;
+                                pos.y += w * width_p - width_p / 2.;
+                                let mut ray =
+                                    Ray::new(pos, dir, [pos.x, pos.y, dir.x, dir.y], wavelength);
+                                ray.ghost_num = ghost_num;
+                                let ray = self.get_ghost_dot(i, j, ray, sensor_pos);
+                                if !filter || ray.o.is_finite() {
+                                    Some(ray)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                }
+            }
+        }
+        rays.iter()
+            .map(|ray| DrawRay {
+                pos: ray.o.xy().into(),
+                wavelength: ray.wavelength,
+                strength: ray.strength,
+                ghost_num: ray.ghost_num,
+                init_pos: ray.init_pos,
+                aperture_pos: ray.aperture_pos,
+                entry_pos: ray.entry_pos,
+            })
+            .collect()
     }
 
     pub fn get_dots(
