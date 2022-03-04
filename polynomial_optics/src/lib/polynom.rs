@@ -664,6 +664,7 @@ impl Polynom4d<f64> {
         num_samples: usize,
         num_iterations: usize,
     ) -> crate::Polynomial<f64, 4> {
+        let debug = cfg!(debug_assertions);
         let mut rng = rand::thread_rng();
         let mut res = crate::Polynomial::<_, 4>::new(vec![]);
         let mut terms = self
@@ -705,24 +706,34 @@ impl Polynom4d<f64> {
                     (i, rand)
                 })
                 .collect::<Vec<_>>();
-            println!("swapping took {:?}", now.elapsed());
+            if debug {
+                println!("swapping took {:?}", now.elapsed());
+            }
             let now = Instant::now();
 
             res.fit(&points[offset..offset + num_samples]);
-            println!("fitting took {:?}", now.elapsed());
+            if debug {
+                println!("fitting took {:?}", now.elapsed());
+            }
             let now = Instant::now();
 
             let new_error = res.approx_error(points, num_samples, offset);
-            println!("error calc took {:?}", now.elapsed());
+            if debug {
+                println!("error calc took {:?}", now.elapsed());
+                println!("{} {}", error, new_error);
+            }
             let now = Instant::now();
-            println!("{} {}", error, new_error);
             if new_error < error {
                 error = new_error;
             } else {
                 let probability = Polynom4d::acceptance_probability(error, new_error, temp);
-                println!("acceptance probability: {}", probability);
+                if debug {
+                    println!("acceptance probability: {}", probability);
+                }
                 if rng.gen::<f64>() > probability {
-                    println!("swap back");
+                    if debug {
+                        println!("swap back");
+                    }
                     // swap back - reversed in case we swapped back into the other list
                     swapped.iter().rev().for_each(|&(i, j)| {
                         std::mem::swap(&mut res.terms[i], &mut terms[j]);
@@ -731,8 +742,9 @@ impl Polynom4d<f64> {
                     error = new_error;
                 }
             }
-            println!("the rest took {:?}", now.elapsed());
-            let now = Instant::now();
+            if debug {
+                println!("the rest took {:?}", now.elapsed());
+            }
         }
         res.fit(points);
         println!(
