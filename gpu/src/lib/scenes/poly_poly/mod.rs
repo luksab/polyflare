@@ -1,14 +1,16 @@
+use rayon::prelude::*;
+use std::io::Write;
 use std::{
     collections::hash_map::DefaultHasher,
     fs::{self, read_to_string, DirBuilder},
     hash::{Hash, Hasher},
     iter,
     path::Path,
-    thread,
     time::Instant,
 };
 
 use directories::ProjectDirs;
+use itertools::iproduct;
 use polynomial_optics::{Polynom4d, Polynomial};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, CommandEncoder, ComputePipeline, Device,
@@ -105,32 +107,61 @@ impl GpuPolynomials {
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
         let now = Instant::now();
-        let mut polynomials = vec![];
-        let mut handles = vec![];
 
         let pos_params = lens_state.pos_params.clone();
         let lens = lens_state.actual_lens.clone();
-        for which_ghost in 1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len() {
-            for dir_xy in 0..=1 {
-                let lens = lens.clone();
-                handles.push(thread::spawn(move || {
+        // for which_ghost in 1..2 {
+        //     for dir_xy in 0..=0 {
+        let polynomials = rayon::ThreadPoolBuilder::new()
+            .num_threads(6)
+            .build()
+            .unwrap()
+            .install(|| {
+                iproduct!(
+                    (1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len()).into_iter(),
+                    0..=1
+                )
+                .par_bridge()
+                .map(|(which_ghost, dir_xy)| {
+                    let lens = lens.clone();
                     let width = 1.;
                     let mut dots = vec![];
-                    while dots.len() < num_dots {
-                        dots.append(&mut lens.get_dots(
-                            num_dots as u32,
-                            cgmath::Vector3 {
-                                x: 0.,
-                                y: 0.,
-                                z: pos_params[2] as f64,
-                            },
-                            which_ghost as u32,
-                            pos_params[8] as f64,
-                            [width as f64, width as f64],
-                            true,
-                        ));
-                    }
+                    // while dots.len() < num_dots {
+                    dots.append(&mut lens.get_dots_grid(
+                        (num_dots as f64).powf(0.25) as u32,
+                        cgmath::Vector3 {
+                            x: 0.,
+                            y: 0.,
+                            z: pos_params[2] as f64,
+                        },
+                        which_ghost as u32,
+                        pos_params[8] as f64,
+                        [width as f64, width as f64],
+                        true,
+                    ));
+                    // }
                     println!("dots: {}", dots.len());
+                    if cfg!(debug_assertions) {
+                        let mut file = std::fs::OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .truncate(true)
+                            .open(format!("python/dots/dots,{},{}.csv", which_ghost, dir_xy))
+                            .unwrap();
+                        for dot in dots.iter() {
+                            writeln!(
+                                file,
+                                "{}, {}, {}, {}, {}, {}",
+                                dot.init_pos[0],
+                                dot.init_pos[1],
+                                dot.init_pos[2],
+                                dot.init_pos[3],
+                                dot.pos[0],
+                                dot.pos[1]
+                            )
+                            .unwrap();
+                        }
+                    }
 
                     let mut points = vec![];
                     for (i, dot) in dots.iter().enumerate() {
@@ -255,7 +286,7 @@ impl GpuPolynomials {
                     // let mut sparse_poly = polynom.get_sparse_dumb(&filtered_points, num_terms);
 
                     let sparse_poly =
-                        polynom.simulated_annealing(&filtered_points, num_terms, 10000, 1000);
+                        polynom.simulated_annealing(&filtered_points, num_terms, 1000, 1000);
 
                     println!("sparse_poly len: {}", sparse_poly.terms.len());
 
@@ -270,14 +301,12 @@ impl GpuPolynomials {
                     // gradient descent is just worse than fit
                     // sparse_poly.gradient_descent(&filtered_points, 100);
                     println!("actual error: {}", sparse_poly.error(&filtered_points));
-                    sparse_poly
-                }));
-            }
-        }
 
-        for handle in handles {
-            polynomials.push(handle.join().unwrap());
-        }
+                    // panic!("{}", now.elapsed().as_millis());
+                    sparse_poly
+                })
+                .collect::<Vec<_>>()
+            });
 
         println!("Computing polynomials took {:?}", now.elapsed());
         // Arc::try_unwrap(polynomials).unwrap().into_inner().unwrap()
@@ -776,21 +805,22 @@ impl PolyPoly {
         config: &SurfaceConfiguration,
         lens_state: &LensState,
     ) -> Self {
-        let num_terms = 40;
-        let degree = 7;
-        let num_samples = 10 * {
-            let mut num_terms = 0;
-            for i in 0..=degree {
-                for j in 0..=degree - i {
-                    for k in 0..=degree - (i + j) {
-                        for _ in 0..=degree - (i + j + k) {
-                            num_terms += 1;
-                        }
-                    }
-                }
-            }
-            num_terms
-        };
+        let num_terms = 100;
+        let degree = 10;
+        // let num_samples = 10 * {
+        //     let mut num_terms = 0;
+        //     for i in 0..=degree {
+        //         for j in 0..=degree - i {
+        //             for k in 0..=degree - (i + j) {
+        //                 for _ in 0..=degree - (i + j + k) {
+        //                     num_terms += 1;
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     num_terms
+        // };
+        let num_samples = 100_000;
         let polynomials = GpuPolynomials::new(num_samples, num_terms, degree, lens_state, device);
 
         let format = wgpu::TextureFormat::Rgba16Float;
