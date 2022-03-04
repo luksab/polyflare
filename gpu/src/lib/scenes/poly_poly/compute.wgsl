@@ -445,7 +445,7 @@ fn drawRay_from_Ray(self: Ray) -> DrawRay {
 
 fn eval(x: vec4<f32>, index: u32) -> f32 {
     var res = 0.;
-    for (var i = u32(index * polyParams.num_terms); i < polyParams.num_terms; i = i + u32(1)) {
+    for (var i = u32(index * polyParams.num_terms); i < (index + u32(1)) * polyParams.num_terms; i = i + u32(1)) {
         let term = terms.monomials[i];
         if (term.coefficient != 0.) {
             var term_res = term.coefficient;
