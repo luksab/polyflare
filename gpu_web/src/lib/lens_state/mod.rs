@@ -3,7 +3,6 @@ use std::path::Path;
 use std::time::Instant;
 
 use cgmath::{InnerSpace, Vector3};
-use directories::ProjectDirs;
 use imgui::{CollapsingHeader, Condition, Drag, Slider, Ui};
 use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier};
 use wgpu::util::DeviceExt;
@@ -697,28 +696,28 @@ impl LensState {
     pub fn get_lenses() -> Vec<(String, Vec<ElementState>)> {
         let mut lenses = vec![];
 
-        let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
-        let dir = proj_dirs.config_dir().join(Path::new("lenses"));
-        if dir.is_dir() {
-            for entry in fs::read_dir(dir).unwrap() {
-                let entry = entry.unwrap();
-                let path = entry.path();
+        // let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
+        // let dir = proj_dirs.config_dir().join(Path::new("lenses"));
+        // if dir.is_dir() {
+        //     for entry in fs::read_dir(dir).unwrap() {
+        //         let entry = entry.unwrap();
+        //         let path = entry.path();
 
-                if !path.is_dir() {
-                    match Self::read_lens(&path) {
-                        Ok(lens) => lenses.push((
-                            path.file_name().unwrap().to_owned().into_string().unwrap(),
-                            lens,
-                        )),
-                        Err(str) => println!("Could not parse {:?}:\n\t {}", path, str),
-                    }
-                }
-            }
-        } else {
-            println!("creating lens directory {:?}", dir);
-            DirBuilder::new().recursive(true).create(dir).unwrap();
-        }
-        lenses.sort_by_key(|(name, _lens)| name.to_owned());
+        //         if !path.is_dir() {
+        //             match Self::read_lens(&path) {
+        //                 Ok(lens) => lenses.push((
+        //                     path.file_name().unwrap().to_owned().into_string().unwrap(),
+        //                     lens,
+        //                 )),
+        //                 Err(str) => println!("Could not parse {:?}:\n\t {}", path, str),
+        //             }
+        //         }
+        //     }
+        // } else {
+        //     println!("creating lens directory {:?}", dir);
+        //     DirBuilder::new().recursive(true).create(dir).unwrap();
+        // }
+        // lenses.sort_by_key(|(name, _lens)| name.to_owned());
         lenses
     }
 
@@ -735,27 +734,27 @@ impl LensState {
 
     /// save the lens descriptions to ~/.config/polyflare/lenses/{name}
     fn save(&self, name: &str) -> std::io::Result<()> {
-        let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
-        let dir = proj_dirs.config_dir().join(Path::new("lenses"));
-        if !dir.is_dir() {
-            println!("creating lens directory {:?}", &dir);
-            DirBuilder::new().recursive(true).create(&dir).unwrap();
-        }
+        // let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
+        // let dir = proj_dirs.config_dir().join(Path::new("lenses"));
+        // if !dir.is_dir() {
+        //     println!("creating lens directory {:?}", &dir);
+        //     DirBuilder::new().recursive(true).create(&dir).unwrap();
+        // }
 
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&dir.join(Path::new(&name)))?;
-        let pretty_config = ron::ser::PrettyConfig::new();
-        std::io::Write::write_all(
-            &mut file,
-            ron::ser::to_string_pretty(&self.lens, pretty_config)
-                .unwrap()
-                .as_bytes(),
-        )?;
-        // handle errors
-        file.sync_all()?;
+        // let mut file = fs::OpenOptions::new()
+        //     .write(true)
+        //     .truncate(true)
+        //     .create(true)
+        //     .open(&dir.join(Path::new(&name)))?;
+        // let pretty_config = ron::ser::PrettyConfig::new();
+        // std::io::Write::write_all(
+        //     &mut file,
+        //     ron::ser::to_string_pretty(&self.lens, pretty_config)
+        //         .unwrap()
+        //         .as_bytes(),
+        // )?;
+        // // handle errors
+        // file.sync_all()?;
         Ok(())
     }
 

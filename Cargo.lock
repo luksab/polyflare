@@ -1160,7 +1160,6 @@ dependencies = [
  "cgmath",
  "console_error_panic_hook",
  "console_log",
- "directories",
  "fastrand",
  "getrandom 0.2.5",
  "image 0.24.1",

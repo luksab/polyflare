@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["luksab <lukas@sabatschus.de>"]
 edition = "2018"
 resolver = "2"
-build = "build.rs"
 
 [[bin]]
 name = "gpu_web"
@@ -25,12 +24,13 @@ rayon = "1.4"
 pollster = "0.2"
 bytemuck = { version = "1.4", features = ["derive"] }
 anyhow = "1.0"
-imgui = "0.8.2"
-imgui-winit-support = { version = "0.8.2", default-features = false, features = ["winit-26"] }
-imgui-wgpu = "0.19.0"
+imgui = { version = "0.8.2", features = ["wasm"] }
+imgui-winit-support = { version = "0.8.2", default-features = false, features = [
+    "winit-26",
+] }
+imgui-wgpu = { version = "0.19.0" }
 fastrand = "1.5"
 png = "0.17"
-directories = "4.0"
 ron = "0.7"
 structopt = "0.3"
 itertools = "0.10.3"
@@ -42,7 +42,7 @@ polynomial_optics = { path = "../polynomial_optics" }
 arrayvec = "0.7"
 log = "0.4"
 raw-window-handle = "0.4"
-serde = { version = "1", features = ["derive"]}
+serde = { version = "1", features = ["derive"] }
 smallvec = "1"
 
 wasm-bindgen = "0.2.76"
@@ -170,7 +170,7 @@ web-sys = { version = "0.3.53", features = [
     "OffscreenCanvas",
     "Window",
     "Location",
-]}
+] }
 js-sys = "0.3.50"
 wasm-bindgen-futures = "0.4.23"
 # enable parking_lot's wasm-bindgen feature so that it, in turn, enables that of crate `instant`
