@@ -610,7 +610,6 @@ impl<
 
     pub fn get_sparse_dumb(
         &self,
-        points: &[(N, N, N, N, N)],
         num_max_terms: usize,
     ) -> crate::Polynomial<N, 4> {
         let mut res = crate::Polynomial::<_, 4>::new(vec![]);
