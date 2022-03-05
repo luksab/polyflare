@@ -1,9 +1,9 @@
+use crate::console_log;
 use std::fs::{self, DirBuilder};
 use std::path::Path;
-use std::time::Instant;
+use instant::Instant;
 
 use cgmath::{InnerSpace, Vector3};
-use imgui::{CollapsingHeader, Condition, Drag, Slider, Ui};
 use polynomial_optics::{Element, Glass, Lens, Properties, QuarterWaveCoating, Sellmeier};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, Device, Queue};
@@ -301,6 +301,7 @@ impl LensState {
                 ],
                 label: None,
             });
+        console_log(format!("haii").as_str());
         let lens_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &lens_bind_group_layout,
             entries: &[
@@ -343,7 +344,7 @@ impl LensState {
             7.,
             0.5,
             1.,
-            0.,  // Padding
+            0., // Padding
         ];
         let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
@@ -761,7 +762,7 @@ impl LensState {
     /// create an imgui window from Self and return
     ///
     /// (update_lens, update_lens_size, update_ray_num, update_dot_num, render, update_res, compute)
-    pub fn build_ui(
+    /*pub fn build_ui(
         &mut self,
         ui: &Ui,
         device: &Device,
@@ -1089,7 +1090,7 @@ impl LensState {
             update_res,
             compute,
         )
-    }
+    }*/
 
     pub fn dir_to_lens(&mut self) {
         let dir = self.actual_lens.get_center_dir(Vector3::new(

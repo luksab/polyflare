@@ -359,7 +359,7 @@ impl PolyRes {
         }
     }
 
-    pub fn update_dots(
+    pub async fn update_dots(
         &mut self,
         device: &wgpu::Device,
         queue: &Queue,
@@ -417,7 +417,7 @@ impl PolyRes {
             let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
             device.poll(wgpu::Maintain::Wait);
 
-            if let Ok(()) = pollster::block_on(buffer_future) {
+            if let Ok(()) = buffer_future.await {
                 let data = buffer_slice.get_mapped_range();
 
                 let vertices = unsafe { data.align_to::<f32>().1 };

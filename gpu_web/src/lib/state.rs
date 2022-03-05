@@ -1,4 +1,6 @@
+use crate::console_log;
 use std::borrow::Cow;
+use web_sys::console;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -45,9 +47,11 @@ impl State {
 
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
         console_log::init().expect("could not initialize logger");
+        console_log("hiii");
         use winit::platform::web::WindowExtWebSys;
         // On wasm, append the canvas to the document body
-        web_sys::window().unwrap()
+        web_sys::window()
+            .unwrap()
             .document()
             .unwrap()
             .body()
@@ -77,7 +81,7 @@ impl State {
                     label: None,
                     features: wgpu::Features::empty(),
                     // Make sure we use the texture resolution limits from the adapter, so we can support images the size of the swapchain.
-                    limits: wgpu::Limits::downlevel_webgl2_defaults()
+                    limits: wgpu::Limits::downlevel_defaults()
                         .using_resolution(adapter.limits()),
                 },
                 None,

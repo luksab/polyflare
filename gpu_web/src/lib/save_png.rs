@@ -2,7 +2,7 @@ use std::{fs::File, io::BufWriter, iter, path::Path};
 
 use wgpu::{Device, Queue, Texture};
 
-pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue, path: &str) {
+pub async fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue, path: &str) {
     let output_buffer_size = (size[0] * size[1] * 4) as wgpu::BufferAddress;
     let output_buffer_desc = wgpu::BufferDescriptor {
         size: output_buffer_size,
@@ -39,7 +39,7 @@ pub fn save_png(tex: &Texture, size: [u32; 2], device: &Device, queue: &Queue, p
     let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
     device.poll(wgpu::Maintain::Wait);
 
-    if let Ok(()) = pollster::block_on(buffer_future) {
+    if let Ok(()) = buffer_future.await {
         let mut data = buffer_slice.get_mapped_range().to_vec();
         // BGRa TO RGBa
         data.chunks_mut(4).for_each(|chunk| chunk.swap(0, 2));

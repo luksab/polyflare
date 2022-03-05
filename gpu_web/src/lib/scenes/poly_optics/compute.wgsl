@@ -421,10 +421,10 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 var dir = posParams.init.d;
                 dir.y = dir.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
                 let wave_num = u32(10);
-                let wavelen = f32(ray_num % wave_num);
+                let wavelen_ = f32(ray_num % wave_num);
                 let start_wavelen = 0.38;
                 let end_wavelen = 0.78;
-                let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
+                let wavelength = start_wavelen + wavelen_ * ((end_wavelen - start_wavelen) / f32(wave_num));
                 var ray = Ray(center_pos, wavelength, dir, str_from_wavelen(wavelength));
 
                 for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
@@ -486,7 +486,6 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   if ((draw_mode & u32(2)) > u32(0)) {
     var dir = posParams.init.d;
     dir.y = dir.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-    let wavelength = 0.5;
     let wave_num = u32(10);
     let wavelen = f32(ray_num % wave_num);
     let start_wavelen = 0.38;

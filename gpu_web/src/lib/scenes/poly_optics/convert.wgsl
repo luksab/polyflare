@@ -117,6 +117,7 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         bg = vec4<f32>(0.3,0.3,0.4,1.0);
     }
 
-    let color = bg * (1.0 - sample.a) + sample;
-    return color;
+    // let color = bg * (1.0 - sample.a) + sample;
+    return vec4<f32>(0.0,0.0,0.0,1.0);
+    // return color;
 }

@@ -394,7 +394,7 @@ impl PolyOptics {
         }
     }
 
-    pub fn update_rays(
+    pub async fn update_rays(
         &mut self,
         device: &wgpu::Device,
         queue: &Queue,
@@ -452,7 +452,7 @@ impl PolyOptics {
             let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
             device.poll(wgpu::Maintain::Wait);
 
-            if let Ok(()) = pollster::block_on(buffer_future) {
+            if let Ok(()) = buffer_future.await {
                 let data = buffer_slice.get_mapped_range();
 
                 let vertices = unsafe { data.align_to::<f32>().1 };
@@ -730,11 +730,11 @@ impl PolyOptics {
         let vertex_buffer_data = [
             -1.0f32, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
         ];
-        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::bytes_of(&vertex_buffer_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        // let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Vertex Buffer"),
+        //     contents: bytemuck::bytes_of(&vertex_buffer_data),
+        //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        // });
 
         // create render pass descriptor and its color attachments
         let color_attachments = [wgpu::RenderPassColorAttachment {
@@ -765,7 +765,7 @@ impl PolyOptics {
             rpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
             rpass.set_bind_group(2, &lens_state.lens_bind_group, &[]);
             // the three instance-local vertices
-            rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
+            //asdadfdfadggddgasgfsdgfsgggfsgfsd rpass.set_vertex_buffer(0, vertices_buffer.slice(..));
             //render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
             rpass.draw(0..vertex_buffer_data.len() as u32 / 2, 0..1);

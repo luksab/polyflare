@@ -493,7 +493,7 @@ impl PolyTri {
         }
     }
 
-    pub fn get_dots(
+    pub async fn get_dots(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -579,7 +579,7 @@ impl PolyTri {
         let mut out = vec![];
         device.poll(wgpu::Maintain::Wait);
 
-        if let Ok(()) = pollster::block_on(buffer_future) {
+        if let Ok(()) = buffer_future.await {
             let data = buffer_slice.get_mapped_range();
 
             let vertices = unsafe { data.align_to::<f32>().1 };
@@ -856,7 +856,7 @@ impl PolyTri {
     }
 
     /// retrace rays with wavelengths and ghosts then render
-    pub fn render_color(
+    pub async fn render_color(
         &mut self,
         view: &TextureView,
         device: &wgpu::Device,
@@ -934,7 +934,7 @@ impl PolyTri {
             let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
             device.poll(wgpu::Maintain::Wait);
 
-            if let Ok(()) = pollster::block_on(buffer_future) {
+            if let Ok(()) = buffer_future.await {
                 let data = buffer_slice.get_mapped_range();
 
                 let vertices = unsafe { data.align_to::<f32>().1 };
