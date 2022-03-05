@@ -693,9 +693,13 @@ impl Polynom4d<f64> {
             let offset = rng.gen_range(0..points.len() - num_samples);
             let now = Instant::now();
             let temp = (num_iterations - i) as f64 / num_iterations as f64;
-            println!("temp: {}", temp);
+            if debug {
+                println!("temp: {}", temp);
+            }
             let num_swap = Polynom4d::temp_to_size(num_terms, temp);
-            println!("swapping {} terms", num_swap);
+            if debug {
+                println!("swapping {} terms", num_swap);
+            }
             let swapped = (0..res.terms.len())
                 .choose_multiple(&mut rng, num_swap)
                 .iter()
