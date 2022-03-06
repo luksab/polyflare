@@ -107,7 +107,12 @@ impl GpuPolynomials {
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
         let now = Instant::now();
+        let plot_output = true;
 
+        if plot_output {
+            // create the directory for the debug info
+            std::fs::create_dir_all("python/dots").unwrap();
+        }
         let pos_params = lens_state.pos_params.clone();
         let lens = lens_state.actual_lens.clone();
         // for which_ghost in 1..2 {
@@ -125,8 +130,8 @@ impl GpuPolynomials {
                 .map(|(which_ghost, dir_xy)| {
                     let lens = lens.clone();
                     let width = 1.;
-                    let dots = &mut lens.get_dots_grid(
-                        (num_dots as f64).powf(0.25) as u32,
+                    let dots = &mut lens.get_dots(
+                        num_dots as u32,
                         cgmath::Vector3 {
                             x: 0.,
                             y: 0.,
@@ -137,8 +142,8 @@ impl GpuPolynomials {
                         [width as f64, width as f64],
                         true,
                     );
-                    println!("dots: {}", dots.len());
-                    if dir_xy == 0 {
+                    dbg!(dots.len());
+                    if plot_output && dir_xy == 0 {
                         let dots = &mut lens.get_dots_2dgrid(
                             (num_dots as f64).powf(0.5) as u32,
                             cgmath::Vector3 {
@@ -157,7 +162,7 @@ impl GpuPolynomials {
                             .truncate(true)
                             .open(format!("python/dots/dots,{}.csv", which_ghost))
                             .unwrap();
-                        println!("dots: {}", dots.len());
+                        dbg!(dots.len());
                         // writeln!(file, "x, y, z, w, xo, yo").unwrap();
                         for dot in dots.iter() {
                             writeln!(
@@ -182,7 +187,7 @@ impl GpuPolynomials {
                             )
                         })
                         .collect::<Vec<_>>();
-                    println!("points: {}", points.len());
+                    dbg!(points.len());
 
                     let now = Instant::now();
 
@@ -256,7 +261,7 @@ impl GpuPolynomials {
                     //     );
                     // }
 
-                    let polynom = dbg!(Polynom4d::<_>::fit(&points, degree));
+                    let polynom = Polynom4d::<_>::fit(&points, degree);
                     println!("Fitting took {:?}", now.elapsed());
 
                     let mut sum = 0.;
@@ -267,37 +272,40 @@ impl GpuPolynomials {
                     }
                     println!("de error: {}", (sum / points.len() as f64).sqrt());
 
-                    let mut file = std::fs::OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(format!("python/dots/depoly,{},{}.csv", which_ghost, dir_xy))
-                        .unwrap();
-                    // writeln!(file, "x, y, z, w, o").unwrap();
-                    lens.get_dots_2dgrid(
-                        (num_dots as f64).powf(0.5) as u32,
-                        cgmath::Vector3 {
-                            x: 0.,
-                            y: 0.,
-                            z: pos_params[2] as f64,
-                        },
-                        which_ghost as u32,
-                        pos_params[8] as f64,
-                        [width as f64, width as f64],
-                        false,
-                    )
-                    .iter()
-                    .map(|ray| (ray.init_pos[2], ray.init_pos[3], ray.pos[0].is_finite()))
-                    .for_each(|(z, w, is_finite)| {
-                        let (x, y) = (0., 0.);
-                        if is_finite {
-                            writeln!(file, "{}, {}, {}", z, w, polynom.eval(x, y, z, w)).unwrap();
-                        } else {
-                            writeln!(file, "{}, {}, {}", z, w, f32::NAN).unwrap();
-                        }
-                    });
+                    if plot_output {
+                        let mut file = std::fs::OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .truncate(true)
+                            .open(format!("python/dots/depoly,{},{}.csv", which_ghost, dir_xy))
+                            .unwrap();
+                        // writeln!(file, "x, y, z, w, o").unwrap();
+                        lens.get_dots_2dgrid(
+                            (num_dots as f64).powf(0.5) as u32,
+                            cgmath::Vector3 {
+                                x: 0.,
+                                y: 0.,
+                                z: pos_params[2] as f64,
+                            },
+                            which_ghost as u32,
+                            pos_params[8] as f64,
+                            [width as f64, width as f64],
+                            false,
+                        )
+                        .iter()
+                        .map(|ray| (ray.init_pos[2], ray.init_pos[3], ray.pos[0].is_finite()))
+                        .for_each(|(z, w, is_finite)| {
+                            let (x, y) = (0., 0.);
+                            if is_finite {
+                                writeln!(file, "{}, {}, {}", z, w, polynom.eval(x, y, z, w))
+                                    .unwrap();
+                            } else {
+                                writeln!(file, "{}, {}, {}", z, w, f32::NAN).unwrap();
+                            }
+                        });
+                    }
 
-                    if cfg!(config_assertions) {
+                    if cfg!(debug_assertions) {
                         println!("{}", polynom);
                     }
                     // let mut sparse_poly =
@@ -307,9 +315,9 @@ impl GpuPolynomials {
 
                     // return sparse_poly;
 
-                    let sparse_poly = polynom.simulated_annealing(&points, num_terms, 1000, 1000);
+                    let sparse_poly = polynom.simulated_annealing(&points, num_terms, 2000, 5000);
 
-                    println!("sparse_poly len: {}", sparse_poly.terms.len());
+                    dbg!(sparse_poly.terms.len());
 
                     sum = 0.;
                     for point in &points {
@@ -323,36 +331,38 @@ impl GpuPolynomials {
                     // sparse_poly.gradient_descent(&filtered_points, 100);
                     println!("actual error: {}", sparse_poly.error(&points));
 
-                    let mut file = std::fs::OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(format!("python/dots/poly,{},{}.csv", which_ghost, dir_xy))
-                        .unwrap();
-                    // writeln!(file, "x, y, z, w, o").unwrap();
-                    lens.get_dots_2dgrid(
-                        (num_dots as f64).powf(0.5) as u32,
-                        cgmath::Vector3 {
-                            x: 0.,
-                            y: 0.,
-                            z: pos_params[2] as f64,
-                        },
-                        which_ghost as u32,
-                        pos_params[8] as f64,
-                        [width as f64, width as f64],
-                        false,
-                    )
-                    .iter()
-                    .map(|ray| (ray.init_pos[2], ray.init_pos[3], ray.pos[0].is_finite()))
-                    .for_each(|(z, w, is_finite)| {
-                        let (x, y) = (0., 0.);
-                        if is_finite {
-                            writeln!(file, "{}, {}, {}", z, w, sparse_poly.eval([x, y, z, w]))
-                                .unwrap();
-                        } else {
-                            writeln!(file, "{}, {}, {}", z, w, f32::NAN).unwrap();
-                        }
-                    });
+                    if plot_output {
+                        let mut file = std::fs::OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .truncate(true)
+                            .open(format!("python/dots/poly,{},{}.csv", which_ghost, dir_xy))
+                            .unwrap();
+                        // writeln!(file, "x, y, z, w, o").unwrap();
+                        lens.get_dots_2dgrid(
+                            (num_dots as f64).powf(0.5) as u32,
+                            cgmath::Vector3 {
+                                x: 0.,
+                                y: 0.,
+                                z: pos_params[2] as f64,
+                            },
+                            which_ghost as u32,
+                            pos_params[8] as f64,
+                            [width as f64, width as f64],
+                            false,
+                        )
+                        .iter()
+                        .map(|ray| (ray.init_pos[2], ray.init_pos[3], ray.pos[0].is_finite()))
+                        .for_each(|(z, w, is_finite)| {
+                            let (x, y) = (0., 0.);
+                            if is_finite {
+                                writeln!(file, "{}, {}, {}", z, w, sparse_poly.eval([x, y, z, w]))
+                                    .unwrap();
+                            } else {
+                                writeln!(file, "{}, {}, {}", z, w, f32::NAN).unwrap();
+                            }
+                        });
+                    }
 
                     // panic!("{}", now.elapsed().as_millis());
                     sparse_poly
@@ -371,8 +381,6 @@ impl GpuPolynomials {
         degree: usize,
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
-        Self::compute_polynomials(num_dots, num_terms, degree, lens_state);
-        panic!("testing!");
         match Self::check_cache(num_dots, num_terms, degree, lens_state) {
             Some(polynomials) => polynomials,
             None => {
