@@ -4,3 +4,4 @@ screenshot.png
 plots/dots.txt
 plots/points.txt
 images/renders/
+python/dots/*.csv
