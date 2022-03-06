@@ -431,7 +431,6 @@ impl GpuPolynomials {
         let poly_data: Vec<f32> = polynomials
             .iter()
             .flat_map(|polynomial: &Polynomial<f64, 4>| polynomial.get_T_as_vec(num_terms))
-            .map(|num| num as f32)
             .collect();
 
         // println!("poly_data: {:?}", poly_data);

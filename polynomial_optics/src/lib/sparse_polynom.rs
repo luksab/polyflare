@@ -246,47 +246,32 @@ pub struct Polynomial<N, const VARIABLES: usize> {
     pub terms: Vec<Monomial<N, VARIABLES>>,
 }
 
-// impl<N: std::convert::From<usize> + Copy, const VARIABLES: usize> PolyStore<N>
-//     for Polynomial<N, VARIABLES>
-// {
-//     default fn get_T_as_vec(&self) -> Vec<N> {
-//         self.terms
-//             .iter()
-//             .flat_map(|m| {
-//                 let mut v = m
-//                     .exponents
-//                     .iter()
-//                     .map(|exp| (*exp).into())
-//                     .collect::<Vec<_>>();
-//                 v.push(m.coefficient);
-//                 v
-//             })
-//             .collect()
-//     }
-// }
-
 impl<const VARIABLES: usize> Polynomial<f64, VARIABLES> {
+    /// get the polynomial as a vec of f32 to upload to the GPU
     #[allow(non_snake_case)]
-    pub fn get_T_as_vec(&self, len: usize) -> Vec<f64> {
-        let v: Vec<f64> = self
+    pub fn get_T_as_vec(&self, len: usize) -> Vec<f32> {
+        let v: Vec<f32> = self
             .terms
             .iter()
             .flat_map(|m| {
                 let mut v = m
                     .exponents
                     .iter()
-                    .map(|exp| (*exp) as f64)
+                    .map(|exp| (*exp) as f32)
                     .collect::<Vec<_>>();
-                v.push(m.coefficient);
+                v.push(m.coefficient as f32);
                 v
             })
             .collect();
+        // fill up if we don't have enough terms
         let missing_len = (VARIABLES + 1) * len - v.len();
         [v, vec![0.0; missing_len]].concat()
     }
 }
 
 impl Polynomial<f64, 1> {
+    /// integrate the polynomial multiplied by `other` polynomial
+    /// in `range` over `num_points` points
     pub fn integrate(
         &self,
         range: std::ops::Range<f64>,
@@ -297,16 +282,7 @@ impl Polynomial<f64, 1> {
             .into_par_iter()
             .map(|i| {
                 range.start + (i as f64) * (range.end - range.start) / (num_points - 1) as f64
-                // - (range.end - range.start) / 2.0
             })
-            // .map(|x| {
-            //     println!("x={}", x);
-            //     x
-            // })
-            // .map(|p| {
-            //     println!("{}  {}", self.eval([p]), other.eval([p]));
-            //     p
-            // })
             .map(|p| self.eval([p]) * other.eval([p]))
             .sum::<f64>()
             * (range.end - range.start)
@@ -339,6 +315,7 @@ where
 }
 
 impl Polynomial<f64, 1> {
+    /// generate a lookup table for the polynomial
     pub fn lut(&self, min: f64, max: f64, num: usize) -> Vec<f64> {
         (0..num)
             .map(|i| min + (max - min) * i as f64 / (num - 1) as f64)
