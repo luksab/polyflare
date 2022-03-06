@@ -19,5 +19,6 @@ in pkgs.mkShell {
     pandoc
     gnuplot
     python-with-my-packages
+    imagemagick
   ];
 }

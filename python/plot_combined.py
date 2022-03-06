@@ -61,5 +61,12 @@ def plot_combined(name, num = 0):
     fig.savefig(f"dots/combinded,{name},{num}.png")
 
 for i in range(1,6):
+    print(f"plotting ghost {i}")
     plot_combined(name = i, num = 0)
     plot_combined(name = i, num = 1)
+
+print("combining images")
+import os
+os.system('convert dots/combinded,*,0.png +append result-sprite0.png')
+os.system('convert dots/combinded,*,1.png +append result-sprite1.png')
+os.system('convert result-sprite0.png result-sprite1.png -append result-sprite.png')
