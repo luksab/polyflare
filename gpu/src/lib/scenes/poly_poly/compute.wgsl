@@ -777,8 +777,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         // Apply the polynomial derivative as strength
         let strength = 1.;//pow(length(eval_grad_zw(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost))), 2.) * 0.75;
         let position = vec3<f32>(
-            eval(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost) * u32(2)), 
-            eval(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost) * u32(2) + u32(1)),
+            eval(vec4<f32>(posParams.init.o.xy, dir.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2)), 
+            eval(vec4<f32>(posParams.init.o.xy, dir.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2) + u32(1)),
             1.);
         dir = normalize(dir);
         // struct Ray {
