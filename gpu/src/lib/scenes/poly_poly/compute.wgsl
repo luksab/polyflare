@@ -775,37 +775,50 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
         dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
         // Apply the polynomial derivative as strength
-        let strength = pow(length(eval_grad_zw(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost))), 2.) * 0.75;
+        let strength = 1.;//pow(length(eval_grad_zw(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost))), 2.) * 0.75;
+        let position = vec3<f32>(
+            eval(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost) * u32(2)), 
+            eval(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost) * u32(2) + u32(1)),
+            1.);
         dir = normalize(dir);
+        // struct Ray {
+        //     o: vec3<f32>;
+        //     wavelength: f32;
+        //     d: vec3<f32>;
+        //     strength: f32;
+        //     aperture_pos: vec2<f32>;
+        //     entry_pos: vec2<f32>;
+        //  };
         var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, strength * str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
         ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
+        ray.o = position;
 
-        for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
-            let element = elements.el[ele];
-            // if we iterated through all elements up to
-            // the first reflection point
+        // for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
+        //     let element = elements.el[ele];
+        //     // if we iterated through all elements up to
+        //     // the first reflection point
 
-            if (ele == j) {
-                // reflect at the first element,
-                // which is further down the optical path
-                ray = reflect_ray(ray, element);
+        //     if (ele == j) {
+        //         // reflect at the first element,
+        //         // which is further down the optical path
+        //         ray = reflect_ray(ray, element);
 
-                // propagate backwards through system
-                // until the second reflection
-                for (var k = j - u32(1); k > i; k = k - u32(1)) { // for k in (i + 1..j).rev() {
-                    ray = propagate(ray, elements.el[k]);
-                }
-                ray = reflect_ray(ray, elements.el[i]);
+        //         // propagate backwards through system
+        //         // until the second reflection
+        //         for (var k = j - u32(1); k > i; k = k - u32(1)) { // for k in (i + 1..j).rev() {
+        //             ray = propagate(ray, elements.el[k]);
+        //         }
+        //         ray = reflect_ray(ray, elements.el[i]);
 
-                for (var k = i + u32(1); k <= j; k = k + u32(1)) { // for k in i + 1..=j {
-                    ray = propagate(ray, elements.el[k]);
-                }
-                // println!("strength: {}", ray.strength);
-            } else {
-                ray = propagate(ray, element);
-            }
-        }
-        ray = intersect_ray(ray, posParams.sensor);
+        //         for (var k = i + u32(1); k <= j; k = k + u32(1)) { // for k in i + 1..=j {
+        //             ray = propagate(ray, elements.el[k]);
+        //         }
+        //         // println!("strength: {}", ray.strength);
+        //     } else {
+        //         ray = propagate(ray, element);
+        //     }
+        // }
+        // ray = intersect_ray(ray, posParams.sensor);
 
         // only return rays that have made it through
         rays.rays[ray_num + ghost_num * (u32(params.side_len) * u32(params.side_len))] = drawRay_from_Ray(ray);
