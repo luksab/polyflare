@@ -66,17 +66,11 @@ def plot_de_poly(name, num = 0):
     plt.imshow(picture, cmap=mpl.cm.gray)
     plt.savefig(f"dots/depoly,{name},{num}.png")
 
-plot_dot("2", 0)
-plt.show()
-plot_dot("2", 1)
-plt.show()
-
-plot_poly("2", 0)
-plt.show()
-plot_poly("2", 1)
-plt.show()
-
-plot_de_poly("2", 0)
-plt.show()
-plot_de_poly("2", 1)
-plt.show()
+for i in range(1,6):
+    plot_dot(i, 0)
+    plot_dot(i, 1)
+    plot_poly(i, 0)
+    plot_poly(i, 1)
+    plot_de_poly(i, 0)
+    plot_de_poly(i, 1)
+    plt.show()
