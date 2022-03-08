@@ -47,6 +47,16 @@ class Poly:
         f = (self*b).antiDerive()
         return (f(1)-f(-1))
 
+    def grid(self,b, num_samples): # scalar product
+        sum = 0
+        for i in range(num_samples):
+            # range from -1 to 1 inclusive
+            x = i/(num_samples-1)*2-1
+            # print(i, x)
+            # x = 2*i/num_samples - 1
+            sum += self(x)*b(x)
+        return sum/num_samples*2
+
     # def __repr__(self):
     #    return "Poly({})".format(self.coef)
     def __repr__(self):
@@ -70,23 +80,77 @@ def gramSchmidt(basis):
             basis[i] -= basis[j]*(basis[j]&basis[i])
         basis[i] *= 1/np.sqrt(basis[i]&basis[i])
 
-N=5
-basis=[Poly([0]*i+[1]+[0]*(N-i-1)) for i in range(N)]
-print(basis)
+def gramSchmidtGrid(basis, num_samples):
+    for i in range(len(basis)):
+        for j in range(i):
+            integrate = basis[j].grid(basis[i], num_samples)
+            basis[i] -= basis[j]*(integrate)
+        integrate = basis[i].grid(basis[i], num_samples)
+        basis[i] *= 1/np.sqrt(integrate)
 
-gramSchmidt(basis)
-print(basis)
+N=5
+LGbasis=[Poly([0]*i+[1]+[0]*(N-i-1)) for i in range(N)]
+print(LGbasis)
+gramSchmidt(LGbasis)
+print(LGbasis)
 for i in range(N):
-    print([round(basis[i]&basis[j], 4) for j in range(N)])
+    print([round(LGbasis[i]&LGbasis[j], 4) for j in range(N)])
 
 X=np.linspace(-1,1,1000)
 for i in range(N):
-    plt.plot(X, basis[i](X))
+    plt.plot(X, LGbasis[i](X))
 
-plt.savefig('legendre.svg')
+plt.savefig(f'basis/legendre.png')
+plt.clf()
+
+samples = [5, 10, 100, 1000]
+for num_samples in samples:
+    basis=[Poly([0]*i+[1]+[0]*(N-i-1)) for i in range(N)]
+    print(basis)
+    gramSchmidtGrid(basis, num_samples)
+    print(basis)
+    
+    for i in range(N):
+        print(f"basis {num_samples}",[round(basis[i].grid(basis[j], num_samples), 4) for j in range(N)])
+
+    X=np.linspace(-1,1,1000)
+    for i in range(N):
+        plt.plot(X, basis[i](X))
+
+    plt.savefig(f'basis/legendreGrid{num_samples}.png')
+    plt.clf()
+
+errors = []
+samples = [100, 200, 250, 400, 500, 700, 1000, 2000, 3500, 5000, 7000, 10000]
+for num_samples in samples:
+    error = 0
+    for i in range(N):
+        for j in range(N):
+            if i == j:
+                error += abs(LGbasis[i].grid(LGbasis[j], num_samples) - 1)
+            else:
+                error += abs(LGbasis[i].grid(LGbasis[j], num_samples))
+        print(f"basis {num_samples}",[round(basis[i]&basis[j], 4) for j in range(N)])
+    errors.append(error)
+    print(f"error {num_samples}", error)
+
+# plt.yscale('log')
+# plt.xscale('log')
+plt.xlabel("Number of samples")
+plt.ylabel("Error")
+plt.title("Error of Legendre polynomials when evaluating on a grid")
+plt.plot(samples, errors)
+plt.savefig(f'basis/legendreError.png')
+plt.savefig(f'basis/legendreError.svg')
+
+plt.yscale('log')
+plt.xscale('log')
+plt.plot(samples, errors)
+plt.savefig(f'basis/legendreErrorLog.png')
+plt.savefig(f'basis/legendreErrorLog.svg')
 
 #types: x: 4d input; i,j,k,l: indices of the basis polynomials
 # total poly: coefficents onto i,j,k,l
 def poly4d(x,i,j,k,l):
-    return basis[i](x[0]) * basis[j](x[1]) * basis[k](x[2]) * basis[l](x[3])
+    return LGbasis[i](x[0]) * LGbasis[j](x[1]) * LGbasis[k](x[2]) * LGbasis[l](x[3])
 # to fit i,j,k,l: scalar product of basis[i,j,k,l] with the function to fit (numerically)
