@@ -185,5 +185,9 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
 
   averageArea = averageArea / f32(num_areas);
 
+  if (!(rays.rays[(x + y * dot_side_len) + offset].strength > 0.)){
+    rays.rays[(x + y * dot_side_len) + offset].strength = 0.;
+  }
+
   rays.rays[(x + y * dot_side_len) + offset].strength = rays.rays[(x + y * dot_side_len) + offset].strength / averageArea;
 }
