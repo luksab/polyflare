@@ -81,9 +81,9 @@ fn eval(x: vec4<f32>, index: u32) -> f32 {
             }
             if (term.c > 0.) {
                 if (i32(term.c) % 2 == 1 && x.z < 0.) {
-                    term_res = -term_res * term.c * pow(-x.z, term.c);
+                    term_res = -term_res * pow(-x.z, term.c);
                 } else {
-                    term_res = term_res * term.c * pow(abs(x.z), term.c);
+                    term_res = term_res * pow(abs(x.z), term.c);
                 }
             }
             if (term.d > 0.) {
