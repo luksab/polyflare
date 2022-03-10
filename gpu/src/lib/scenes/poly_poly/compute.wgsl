@@ -775,7 +775,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
         dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
         // Apply the polynomial derivative as strength
-        let strength = 1.;//pow(length(eval_grad_zw(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost))), 2.) * 0.75;
+        let strength = pow(eval_grad_zw(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost)), 0.5);
         let position = vec3<f32>(
             eval(vec4<f32>(posParams.init.o.xy, dir.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2)), 
             eval(vec4<f32>(posParams.init.o.xy, dir.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2) + u32(1)),
@@ -790,8 +790,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         //     entry_pos: vec2<f32>;
         //  };
         var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, strength * str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
-        ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
-        ray.o = position;
+        // ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
 
         // for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
         //     let element = elements.el[ele];
@@ -819,6 +818,8 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         //     }
         // }
         // ray = intersect_ray(ray, posParams.sensor);
+
+        ray.o = position;
 
         // only return rays that have made it through
         rays.rays[ray_num + ghost_num * (u32(params.side_len) * u32(params.side_len))] = drawRay_from_Ray(ray);
