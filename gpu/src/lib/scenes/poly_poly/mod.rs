@@ -109,6 +109,15 @@ impl GpuPolynomials {
         let now = Instant::now();
         let plot_output = true;
 
+        let stats_file = std::sync::Arc::new(std::sync::Mutex::new(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open("poly_stats.csv")
+                .unwrap(),
+        ));
+
         if plot_output {
             // create the directory for the debug info
             std::fs::create_dir_all("python/dots").unwrap();
@@ -128,7 +137,9 @@ impl GpuPolynomials {
                 )
                 .par_bridge()
                 .map(|(which_ghost, dir_xy)| {
-                    let lens = lens.clone();
+                    let mut stats = String::new();
+                    stats += format!("{},{}", which_ghost, dir_xy).as_str();
+                    // stats: which_ghost, dir_xy
                     let width = 1.;
                     let dots = &mut lens.get_dots(
                         num_dots as u32,
@@ -193,6 +204,8 @@ impl GpuPolynomials {
 
                     let polynom = Polynom4d::<_>::fit(&points, degree);
                     println!("Fitting took {:?}", now.elapsed());
+                    stats += format!(",{}", now.elapsed().as_millis()).as_str();
+                    // stats: which_ghost, dir_xy, dense_fit_time
 
                     let mut sum = 0.;
                     for point in &points {
@@ -201,6 +214,8 @@ impl GpuPolynomials {
                         // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
                     }
                     println!("de error: {}", (sum / points.len() as f64).sqrt());
+                    stats += format!(",{}", (sum / points.len() as f64).sqrt()).as_str();
+                    // stats: which_ghost, dir_xy, dense_fit_time, dense_fit_error
 
                     if plot_output {
                         let mut file = std::fs::OpenOptions::new()
@@ -256,10 +271,14 @@ impl GpuPolynomials {
                         // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
                     }
                     println!("sp error: {}", (sum / points.len() as f64).sqrt());
+                    stats += format!(",{}", (sum / points.len() as f64).sqrt()).as_str();
+                    // stats: which_ghost, dir_xy, dense_fit_time, dense_fit_error, sparse_fit_error
 
                     // gradient descent is just worse than fit
                     // sparse_poly.gradient_descent(&filtered_points, 100);
                     println!("actual error: {}", sparse_poly.error(&points));
+                    stats += format!(",{}", sparse_poly.error(&points)).as_str();
+                    // stats: which_ghost, dir_xy, dense_fit_time, dense_fit_error, sparse_fit_error, sparse_fit_error_actual
 
                     if plot_output {
                         let mut file = std::fs::OpenOptions::new()
@@ -293,6 +312,10 @@ impl GpuPolynomials {
                             }
                         });
                     }
+
+                    stats += "\n";
+
+                    stats_file.lock().unwrap().write_all(stats.as_bytes()).unwrap();
 
                     // panic!("{}", now.elapsed().as_millis());
                     sparse_poly
