@@ -128,6 +128,8 @@ fn main() {
 
     let mut last_frame = Instant::now();
 
+    let mut low_res_render = false;
+
     let mut last_cursor = None;
 
     let mut poly_res_size: [f32; 2] = [640.0, 480.0];
@@ -223,10 +225,17 @@ fn main() {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                let (update_lens, update_ray_num, update_dot_num, render, update_res, compute) =
-                    lens_ui.build_ui(&ui, &state.device, &state.queue);
+                let (
+                    update_lens,
+                    update_ray_num,
+                    update_dot_num,
+                    render,
+                    update_res,
+                    compute,
+                    render_low,
+                ) = lens_ui.build_ui(&ui, &state.device, &state.queue);
 
-                if update_lens {
+                if compute {
                     poly_poly.update_poly(&state.device, &lens_ui);
                 }
 
@@ -290,6 +299,88 @@ fn main() {
                     }
                 }
 
+                if low_res_render {
+                    let now = Instant::now();
+                    let size: [u32; 2] = [
+                        (poly_res_size[0] as f64 * state.scale_factor) as u32,
+                        (poly_res_size[1] as f64 * state.scale_factor) as u32,
+                    ];
+                    println!("{:?}", size);
+                    let extend = wgpu::Extent3d {
+                        width: size[0],
+                        height: size[1],
+                        depth_or_array_layers: 1,
+                    };
+                    let desc = wgpu::TextureDescriptor {
+                        label: Some("low-res"),
+                        size: extend,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_SRC,
+                    };
+                    let tex = state.device.create_texture(&desc);
+
+                    match lens_ui.render_mode {
+                        lens_state::DrawMode::Dense => {
+                            // Only render contents if the window is not collapsed
+                            match poly_res.render(
+                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                &state.device,
+                                &state.queue,
+                                &lens_ui,
+                            ) {
+                                Ok(_) => {}
+                                // just ignore here
+                                Err(e) => eprintln!("{:?}", e),
+                            }
+                        }
+                        lens_state::DrawMode::Sparse => {
+                            match poly_tri.render_color(
+                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                &state.device,
+                                &state.queue,
+                                &mut lens_ui,
+                                update_dot_num | update_lens,
+                            ) {
+                                Ok(_) => {}
+                                // just ignore here
+                                Err(e) => eprintln!("{:?}", e),
+                            }
+                        }
+                        lens_state::DrawMode::Poly => {
+                            match poly_poly.render_color(
+                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                &state.device,
+                                &state.queue,
+                                &mut lens_ui,
+                                update_dot_num | update_lens,
+                            ) {
+                                Ok(_) => {}
+                                // just ignore here
+                                Err(e) => eprintln!("{:?}", e),
+                            }
+                        }
+                    }
+
+                    save_png::save_png(
+                        &tex,
+                        [
+                            (poly_res_size[0] as f64 * state.scale_factor) as u32,
+                            (poly_res_size[1] as f64 * state.scale_factor) as u32,
+                        ],
+                        &state.device,
+                        &state.queue,
+                        "low-res.png",
+                    );
+                    low_res_render = false;
+                }
+                if render_low {
+                    low_res_render = true;
+                }
                 if render {
                     let now = Instant::now();
                     let size = [2048 * 4, 2048 * 4];
@@ -393,7 +484,6 @@ fn main() {
                     println!("Rendering and saving image took {:?}", now.elapsed());
                 }
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
-
                 if compute {
                     poly_poly.update_poly(&state.device, &lens_ui);
                 }
@@ -406,18 +496,46 @@ fn main() {
                 {
                     // Store the new size of Image() or None to indicate that the window is collapsed.
                     let mut new_window_size: Option<[f32; 2]> = None;
-                    imgui::Window::new("Poly Res")
-                        .size([512.0, 512.0], Condition::FirstUseEver)
-                        .position([700., 50.], Condition::FirstUseEver)
-                        .build(&ui, || {
-                            new_window_size = Some(ui.content_region_avail());
-                            imgui::Image::new(res_window_texture_id, new_window_size.unwrap())
-                                .build(&ui);
-                        });
+                    if low_res_render {
+                        let size = [
+                            ((poly_res_size[0]) as u32 / wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+                                * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+                                + 16) as _,
+                            poly_res_size[1] + 35.0,
+                        ];
+                        println!(
+                            "tried to resize to {:?}",
+                            [
+                                ((poly_res_size[0]) as u32 / wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+                                    * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+                                    as f32,
+                                poly_res_size[1],
+                            ]
+                        );
+                        println!("resize window to {:?}", size);
+                        imgui::Window::new("Poly Res")
+                            .size(size, Condition::Always)
+                            .position([700., 50.], Condition::FirstUseEver)
+                            .build(&ui, || {
+                                new_window_size = Some(ui.content_region_avail());
+                                imgui::Image::new(res_window_texture_id, new_window_size.unwrap())
+                                    .build(&ui);
+                            });
+                    } else {
+                        imgui::Window::new("Poly Res")
+                            .size([512.0, 512.0], Condition::FirstUseEver)
+                            .position([700., 50.], Condition::FirstUseEver)
+                            .build(&ui, || {
+                                new_window_size = Some(ui.content_region_avail());
+                                imgui::Image::new(res_window_texture_id, new_window_size.unwrap())
+                                    .build(&ui);
+                            });
+                    }
 
                     if let Some(size) = new_window_size {
                         // Resize render target if size changed
                         if size != poly_res_size && size[0] >= 1.0 && size[1] >= 1.0 {
+                            println!("Resizing poly_res to {:?}\n", size);
                             poly_res_size = size;
                             let scale = &ui.io().display_framebuffer_scale;
                             let texture_config = TextureConfig {
