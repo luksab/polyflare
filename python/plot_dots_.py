@@ -39,6 +39,7 @@ def plot_dot(name, picture = 0):
     else:
         plt.imshow(picture2, cmap=mpl.cm.gray)
     plt.savefig(f"dots/dots,{name},{picture}.png")
+    plt.clf()
 
 def plot_poly(name, num = 0):
     data = np.loadtxt(f"dots/poly,{name},{num}.csv", delimiter=",")
@@ -52,6 +53,7 @@ def plot_poly(name, num = 0):
 
     plt.imshow(picture, cmap=mpl.cm.gray)
     plt.savefig(f"dots/poly,{name},{num}.png")
+    plt.clf()
 
 def plot_de_poly(name, num = 0):
     data = np.loadtxt(f"dots/depoly,{name},{num}.csv", delimiter=",")
@@ -65,6 +67,7 @@ def plot_de_poly(name, num = 0):
 
     plt.imshow(picture, cmap=mpl.cm.gray)
     plt.savefig(f"dots/depoly,{name},{num}.png")
+    plt.clf()
 
 for i in range(1,6):
     plot_dot(i, 0)
@@ -73,4 +76,3 @@ for i in range(1,6):
     plot_poly(i, 1)
     plot_de_poly(i, 0)
     plot_de_poly(i, 1)
-    plt.show()
