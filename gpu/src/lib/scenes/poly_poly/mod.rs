@@ -106,6 +106,9 @@ impl GpuPolynomials {
         degree: usize,
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
+        let num_samples = 2000;
+        let num_iterations = 5000;
+
         let now = Instant::now();
         let plot_output = true;
 
@@ -260,7 +263,12 @@ impl GpuPolynomials {
 
                     // return sparse_poly;
 
-                    let sparse_poly = polynom.simulated_annealing(&points, num_terms, 2000, 5000);
+                    let sparse_poly = polynom.simulated_annealing(
+                        &points,
+                        num_terms,
+                        usize::min(num_samples, points.len()),// make sure we don't sample more than we have
+                        num_iterations,
+                    );
 
                     dbg!(sparse_poly.terms.len());
 
@@ -315,7 +323,11 @@ impl GpuPolynomials {
 
                     stats += "\n";
 
-                    stats_file.lock().unwrap().write_all(stats.as_bytes()).unwrap();
+                    stats_file
+                        .lock()
+                        .unwrap()
+                        .write_all(stats.as_bytes())
+                        .unwrap();
 
                     // panic!("{}", now.elapsed().as_millis());
                     sparse_poly
