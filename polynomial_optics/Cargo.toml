@@ -12,17 +12,14 @@ path = "src/bin.rs"
 name = "polynomial_optics"
 path = "src/lib/lib.rs"
 
-[features]
-sys = ["mathru_sys"]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tiny-skia = "0.6.1"
 num = "0.4.0"
 cgmath = { version = "0.18", features = ["swizzle"] }
-mathru_sys = { package = "mathru", version = "0.11", default-features = false, features = ["intel-mkl"], optional = true }
-mathru = { package = "mathru", version = "0.11" }
+mathru = { package = "mathru", version = "0.11", default-features = false, features = ["intel-mkl"] }
+#mathru = { package = "mathru", version = "0.11" }
 serde = "1.0"
 ron = "0.7"
 csv = "1.1"
