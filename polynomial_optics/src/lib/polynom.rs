@@ -608,10 +608,7 @@ impl<
         phi
     }
 
-    pub fn get_sparse_dumb(
-        &self,
-        num_max_terms: usize,
-    ) -> crate::Polynomial<N, 4> {
+    pub fn get_sparse_dumb(&self, num_max_terms: usize) -> crate::Polynomial<N, 4> {
         let mut res = crate::Polynomial::<_, 4>::new(vec![]);
         let mut terms = self.get_terms();
         println!("got {} terms", terms.len());
@@ -663,6 +660,7 @@ impl Polynom4d<f64> {
         num_samples: usize,
         num_iterations: usize,
     ) -> crate::Polynomial<f64, 4> {
+        assert!(num_samples <= points.len());
         let debug = cfg!(debug_assertions);
         let mut rng = rand::thread_rng();
         let mut res = crate::Polynomial::<_, 4>::new(vec![]);
@@ -690,7 +688,11 @@ impl Polynom4d<f64> {
         // let offset = 0;
         let mut error = res.approx_error(points, num_samples, 0);
         for i in 0..num_iterations {
-            let offset = rng.gen_range(0..points.len() - num_samples);
+            let offset = if points.len() > num_samples {
+                rng.gen_range(0..points.len() - num_samples)
+            } else {
+                0
+            };
             let now = Instant::now();
             let temp = (num_iterations - i) as f64 / num_iterations as f64;
             if debug {
