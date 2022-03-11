@@ -98,6 +98,11 @@ impl GpuPolynomials {
         .unwrap();
         // handle errors
         file.sync_all().unwrap();
+
+        // check that the written polynomial is the same as the one read
+        let read_poly =
+            GpuPolynomials::check_cache(num_dots, num_terms, degree, lens_state).unwrap();
+        assert_eq!(polynomials, &read_poly);
     }
 
     fn compute_polynomials(
