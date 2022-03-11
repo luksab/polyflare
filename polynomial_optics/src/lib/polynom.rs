@@ -26,11 +26,11 @@ macro_rules! pow_u {
     };
 }
 
-macro_rules! pow_f {
+macro_rules! pow_i {
     ($T:ty) => {
         impl PowUsize for $T {
             fn upow(self, exp: usize) -> Self {
-                self.powf(exp as $T)
+                self.powi(exp as i32)
             }
         }
     };
@@ -48,8 +48,8 @@ pow_u!(i32);
 pow_u!(i64);
 pow_u!(i128);
 pow_u!(isize);
-pow_f!(f32);
-pow_f!(f64);
+pow_i!(f32);
+pow_i!(f64);
 
 #[derive(Debug, Clone)]
 pub struct Polynom2d<N, const DEGREE: usize> {
