@@ -1317,7 +1317,6 @@ impl Lens {
         filter: bool,
     ) -> Vec<DrawRay> {
         let center_dir = self.get_center_dir(pos);
-        println!("center dir: {:?}", center_dir);
 
         let mut rays = vec![];
 
@@ -1396,7 +1395,6 @@ impl Lens {
         filter: bool,
     ) -> Vec<DrawRay> {
         let center_dir = self.get_center_dir(pos);
-        println!("center dir: {:?}", center_dir);
 
         let mut rays = vec![];
 
@@ -1485,7 +1483,6 @@ impl Lens {
         // );
 
         let center_dir = self.get_center_dir(pos);
-        println!("center dir: {:?}", center_dir);
 
         let mut rays = vec![];
 
@@ -1497,7 +1494,7 @@ impl Lens {
             for j in i + 1..self.elements.len() {
                 ghost_num += 1;
                 if ghost_num == which_ghost {
-                    for _ in 0..num_rays {
+                    while rays.len() < num_rays as usize {
                         // let wave_num = 1;
                         // let ray_num = ray_num_x * num_rays + ray_num_y;
                         // let wavelen = (ray_num % wave_num) as f64;
