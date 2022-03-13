@@ -54,6 +54,7 @@ struct PosParams {
   // position of the sensor in the optical plane
   sensor: f32;
   width: f32;
+  entry_rad: f32;
 };
 
 
@@ -325,6 +326,14 @@ fn intersect_ray_to_ray(self: Ray, plane: f32) -> Ray {
     ray.o = intersect;
     return ray;
 }
+fn intersect_ray_to_xy(self: Ray, plane: f32) -> vec2<f32> {
+    let diff = plane - self.o.z;
+    let num_z = diff / self.d.z;
+
+    let intersect = self.o + self.d * num_z;
+    var ray = self;
+    return vec2<f32>(intersect.x, intersect.y);
+}
 
 let tpi: f32 = 6.283185307179586;
 fn clip_ray_poly(self: Ray, pos: f32, num_edge: u32, size: f32) -> bool {
@@ -455,6 +464,12 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 let end_wavelen = 0.78;
                 let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
                 var ray = Ray(posParams.init.o, wavelength, dir, str_from_wavelen(wavelength));
+                // constrain to entry pos
+                if (length(intersect_ray_to_xy(ray, elements.el[0].position)) > posParams.entry_rad) {
+                    rays.rays[ray_num * num_segments + counter] = Ray(vec3<f32>(100., 100., 100.), 0.5, vec3<f32>(0.0, 0.0, 0.0), 0.0);
+                    counter = counter + u32(1);
+                    continue;
+                }
 
                 for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
                     let element = elements.el[ele];
