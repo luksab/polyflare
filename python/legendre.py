@@ -100,7 +100,8 @@ X=np.linspace(-1,1,1000)
 for i in range(N):
     plt.plot(X, LGbasis[i](X))
 
-plt.savefig(f'basis/legendre.png')
+plt.title(f'legendre polynomials')
+plt.savefig(f'basis/legendre.svg')
 plt.clf()
 
 samples = [5, 10, 100, 1000]
@@ -117,7 +118,8 @@ for num_samples in samples:
     for i in range(N):
         plt.plot(X, basis[i](X))
 
-    plt.savefig(f'basis/legendreGrid{num_samples}.png')
+    plt.title(f'{num_samples} samples')
+    plt.savefig(f'basis/grid{num_samples}.svg')
     plt.clf()
 
 errors = []
@@ -136,15 +138,16 @@ for num_samples in samples:
 
 # plt.yscale('log')
 # plt.xscale('log')
-plt.xlabel("Number of samples")
+plt.xlabel("N")
 plt.ylabel("Error")
-plt.title("Error of Legendre polynomials when evaluating on a grid")
+plt.title("Linear axis")
 plt.plot(samples, errors)
 plt.savefig(f'basis/legendreError.png')
 plt.savefig(f'basis/legendreError.svg')
 
 plt.yscale('log')
 plt.xscale('log')
+plt.title("Log-log axis")
 plt.plot(samples, errors)
 plt.savefig(f'basis/legendreErrorLog.png')
 plt.savefig(f'basis/legendreErrorLog.svg')
