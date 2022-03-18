@@ -77,6 +77,7 @@ struct PosParams {
   // position of the sensor in the optical plane
   sensor: f32;
   width: f32;
+  entry_rad: f32;
 };
 
 
@@ -770,17 +771,21 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let j = whichGhost.el[ghost_num].j;
   if ((draw_mode & u32(1)) > u32(0) && !(i == u32(0) && j == u32(0))) {  
         // make new ray
-        var dir = posParams.init.d;
+        var init = posParams.init.d;
         // modify both directions according to our index
-        dir.x = dir.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
-        dir.y = dir.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
+        init.x = init.x + (ray_num_x / f32(sqrt_num - u32(1)) * width - width / 2.);
+        init.y = init.y + (ray_num_y / f32(sqrt_num - u32(1)) * width - width / 2.);
         // Apply the polynomial derivative as strength
-        let strength = pow(eval_grad_zw(vec4<f32>(posParams.init.o.xy, dir.xy), u32(ghost_num) + u32(params.which_ghost)), 0.5);
+        var strength = 1.;
+        if (posParams.entry_rad > 1.){
+            strength = pow(eval_grad_zw(vec4<f32>(posParams.init.o.xy, init.xy), u32(ghost_num) + u32(params.which_ghost)), 0.5);
+        }
         let position = vec3<f32>(
-            eval(vec4<f32>(posParams.init.o.xy, dir.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2)), 
-            eval(vec4<f32>(posParams.init.o.xy, dir.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2) + u32(1)),
+            eval(vec4<f32>(posParams.init.o.xy, init.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2)), 
+            eval(vec4<f32>(posParams.init.o.xy, init.xy), (u32(ghost_num) + u32(params.which_ghost)) * u32(2) + u32(1)),
             1.);
-        dir = normalize(dir);
+        // ray.entry_pos = dir.xy;
+        let dir = normalize(init);
         // struct Ray {
         //     o: vec3<f32>;
         //     wavelength: f32;
@@ -791,6 +796,7 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
         //  };
         var ray = Ray(posParams.init.o, posParams.init.wavelength, dir, strength * str_from_wavelen(posParams.init.wavelength), vec2<f32>(0., 0.), vec2<f32>(0., 0.));
         // ray.entry_pos = intersect_ray_to_xy(ray, elements.el[0].position);
+        ray.entry_pos = init.xy;
 
         // for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
         //     let element = elements.el[ele];

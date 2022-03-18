@@ -80,11 +80,201 @@ struct Elements {
   el: [[stride(72)]] array<Element>;
 };
 
+struct PolyParams {
+    num_terms: u32;
+};
+
+struct Monomial {
+    a: f32;
+    b: f32;
+    c: f32;
+    d: f32;
+    coefficient: f32;
+};
+
+struct Polynomial {
+    monomials: [[stride(20)]] array<Monomial>;
+};
+
 [[group(0), binding(0)]] var<storage, read> elements : Elements;
 
 [[group(1), binding(2)]] var<uniform> params : SimParams;
 [[group(1), binding(1)]] var<storage, read> sensor : Sensor;
 [[group(1), binding(0)]] var<uniform> posParams : PosParams;
+
+[[group(2), binding(0)]] var<storage, read> terms : Polynomial;
+[[group(2), binding(1)]] var<uniform> polyParams : PolyParams;
+
+fn eval_grad_zw(x: vec4<f32>, index: u32) -> f32 {
+    var dz = vec2<f32>(0.);
+    var dw = vec2<f32>(0.);
+    let poyly_index = index * u32(2) * polyParams.num_terms;
+    // dc z
+    for (var i = u32(poyly_index); i < polyParams.num_terms + poyly_index; i = i + u32(1)) {
+        let term = terms.monomials[i];
+        if (term.coefficient != 0.) {
+            var term_res = term.coefficient;
+            if (term.c == 0.) {
+                term_res = 0.;
+            } else {
+                if (term.c > 1.) {
+                    if (i32(term.c - 1.) % 2 == 1 && x.z < 0.) {
+                        term_res = -term_res * term.c * pow(-x.z, term.c - 1.);
+                    } else {
+                        term_res = term_res * term.c * pow(abs(x.z), term.c - 1.);
+                    }
+                }
+                if (term.a > 0.) {
+                    if (i32(term.a) % 2 == 1 && x.x < 0.) {
+                        term_res = -term_res * pow(-x.x, term.a);
+                    } else {
+                        term_res = term_res * pow(abs(x.x), term.a);
+                    }
+                }
+                if (term.b > 0.) {
+                    if (i32(term.b) % 2 == 1 && x.y < 0.) {
+                        term_res = -term_res * pow(-x.y, term.b);
+                    } else {
+                        term_res = term_res * pow(abs(x.y), term.b);
+                    }
+                }
+                if (term.d > 0.) {
+                    if (i32(term.d) % 2 == 1 && x.w < 0.) {
+                        term_res = -term_res * pow(-x.w, term.d);
+                    } else {
+                        term_res = term_res * pow(abs(x.w), term.d);
+                    }
+                }
+            }
+            dz.x = dz.x + term_res;
+        }
+    }
+
+    // dc w
+    for (var i = u32(poyly_index) + polyParams.num_terms; i < u32(2) * polyParams.num_terms + poyly_index; i = i + u32(1)) {
+        let term = terms.monomials[i];
+        if (term.coefficient != 0.) {
+            var term_res = term.coefficient;
+            if (term.c == 0.) {
+                term_res = 0.;
+            } else {
+                if (term.c > 1.) {
+                    if (i32(term.c - 1.) % 2 == 1 && x.z < 0.) {
+                        term_res = -term_res * term.c * pow(-x.z, term.c - 1.);
+                    } else {
+                        term_res = term_res * term.c * pow(abs(x.z), term.c - 1.);
+                    }
+                }
+                if (term.a > 0.) {
+                    if (i32(term.a) % 2 == 1 && x.x < 0.) {
+                        term_res = -term_res * pow(-x.x, term.a);
+                    } else {
+                        term_res = term_res * pow(abs(x.x), term.a);
+                    }
+                }
+                if (term.b > 0.) {
+                    if (i32(term.b) % 2 == 1 && x.y < 0.) {
+                        term_res = -term_res * pow(-x.y, term.b);
+                    } else {
+                        term_res = term_res * pow(abs(x.y), term.b);
+                    }
+                }
+                if (term.d > 0.) {
+                    if (i32(term.d) % 2 == 1 && x.w < 0.) {
+                        term_res = -term_res * pow(-x.w, term.d);
+                    } else {
+                        term_res = term_res * pow(abs(x.w), term.d);
+                    }
+                }
+            }
+            dz.y = dz.y + term_res;
+        }
+    }
+
+    // dd z
+    for (var i = u32(poyly_index); i < polyParams.num_terms + poyly_index; i = i + u32(1)) {
+        let term = terms.monomials[i];
+        if (term.coefficient != 0.) {
+            var term_res = term.coefficient;
+            if (term.d == 0.) {
+                term_res = 0.;
+            } else {
+                if (term.d > 1.) {
+                    if (i32(term.d - 1.) % 2 == 1 && x.w < 0.) {
+                        term_res = -term_res * term.d * pow(-x.w, term.d - 1.);
+                    } else {
+                        term_res = term_res * term.d * pow(abs(x.w), term.d - 1.);
+                    }
+                }
+                if (term.a > 0.) {
+                    if (i32(term.a) % 2 == 1 && x.x < 0.) {
+                        term_res = -term_res * pow(-x.x, term.a);
+                    } else {
+                        term_res = term_res * pow(abs(x.x), term.a);
+                    }
+                }
+                if (term.b > 0.) {
+                    if (i32(term.b) % 2 == 1 && x.y < 0.) {
+                        term_res = -term_res * pow(-x.y, term.b);
+                    } else {
+                        term_res = term_res * pow(abs(x.y), term.b);
+                    }
+                }
+                if (term.c > 0.) {
+                    if (i32(term.c) % 2 == 1 && x.z < 0.) {
+                        term_res = -term_res * pow(-x.z, term.c);
+                    } else {
+                        term_res = term_res * pow(abs(x.z), term.c);
+                    }
+                }
+            }
+            dw.x = dw.x + term_res;
+        }
+    }
+
+    // dd w
+    for (var i = u32(poyly_index) + polyParams.num_terms; i < u32(2) * polyParams.num_terms + poyly_index; i = i + u32(1)) {
+        let term = terms.monomials[i];
+        if (term.coefficient != 0.) {
+            var term_res = term.coefficient;
+            if (term.d == 0.) {
+                term_res = 0.;
+            } else {
+                if (term.d > 1.) {
+                    if (i32(term.d - 1.) % 2 == 1 && x.w < 0.) {
+                        term_res = -term_res * term.d * pow(-x.w, term.d - 1.);
+                    } else {
+                        term_res = term_res * term.d * pow(abs(x.w), term.d - 1.);
+                    }
+                }
+                if (term.a > 0.) {
+                    if (i32(term.a) % 2 == 1 && x.x < 0.) {
+                        term_res = -term_res * pow(-x.x, term.a);
+                    } else {
+                        term_res = term_res * pow(abs(x.x), term.a);
+                    }
+                }
+                if (term.b > 0.) {
+                    if (i32(term.b) % 2 == 1 && x.y < 0.) {
+                        term_res = -term_res * pow(-x.y, term.b);
+                    } else {
+                        term_res = term_res * pow(abs(x.y), term.b);
+                    }
+                }
+                if (term.c > 0.) {
+                    if (i32(term.c) % 2 == 1 && x.z < 0.) {
+                        term_res = -term_res * pow(-x.z, term.c);
+                    } else {
+                        term_res = term_res * pow(abs(x.z), term.c);
+                    }
+                }
+            }
+            dw.y = dw.y + term_res;
+        }
+    }
+
+    return 1. / abs(dz.x * dw.y - dz.y * dw.x);
+}
 
 fn lookup_rgb(wavelength: f32) -> vec3<f32> {
     let lower_index = u32(clamp((wavelength - sensor.measuremens[0].wavelength / 1000.) * 100., 0., 34.));
@@ -143,7 +333,12 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
       }
   }
 
-  let strength = in.strength;
+  var strength = 0.;
+  if (posParams.entry_rad > 1.){
+    strength = in.strength;
+  } else {
+    strength = in.strength * pow(eval_grad_zw(vec4<f32>(posParams.init.o.xy, in.entry_pos), u32(2)), 0.5);
+  }
 
   if (isNan(strength) || length(in.entry_pos) > posParams.entry_rad) {
     return vec4<f32>(0., 0., 0., 0.);

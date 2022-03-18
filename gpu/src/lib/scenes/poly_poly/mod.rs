@@ -472,6 +472,7 @@ impl PolyPoly {
         format: TextureFormat,
         params_bind_group_layout: &BindGroupLayout,
         lens_bind_group_layout: &BindGroupLayout,
+        polynomial_bind_group_layout: &BindGroupLayout,
     ) -> RenderPipeline {
         let draw_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("polyPoly"),
@@ -485,7 +486,7 @@ impl PolyPoly {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render"),
-                bind_group_layouts: &[lens_bind_group_layout, params_bind_group_layout],
+                bind_group_layouts: &[lens_bind_group_layout, params_bind_group_layout, polynomial_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -863,6 +864,7 @@ impl PolyPoly {
             format,
             &lens_state.params_bind_group_layout,
             &lens_state.lens_bind_group_layout,
+            &polynomials.polynomial_bind_group_layout
         );
 
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
@@ -1201,6 +1203,7 @@ impl PolyPoly {
                     self.format,
                     &lens_state.params_bind_group_layout,
                     &lens_state.lens_bind_group_layout,
+                    &self.polynomials.polynomial_bind_group_layout
                 );
                 self.tri_render_pipeline = pipeline;
                 println!("took {:?}.", now.elapsed());
@@ -1468,6 +1471,7 @@ impl PolyPoly {
             rpass.set_pipeline(&self.tri_render_pipeline);
             rpass.set_bind_group(0, &lens_state.lens_bind_group, &[]);
             rpass.set_bind_group(1, &lens_state.params_bind_group, &[]);
+            rpass.set_bind_group(2, &self.polynomials.polynomial_bind_group, &[]);
             // the three instance-local vertices
             rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             rpass.set_index_buffer(self.tri_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
