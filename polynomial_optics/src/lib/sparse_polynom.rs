@@ -1,3 +1,4 @@
+use itertools::iproduct;
 use itertools::Itertools;
 use mathru::algebra::{
     abstr::{AbsDiffEq, Field, Scalar},
@@ -11,11 +12,14 @@ use rand::Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
+use std::time::Instant;
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
     ops::{Add, AddAssign, Div, Mul, MulAssign, Neg},
 };
+
+use crate::iexp;
 
 pub trait PowUsize {
     fn upow(self, exp: usize) -> Self;
@@ -280,9 +284,7 @@ impl Polynomial<f64, 1> {
     ) -> f64 {
         (0..num_points)
             .into_par_iter()
-            .map(|i| {
-                range.start + (i as f64) * (range.end - range.start) / (num_points - 1) as f64
-            })
+            .map(|i| range.start + (i as f64) * (range.end - range.start) / (num_points - 1) as f64)
             .map(|p| self.eval([p]) * other.eval([p]))
             .sum::<f64>()
             * (range.end - range.start)
@@ -566,7 +568,17 @@ impl<'a, N: Copy + PartialOrd + AddAssign + std::ops::Mul<Output = N>, const VAR
 }
 
 impl<
-        N: Add + Copy + num::Zero + One + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq,
+        N: Add
+            + Copy
+            + Sync
+            + Send
+            + num::Zero
+            + One
+            + std::iter::Sum<N>
+            + PowUsize
+            + Field
+            + Scalar
+            + AbsDiffEq,
     > Polynomial<N, 2>
 {
     /// ```
@@ -590,21 +602,28 @@ impl<
     pub fn fit(&mut self, points: &[(N, N, N)]) {
         let tems_num = self.terms.len();
         let mut m = vec![num::Zero::zero(); tems_num.pow(2_u32)];
-        let mut k = vec![num::Zero::zero(); tems_num];
-        for (i, a) in self.terms.iter().enumerate() {
-            for (j, b) in self.terms.iter().enumerate() {
-                m[i * self.terms.len() + j] = points
+        // let mut k = vec![num::Zero::zero(); tems_num];
+        iexp!(self.terms.iter().enumerate(), 2)
+            .zip(m.iter_mut())
+            .into_iter()
+            .par_bridge()
+            .for_each(|([(i, a), (j, b)], m)| {
+                *m = points
                     .iter()
                     .map(|(x, y, _d)| a.combine_res(b, [*x, *y]))
                     .sum::<N>();
-            }
-        }
-        for (i, a) in self.terms.iter().enumerate() {
-            k[i] = points
-                .iter()
-                .map(|(x, y, d)| *d * a.res([*x, *y]))
-                .sum::<N>()
-        }
+            });
+
+        let k = self
+            .terms
+            .par_iter_mut()
+            .map(|a| {
+                points
+                    .iter()
+                    .map(|(x, y, d)| *d * a.res([*x, *y]))
+                    .sum::<N>()
+            })
+            .collect();
         let m = Matrix::new(tems_num, tems_num, m);
         let k = Vector::new_column(k);
         let c = m.solve(&k).unwrap();
@@ -617,6 +636,8 @@ impl<
 impl<
         N: Add
             + Copy
+            + Sync
+            + Send
             + num::Zero
             + num::One
             + std::iter::Sum<N>
@@ -627,6 +648,7 @@ impl<
     > Polynomial<N, 4>
 {
     pub fn fit(&mut self, points: &[(N, N, N, N, N)]) {
+        let now = Instant::now();
         let tems_num = self.terms.len();
         let mut m = vec![num::Zero::zero(); tems_num * points.len()];
         for (i, point) in points.iter().enumerate() {
@@ -634,6 +656,15 @@ impl<
                 m[i * self.terms.len() + j] = b.eval_exp([point.0, point.1, point.2, point.3]);
             }
         }
+        let ma = m.clone();
+        iproduct!(points.iter().enumerate(), self.terms.iter().enumerate())
+            .zip(m.iter_mut())
+            .into_iter()
+            .par_bridge()
+            .for_each(|(((i, point), (j, b)), m)| {
+                *m = b.eval_exp([point.0, point.1, point.2, point.3]);
+            });
+        assert_eq!(m, ma);
         let x = Matrix::new(tems_num, points.len(), m);
         let y = Vector::new_column(points.iter().map(|p| p.4).collect());
 
@@ -643,6 +674,9 @@ impl<
         let c = x.solve(&y).unwrap();
         for (term, c) in self.terms.iter_mut().zip(c.iter()) {
             term.coefficient = *c;
+        }
+        if cfg!(debug_assertions) {
+            println!("fit time: {:?}", now.elapsed());
         }
     }
 }
@@ -662,10 +696,7 @@ impl Polynomial<f64, 4> {
             .sqrt()
     }
 
-    pub fn error(
-        &self,
-        points: &[(f64, f64, f64, f64, f64)],
-    ) -> f64 {
+    pub fn error(&self, points: &[(f64, f64, f64, f64, f64)]) -> f64 {
         (points
             .par_iter()
             .map(|p| (p.4 - self.eval([p.0, p.1, p.2, p.3])).powi(2))
@@ -681,7 +712,11 @@ impl Polynomial<f64, 4> {
             .join(", ")
     }
 
-    pub fn gradient_descent(&mut self, points: &[(f64, f64, f64, f64, f64)], num_iterations: usize) {
+    pub fn gradient_descent(
+        &mut self,
+        points: &[(f64, f64, f64, f64, f64)],
+        num_iterations: usize,
+    ) {
         let mut rng = rand::thread_rng();
         let num_samples = 10000;
         let momentum_multiplier = 0.9;

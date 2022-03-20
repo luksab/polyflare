@@ -4,6 +4,8 @@ use mathru::algebra::linear::{matrix::Solve, Matrix, Vector};
 use num::traits::Zero;
 use rand::prelude::IteratorRandom;
 use rand::Rng;
+use rayon::prelude::*;
+use std::io::Write;
 use std::time::Instant;
 use std::vec;
 use std::{
@@ -167,6 +169,8 @@ impl<
         N: Zero
             + num::One
             + Sum
+            + Send
+            + Sync
             + AddAssign
             + MulAssign
             + std::ops::Mul<Output = N>
@@ -182,12 +186,16 @@ impl<
     > Polynom2d<N, DEGREE>
 {
     fn dist(phi: &crate::Polynomial<N, 2>, points: &[(N, N, N)]) -> N {
-        let mut result: N = num::Zero::zero();
-        for point in points {
-            let input = [point.0, point.1];
-            result += (phi.eval(input) - point.2).upow(2);
-        }
-        result.sqrt()
+        // let mut result: N = num::Zero::zero();
+        points
+            .par_iter()
+            .map(|point| {
+                let input = [point.0, point.1];
+                (phi.eval(input) - point.2).upow(2)
+            })
+            .sum::<N>()
+            .sqrt()
+        // result.sqrt()
     }
 
     fn get_monomial(&self, i: usize, j: usize, coefficient: N) -> crate::Monomial<N, 2> {
@@ -223,7 +231,7 @@ impl<
             let (mut min_i, mut min_j, mut min_c) = (*i, *j, coefficient);
             phi.terms.pop();
             for ((k, l), inner_coefficient) in terms.iter().zip(self.coefficients.iter()) {
-                if !phi.terms.iter().any(|&mon| mon.exponents == [*k, *l]) {
+                if !phi.terms.par_iter().any(|&mon| mon.exponents == [*k, *l]) {
                     phi.terms
                         .push(self.get_monomial(*k, *l, *inner_coefficient));
                     let new_min = Self::dist(&phi, points);
@@ -473,6 +481,8 @@ impl<
         N: num::Zero
             + num::One
             + Sum
+            + Sync
+            + Send
             + AddAssign
             + MulAssign
             + std::ops::Mul<Output = N>
@@ -487,12 +497,14 @@ impl<
     > Polynom4d<N>
 {
     fn dist(phi: &crate::Polynomial<N, 4>, points: &[(N, N, N, N, N)]) -> N {
-        let mut result = <N as num::Zero>::zero();
-        for point in points {
-            let input = [point.0, point.1, point.2, point.3];
-            result += (phi.eval(input) - point.4).upow(2);
-        }
-        result.sqrt()
+        points
+            .par_iter()
+            .map(|point| {
+                let input = [point.0, point.1, point.2, point.3];
+                (phi.eval(input) - point.4).upow(2)
+            })
+            .sum::<N>()
+            .sqrt()
     }
 
     fn get_monomial(
@@ -523,6 +535,14 @@ impl<
         let mut now = Instant::now();
         let terms = self.get_terms();
 
+        let write_file = true;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("omp.csv")
+            .unwrap();
+
         // for (counter, (((i, j), k), l)) in (0..DEGREE)
         //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
         //     .flat_map(|e| std::iter::repeat(e).zip(0..DEGREE))
@@ -535,7 +555,7 @@ impl<
             if counter > num_max_terms && cheap {
                 break;
             }
-            if cfg!(debug_assertions) {
+            if cfg!(debug_assertions) || true {
                 if now.elapsed().as_secs() > 0 {
                     println!("{}: took {:?}", counter, now.elapsed());
                     now = Instant::now();
@@ -543,6 +563,10 @@ impl<
             }
 
             let mut min = Self::dist(&phi, points);
+            if write_file {
+                file.write_all(format!("{},{}\n", counter, Self::dist(&phi, points)).as_bytes())
+                    .unwrap();
+            }
             // let mut min = points.iter().map(|p| p.4.upow(2)).sum::<N>().sqrt();
             if cfg!(debug_assertions) {
                 print!("{}: {}", counter, min);
@@ -585,13 +609,19 @@ impl<
                 phi.terms
                     .push(self.get_monomial(min_i, min_j, min_k, min_l, min_c));
             } else {
+                let phi_copy = phi.clone();
+                let mut replaced = false;
                 let mut term = self.get_monomial(min_i, min_j, min_k, min_l, min_c);
                 for k in 0..phi.terms.len() {
                     term = std::mem::replace(&mut phi.terms[k], term);
                     let new_min = Self::dist(&phi, points);
                     if new_min < min {
+                        replaced = true;
                         break;
                     }
+                }
+                if !replaced {
+                    phi = phi_copy;
                 }
             }
             // println!("pre-fit: {}", phi);
@@ -599,6 +629,13 @@ impl<
                 phi.fit(points);
             }
             // println!("post-fit: {}", phi);
+        }
+
+        if write_file {
+            file.write_all(
+                format!("{},{}\n", self.coefficients.len(), Self::dist(&phi, points)).as_bytes(),
+            )
+            .unwrap();
         }
 
         if cfg!(debug_assertions) {
@@ -662,6 +699,15 @@ impl Polynom4d<f64> {
     ) -> crate::Polynomial<f64, 4> {
         assert!(num_samples <= points.len());
         let debug = cfg!(debug_assertions);
+
+        let write_file = true;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("sim_ann.csv")
+            .unwrap();
+
         let mut rng = rand::thread_rng();
         let mut res = crate::Polynomial::<_, 4>::new(vec![]);
         let mut terms = self
@@ -687,6 +733,11 @@ impl Polynom4d<f64> {
 
         // let offset = 0;
         let mut error = res.approx_error(points, num_samples, 0);
+        if write_file {
+            file.write_all(format!("{},{},{}\n", 0, error, error).as_bytes())
+                .unwrap();
+        }
+
         for i in 0..num_iterations {
             let offset = if points.len() > num_samples {
                 rng.gen_range(0..points.len() - num_samples)
@@ -749,6 +800,10 @@ impl Polynom4d<f64> {
             }
             if debug {
                 println!("the rest took {:?}", now.elapsed());
+            }
+            if write_file {
+                file.write_all(format!("{},{},{}\n", i + 1, error, new_error).as_bytes())
+                    .unwrap();
             }
         }
         res.fit(points);
