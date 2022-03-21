@@ -11,7 +11,7 @@ use std::{
 
 use directories::ProjectDirs;
 use itertools::iproduct;
-use polynomial_optics::{Polynom4d, Polynomial};
+use polynomial_optics::{Monomial, Polynom4d, Polynomial};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, CommandEncoder, ComputePipeline, Device,
     Queue, RenderPipeline, SurfaceConfiguration, TextureFormat, TextureView,
@@ -41,26 +41,84 @@ impl GpuPolynomials {
         let proj_dirs = ProjectDirs::from("de", "luksab", "polyflare").unwrap();
         let cache_dir = proj_dirs.config_dir().join(Path::new("poly_cache"));
 
+        // let polys = (1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len() * 2)
+        //     .into_iter()
+        //     .map(|i| {
+        //         let ghost = i/2;
+        //         let dir = i%2;
+        //         let terms = vec![Monomial {
+        //             coefficient: 2.,
+        //             exponents: [0, 0, dir, 1-dir],
+        //         },
+        //         Monomial {
+        //             coefficient: -1.,
+        //             exponents: [0, 0, 2-dir, 1+dir],
+        //         }
+        //         ];
+        //         println!("{:?}", terms);
+        //         let poly = Polynomial::<f64, 4>::new(terms);
+        //         poly
+        //     })
+        //     .collect::<Vec<_>>();
+        // return Some(polys);
+
         let path = cache_dir.join(format!("{:x}.poly", hash));
+        // let path = cache_dir.join("21e92309c06081ff.poly");
         if path.exists() {
             if let Ok(str) = std::fs::read_to_string(path) {
                 let (num_dots_read, num_terms_read, degree_read, polynomials): (
                     usize,
                     usize,
                     usize,
-                    _,
+                    Vec<Polynomial<f64, 4>>,
                 ) = match ron::de::from_str(str.as_str()) {
                     Ok(lens) => lens,
                     Err(_) => return None,
                 };
                 if num_dots_read == num_dots && num_terms_read == num_terms && degree_read == degree
                 {
+                    // let dots = &mut lens_state.actual_lens.get_dots(
+                    //     num_dots as u32,
+                    //     cgmath::Vector3 {
+                    //         x: 0.,
+                    //         y: 0.,
+                    //         z: lens_state.pos_params[2] as f64,
+                    //     },
+                    //     1,
+                    //     lens_state.pos_params[8] as f64,
+                    //     [1., 1.],
+                    //     true,
+                    // );
+                    // let points = dots
+                    //     .iter()
+                    //     .map(|dot| {
+                    //         (
+                    //             dot.init_pos[0],
+                    //             dot.init_pos[1],
+                    //             dot.init_pos[2],
+                    //             dot.init_pos[3],
+                    //             // dot.strength,
+                    //             dot.pos[0],
+                    //         )
+                    //     })
+                    //     .collect::<Vec<_>>();
+                    // println!("{:?}", points);
+
+                    // let mut sum = 0.;
+                    // for point in &points {
+                    //     let eval = polynomials[2].eval([point.0, point.1, point.2, point.3]);
+                    //     println!("{:?}", eval);
+                    //     sum += (point.4 - eval).powi(2);
+                    //     // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
+                    // }
+                    // println!("sp error: {}", (sum / points.len() as f64).sqrt());
                     return Some(polynomials);
                 }
                 return None;
             }
         }
 
+        println!("cache miss");
         None
     }
 
@@ -144,13 +202,20 @@ impl GpuPolynomials {
                     0..=1
                 )
                 .par_bridge()
+                // uncomment for specific ghost
+                // vec![(1usize, 0usize)]
+                //     .into_iter()
                 .map(|(which_ghost, dir_xy)| {
                     let mut stats = String::new();
                     stats += format!("{},{}", which_ghost, dir_xy).as_str();
                     // stats: which_ghost, dir_xy
                     let width = 1.;
+                    // let dots = &mut lens.get_dots_grid(
+                    //     f64::powf(num_dots as f64, 0.28) as u32,
                     let dots = &mut lens.get_dots(
                         num_dots as u32,
+                        // let dots = &mut lens.get_dots(
+                        //     11673,
                         cgmath::Vector3 {
                             x: 0.,
                             y: 0.,
@@ -212,6 +277,7 @@ impl GpuPolynomials {
 
                     let polynom = Polynom4d::<_>::fit(&points, degree);
                     println!("Fitting took {:?}", now.elapsed());
+                    let now = Instant::now();
                     stats += format!(",{}", now.elapsed().as_millis()).as_str();
                     // stats: which_ghost, dir_xy, dense_fit_time
 
@@ -225,6 +291,79 @@ impl GpuPolynomials {
                     stats += format!(",{}", (sum / points.len() as f64).sqrt()).as_str();
                     // stats: which_ghost, dir_xy, dense_fit_time, dense_fit_error
 
+                    let points_rand = &mut lens
+                        .get_dots(
+                            num_dots as u32,
+                            cgmath::Vector3 {
+                                x: 0.,
+                                y: 0.,
+                                z: pos_params[2] as f64,
+                            },
+                            which_ghost as u32,
+                            pos_params[8] as f64,
+                            [width as f64, width as f64],
+                            true,
+                        )
+                        .iter()
+                        .map(|dot| {
+                            (
+                                dot.init_pos[0],
+                                dot.init_pos[1],
+                                dot.init_pos[2],
+                                dot.init_pos[3],
+                                // dot.strength,
+                                dot.pos[dir_xy],
+                            )
+                        })
+                        .collect::<Vec<_>>();
+
+                    let points_grid = &mut lens
+                        .get_dots_grid(
+                            f64::powf(num_dots as f64, 0.3) as u32,
+                            cgmath::Vector3 {
+                                x: 0.,
+                                y: 0.,
+                                z: pos_params[2] as f64,
+                            },
+                            which_ghost as u32,
+                            pos_params[8] as f64,
+                            [width as f64, width as f64],
+                            true,
+                        )
+                        .iter()
+                        .map(|dot| {
+                            (
+                                dot.init_pos[0],
+                                dot.init_pos[1],
+                                dot.init_pos[2],
+                                dot.init_pos[3],
+                                // dot.strength,
+                                dot.pos[dir_xy],
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    println!("number of points: {}", points_grid.len());
+
+                    let mut sum_rand = 0.;
+                    for point in points_rand.iter() {
+                        let eval = polynom.eval(point.0, point.1, point.2, point.3);
+                        sum_rand += (point.4 - eval).powi(2);
+                        // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
+                    }
+
+                    let mut sum_grid = 0.;
+                    for point in points_grid.iter() {
+                        let eval = polynom.eval(point.0, point.1, point.2, point.3);
+                        sum_grid += (point.4 - eval).powi(2);
+                        // println!("p: {}, l: {}, q: {}", point.4, eval, point.4 / eval);
+                    }
+
+                    println!(
+                        "rand error: {}, grid error: {}",
+                        (sum_rand / points_rand.len() as f64).sqrt(),
+                        (sum_grid / points_grid.len() as f64).sqrt()
+                    );
+                    // panic!("done");
                     if plot_output {
                         let mut file = std::fs::OpenOptions::new()
                             .write(true)
@@ -258,11 +397,24 @@ impl GpuPolynomials {
                         });
                     }
 
+                    println!("plotting took {:?}", now.elapsed());
+                    let now = Instant::now();
+
                     if cfg!(debug_assertions) {
                         println!("{}", polynom);
                     }
-                    // let mut sparse_poly =
-                    //     polynom.get_sparse(&filtered_points, num_terms, true, true);
+                    let now = Instant::now();
+                    println!("poly len: {}", polynom.coefficients.len());
+                    // let mut sparse_poly = polynom.get_sparse(
+                    //     &points[0..usize::min(num_samples, points.len())],
+                    //     num_terms,
+                    //     false,
+                    //     false,
+                    // );
+                    // let omp_time = now.elapsed().as_millis();
+                    // println!("sparse_poly took {:?}", now.elapsed());
+                    // let omp_error = sparse_poly.error(&points);
+                    // let now = Instant::now();
 
                     // let mut sparse_poly = polynom.get_sparse_dumb(num_terms);
 
@@ -271,9 +423,20 @@ impl GpuPolynomials {
                     let sparse_poly = polynom.simulated_annealing(
                         &points,
                         num_terms,
-                        usize::min(num_samples, points.len()),// make sure we don't sample more than we have
+                        usize::min(num_samples, points.len()), // make sure we don't sample more than we have
                         num_iterations,
                     );
+                    let sa_time = now.elapsed().as_millis();
+                    println!("sa took {:?}", now.elapsed());
+                    // error on random and grid points
+                    let sa_error_grid = sparse_poly.error(&points_grid);
+                    let sa_error_rand = sparse_poly.error(&points_rand);
+                    println!("sa rand: {}, sa grid: {}", sa_error_rand, sa_error_grid);
+
+                    // println!("omp time: {}, sa time: {}", omp_time, sa_time);
+                    // let sa_error = sparse_poly.error(&points);
+                    // println!("omp error: {}, sa error: {}", omp_error, sa_error);
+                    // panic!("done!");
 
                     dbg!(sparse_poly.terms.len());
 
@@ -486,7 +649,11 @@ impl PolyPoly {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render"),
-                bind_group_layouts: &[lens_bind_group_layout, params_bind_group_layout, polynomial_bind_group_layout],
+                bind_group_layouts: &[
+                    lens_bind_group_layout,
+                    params_bind_group_layout,
+                    polynomial_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
 
@@ -562,6 +729,7 @@ impl PolyPoly {
                 cull_mode: None,
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
+                // polygon_mode: wgpu::PolygonMode::Line,
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
                 unclipped_depth: false,
@@ -852,7 +1020,7 @@ impl PolyPoly {
         //     }
         //     num_terms
         // };
-        let num_samples = 100_000;
+        let num_samples = 10_000;
         let polynomials = GpuPolynomials::new(num_samples, num_terms, degree, lens_state, device);
 
         let format = wgpu::TextureFormat::Rgba16Float;
@@ -864,7 +1032,7 @@ impl PolyPoly {
             format,
             &lens_state.params_bind_group_layout,
             &lens_state.lens_bind_group_layout,
-            &polynomials.polynomial_bind_group_layout
+            &polynomials.polynomial_bind_group_layout,
         );
 
         let (conversion_render_pipeline, conversion_bind_group) = Self::convert_shader(
@@ -1203,7 +1371,7 @@ impl PolyPoly {
                     self.format,
                     &lens_state.params_bind_group_layout,
                     &lens_state.lens_bind_group_layout,
-                    &self.polynomials.polynomial_bind_group_layout
+                    &self.polynomials.polynomial_bind_group_layout,
                 );
                 self.tri_render_pipeline = pipeline;
                 println!("took {:?}.", now.elapsed());
