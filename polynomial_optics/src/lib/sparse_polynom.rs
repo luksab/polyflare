@@ -559,7 +559,9 @@ impl<'a, N: Copy + PartialOrd + AddAssign + std::ops::Mul<Output = N>, const VAR
         let trunc_degree = 50;
         for i in 0..self.terms.len() {
             let product = (&self.terms[i]) * rhs;
-            terms.push(product);
+            if product.degree() <= trunc_degree {
+                terms.push(product);
+            }
         }
 
         Polynomial::consolidate_terms(&mut terms);
