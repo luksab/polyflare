@@ -173,7 +173,7 @@ impl GpuPolynomials {
         let num_iterations = 5000;
 
         let now = Instant::now();
-        let plot_output = true;
+        let plot_output = false;
 
         let stats_file = std::sync::Arc::new(std::sync::Mutex::new(
             std::fs::OpenOptions::new()
