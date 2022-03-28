@@ -220,30 +220,82 @@ impl QuarterWaveCoating {
     /// ```
     pub fn fresnel_ar(&self, theta0: f64, lambda: f64, n0: f64, n2: f64) -> f64 {
         // refracton angle sin coating and the 2nd medium
-        let theta1 = (theta0.sin() * n0 / self.ior).asin();
-        let theta2 = (theta0.sin() * n0 / n2).asin();
+        let theta1 = f64::asin(f64::sin(theta0) * n0 / self.ior);
+        let theta2 = f64::asin(f64::sin(theta0) * n0 / n2);
         // println!("t1: {}, t2: {}", theta1, theta2);
         // amplitude for outer refl. / transmission on topmost interface
-        let rs01 = -(theta0 - theta1).sin() / (theta0 + theta1).sin();
-        let rp01 = (theta0 - theta1).tan() / (theta0 + theta1).tan();
-        let ts01 = 2. * theta1.sin() * theta0.cos() / (theta0 + theta1).sin();
-        let tp01 = ts01 * (theta0 - theta1).cos();
+        let rs01 = -f64::sin(theta0 - theta1) / f64::sin(theta0 + theta1);
+        let rp01 = f64::tan(theta0 - theta1) / f64::tan(theta0 + theta1);
+        let ts01 = 2. * f64::sin(theta1) * f64::cos(theta0) / f64::sin(theta0 + theta1);
+        let tp01 = ts01 * f64::cos(theta0 - theta1);
         // amplitude for inner reflection
-        let rs12 = -(theta1 - theta2).sin() / (theta1 + theta2).sin();
-        let rp12 = (theta1 - theta2).tan() / (theta1 + theta2).tan();
+        let rs12 = -f64::sin(theta1 - theta2) / f64::sin(theta1 + theta2);
+        let rp12 = f64::tan(theta1 - theta2) / f64::tan(theta1 + theta2);
         // after passing through first surface twice:
         // 2 transmissions and 1 reflection
         let ris = ts01 * ts01 * rs12;
         let rip = tp01 * tp01 * rp12;
-        // phasedifference between outer and inner reflections
+        // phase difference between outer and inner reflections
         let dy = self.thickness * self.ior;
-        let dx = theta1.tan() * dy;
-        let delay = (dx * dx + dy * dy).sqrt();
-        let rel_phase = 4. * std::f64::consts::PI / lambda * (delay - dx * theta0.sin());
+        let dx = f64::tan(theta1) * dy;
+        let delay = f64::sqrt(dx * dx + dy * dy);
+        let rel_phase = 4. * std::f64::consts::PI / lambda * (delay - dx * f64::sin(theta0));
         // Add up sines of different phase and amplitude
-        let out_s2 = rs01 * rs01 + ris * ris + 2. * rs01 * ris * rel_phase.cos();
-        let out_p2 = rp01 * rp01 + rip * rip + 2. * rp01 * rip * rel_phase.cos();
+        let out_s2 = rs01 * rs01 + ris * ris + 2. * rs01 * ris * f64::cos(rel_phase);
+        let out_p2 = rp01 * rp01 + rip * rip + 2. * rp01 * rip * f64::cos(rel_phase);
         (out_s2 + out_p2) / 2. // reflectivity
+    }
+
+    /// ```
+    /// # use polynomial_optics::QuarterWaveCoating;
+    /// let coating = QuarterWaveCoating::optimal(1.0, 1.5168, 0.5);
+    /// coating.plot();
+    /// panic!("done plotting");
+    pub fn plot(&self) {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(format!("python/coating_wl_sweep.csv"))
+            .unwrap();
+
+        let wl_min = 0.31;
+        let wl_max = 1.1;
+        let num_steps = 100;
+        // BK7,1.03961212,0.231792344,1.01046945,0.00600069867,0.0200179144,103.560653
+        let bk7 = Sellmeier::bk7();
+        for i in 0..num_steps {
+            let wavelength = wl_min + (wl_max - wl_min) * i as f64 / num_steps as f64;
+
+            let reflectance_entry = self.fresnel_ar(0.01, wavelength, 1.0, bk7.ior(wavelength));
+            let reflectance_exit = self.fresnel_ar(0.01, wavelength, bk7.ior(wavelength), 1.0);
+            // let transmittance = 1.0 - reflectance;
+            // let transmittance = 1.0 - reflectance;
+            writeln!(file, "{}, {}, {}", wavelength, reflectance_entry, reflectance_exit).unwrap();
+        }
+
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(format!("python/coating_angle_sweep.csv"))
+            .unwrap();
+
+        let angle_min = 0.01;
+        let angle_max = std::f64::consts::PI / 2.0;
+        let num_steps = 100;
+        // BK7,1.03961212,0.231792344,1.01046945,0.00600069867,0.0200179144,103.560653
+        let bk7 = Sellmeier::bk7();
+        for i in 0..num_steps {
+            let angle = angle_min + (angle_max - angle_min) * i as f64 / num_steps as f64;
+            let wavelength = 0.5;
+
+            let reflectance_entry = self.fresnel_ar(angle, wavelength, 1.0, bk7.ior(wavelength));
+            let reflectance_exit = self.fresnel_ar(angle, wavelength, bk7.ior(wavelength), 1.0);
+            // let transmittance = 1.0 - reflectance;
+            // let transmittance = 1.0 - reflectance;
+            writeln!(file, "{}, {}, {}", angle, reflectance_entry, reflectance_exit).unwrap();
+        }
     }
 }
 
