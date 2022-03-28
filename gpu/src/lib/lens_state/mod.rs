@@ -985,9 +985,9 @@ impl LensState {
         let mut render_low = false;
         let mut compute = false;
 
-        let sample = 1. / (Instant::now() - self.last_frame_time).as_secs_f64();
+        let sample = (Instant::now() - self.last_frame_time).as_secs_f64();
         let alpha = 0.98;
-        self.fps = alpha * self.fps + (1.0 - alpha) * sample;
+        self.fps = 1. / sample;//alpha * self.fps + (1.0 - alpha) * sample;
         imgui::Window::new("Params")
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([600.0, 100.0], Condition::FirstUseEver)
@@ -999,7 +999,7 @@ impl LensState {
                 if Slider::new("which ghost", 0, num_ghosts).build(ui, &mut self.which_ghost) {
                     update_lens = true;
                 }
-                ui.text(format!("Framerate: {:.0}", self.fps));
+                ui.text(format!("Framerate: {:.0}, ms: {:.0}", self.fps, sample * 1000.));
                 update_rays |=
                     Slider::new("rays_exponent", 0., 6.5).build(ui, &mut self.ray_exponent);
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));
