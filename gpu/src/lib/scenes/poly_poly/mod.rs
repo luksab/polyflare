@@ -169,8 +169,8 @@ impl GpuPolynomials {
         degree: usize,
         lens_state: &LensState,
     ) -> Vec<Polynomial<f64, 4>> {
-        let num_samples = 2000;
-        let num_iterations = 5000;
+        let num_samples = 7000;
+        let num_iterations = 30000;
 
         let now = Instant::now();
         let plot_output = false;
@@ -193,18 +193,18 @@ impl GpuPolynomials {
         // for which_ghost in 1..2 {
         //     for dir_xy in 0..=0 {
         let polynomials = rayon::ThreadPoolBuilder::new()
-            .num_threads(6)
+            .num_threads(10)
             .build()
             .unwrap()
             .install(|| {
-                iproduct!(
-                    (1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len()).into_iter(),
-                    0..=1
-                )
-                .par_bridge()
+                // iproduct!(
+                //     (1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len()).into_iter(),
+                //     0..=1
+                // )
+                // .par_bridge()
                 // uncomment for specific ghost
-                // vec![(1usize, 0usize)]
-                //     .into_iter()
+                vec![(1usize, 0usize)]
+                    .into_iter()
                 .map(|(which_ghost, dir_xy)| {
                     let mut stats = String::new();
                     stats += format!("{},{}", which_ghost, dir_xy).as_str();
@@ -228,6 +228,7 @@ impl GpuPolynomials {
                     );
                     dbg!(dots.len());
                     if plot_output && dir_xy == 0 {
+                        // let num_dots = 316;
                         let dots = &mut lens.get_dots_2dgrid(
                             (num_dots as f64).powf(0.5) as u32,
                             cgmath::Vector3 {
@@ -420,6 +421,16 @@ impl GpuPolynomials {
 
                     // return sparse_poly;
 
+                    (0..10).par_bridge().for_each(|_| {
+                        let sparse_poly = polynom.simulated_annealing(
+                            &points,
+                            num_terms,
+                            usize::min(num_samples, points.len()), // make sure we don't sample more than we have
+                            num_iterations,
+                        );
+                        println!("{}", sparse_poly.error(&points_rand));
+                    });
+                    panic!("done");
                     let sparse_poly = polynom.simulated_annealing(
                         &points,
                         num_terms,
@@ -432,6 +443,7 @@ impl GpuPolynomials {
                     let sa_error_grid = sparse_poly.error(&points_grid);
                     let sa_error_rand = sparse_poly.error(&points_rand);
                     println!("sa rand: {}, sa grid: {}", sa_error_rand, sa_error_grid);
+                    panic!("done");
 
                     // println!("omp time: {}, sa time: {}", omp_time, sa_time);
                     // let sa_error = sparse_poly.error(&points);
