@@ -1525,7 +1525,7 @@ impl Lens {
         filter: bool,
     ) -> Vec<DrawRay> {
         // Pick an arbitrary number as seed.
-        fastrand::seed(7);
+        // fastrand::seed(7);
         // let rays = self.get_paths(
         //     num::integer::Roots::sqrt(&(num_rays * 1000)),
         //     center_pos,
