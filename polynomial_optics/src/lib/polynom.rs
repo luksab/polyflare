@@ -738,7 +738,12 @@ impl Polynom4d<f64> {
                 .unwrap();
         }
 
+        let mut global_now = std::time::Instant::now();
         for i in 0..num_iterations {
+            if global_now.elapsed().as_secs() > 1 {
+                println!("{} took {:?}", i, global_now.elapsed());
+                global_now = std::time::Instant::now();
+            }
             let offset = if points.len() > num_samples {
                 rng.gen_range(0..points.len() - num_samples)
             } else {
@@ -807,11 +812,11 @@ impl Polynom4d<f64> {
             }
         }
         res.fit(points);
-        println!(
-            "actual error = {} error = {}",
-            res.error(points),
-            res.approx_error(points, num_samples, 0)
-        );
+        // println!(
+        //     "actual error = {} error = {}",
+        //     res.error(points),
+        //     res.approx_error(points, num_samples, 0)
+        // );
 
         res
     }
@@ -855,11 +860,11 @@ impl<N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq> 
     pub fn fit(points: &[(N, N, N, N, N)], degree: usize) -> Polynom4d<N> {
         let terms = Self::get_terms_fn(degree);
         let num_terms = terms.len();
-        println!("num of points: {}", points.len());
+        // println!("num of points: {}", points.len());
         let mut now = std::time::Instant::now();
         let mut m = Matrix::<N>::zero(num_terms, points.len());
         let y = Vector::<N>::new_column(points.iter().map(|point| point.4).collect::<Vec<_>>());
-        println!("init: {:?}", now.elapsed());
+        // println!("init: {:?}", now.elapsed());
         now = std::time::Instant::now();
 
         // iter_mut is column first
@@ -871,13 +876,13 @@ impl<N: Add + Copy + std::iter::Sum<N> + PowUsize + Field + Scalar + AbsDiffEq> 
                 * (points[point].2).upow(a.2)
                 * (points[point].3).upow(a.3);
         }
-        println!("set Matrix: {:?} dim: {:?}", now.elapsed(), m.dim());
+        // println!("set Matrix: {:?} dim: {:?}", now.elapsed(), m.dim());
         now = std::time::Instant::now();
         let y = m.clone() * y;
         let x = m.clone() * m.clone().transpose();
 
         let c = x.solve(&y).unwrap();
-        println!("solve: {:?}", now.elapsed());
+        // println!("solve: {:?}", now.elapsed());
         now = std::time::Instant::now();
         let mut coefficients = Vec::with_capacity(num_terms);
         for element in c.iter() {
