@@ -533,7 +533,7 @@ impl SparseLegendre4d {
             .create(true)
             .truncate(true)
             // .append(true)
-            .open("python/coefficients.csv")
+            .open("python/data/coefficients.csv")
             .unwrap();
         let old_coefficients = self.coefficiencts.clone();
         let momentum_multiplier = 0.9;

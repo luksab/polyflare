@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 #         print(plot_name)
 #         plt.savefig(plot_name)
 
-data = np.genfromtxt("coefficients sparse.csv", delimiter=",")
+data = np.genfromtxt("data/coefficients sparse.csv", delimiter=",")
 data = data / data[0]
 
 X = np.linspace(0, len(data), len(data))

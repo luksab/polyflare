@@ -256,7 +256,7 @@ impl QuarterWaveCoating {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("python/coating_wl_sweep.csv"))
+            .open(format!("python/data/coating_wl_sweep.csv"))
             .unwrap();
 
         let wl_min = 0.31;
@@ -278,7 +278,7 @@ impl QuarterWaveCoating {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("python/coating_angle_sweep.csv"))
+            .open(format!("python/data/coating_angle_sweep.csv"))
             .unwrap();
 
         let angle_min = 0.01;

@@ -540,7 +540,7 @@ impl<
             .write(true)
             .create(true)
             .truncate(true)
-            .open("omp.csv")
+            .open("python/data/omp.csv")
             .unwrap();
 
         // for (counter, (((i, j), k), l)) in (0..DEGREE)
@@ -705,7 +705,7 @@ impl Polynom4d<f64> {
             .write(true)
             .create(true)
             .truncate(true)
-            .open("sim_ann.csv")
+            .open("python/data/sim_ann.csv")
             .unwrap();
 
         let mut rng = rand::thread_rng();

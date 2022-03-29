@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-omp_data = np.genfromtxt("../omp.csv", delimiter=",")
+omp_data = np.genfromtxt("data/omp.csv", delimiter=",")
 # remove first column
 omp_data = omp_data[:,1:]
 omp_data = omp_data * omp_data # square
@@ -18,7 +18,7 @@ plt.savefig("omp.png")
 plt.savefig("omp.svg")
 plt.clf()
 
-sa_data = np.genfromtxt("../sim_ann.csv", delimiter=",")
+sa_data = np.genfromtxt("data/sim_ann.csv", delimiter=",")
 # remove first column
 sa_data = sa_data[:,1:]
 # exchange column 0 and 1

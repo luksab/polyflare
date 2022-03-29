@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-data = np.genfromtxt("coating_wl_sweep.csv", delimiter=",")
+data = np.genfromtxt("data/coating_wl_sweep.csv", delimiter=",")
 # X = fist column
 X = data[:,0]
 # remove first column
@@ -22,7 +22,7 @@ plt.savefig("coating_wl_sweep.svg")
 plt.clf()
 
 
-data = np.genfromtxt("coating_angle_sweep.csv", delimiter=",")
+data = np.genfromtxt("data/coating_angle_sweep.csv", delimiter=",")
 # X = fist column, converted from rad to deg
 X = data[:,0] * 180 / np.pi
 # remove first column

@@ -737,7 +737,7 @@ impl Polynomial<f64, 4> {
             .create(true)
             .truncate(true)
             // .append(true)
-            .open("python/coefficients sparse.csv")
+            .open("python/data/coefficients sparse.csv")
             .unwrap();
         let offset = rng.gen_range(0..points.len() - num_samples);
         for _ in 0..num_iterations {

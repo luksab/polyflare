@@ -180,7 +180,7 @@ impl GpuPolynomials {
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .open("poly_stats.csv")
+                .open("python/data/poly_stats.csv")
                 .unwrap(),
         ));
 
