@@ -78,7 +78,8 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var bg = vec4<f32>(0.15,0.15,0.25,1.0);
 
     let screenAspect = normalize(vec2<f32>(params.height, params.width));
-    let pos_lens = (pos - vec2<f32>(0.5,0.5))/screenAspect * 2. / params.zoom;
+    var pos_lens = (pos - vec2<f32>(0.5,0.5))/screenAspect * 2. / params.zoom * 4.;
+    pos_lens.x = pos_lens.x - 0.5;
 
     for (var i: u32 = u32(0); i < arrayLength(&elements.el); i = i + u32(1)) {
         let element = elements.el[i];

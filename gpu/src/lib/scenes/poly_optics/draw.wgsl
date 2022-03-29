@@ -53,7 +53,7 @@ fn mainv(
     let screenAspect = normalize(vec2<f32>(params.height_scaled, params.width_scaled));
 
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(vec2<f32>(in.o.z, in.o.y) / 4.0 * screenAspect * params.zoom, 0.,1.);
+    out.clip_position = vec4<f32>(vec2<f32>(in.o.z + 2., in.o.y) / 4.0 * screenAspect * params.zoom / 4., 0.,1.);
     out.strength = in.strength;
     out.wavelength = in.wavelength;
     return out;
@@ -64,7 +64,7 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   let s = in.strength * params.opacity;
   var rgb = lookup_rgb(in.wavelength);
   rgb.g = rgb.g * 0.6;
-  rgb = vec3<f32>(1., 1., 1.);
+//   rgb = vec3<f32>(1., 1., 1.);
   return vec4<f32>(rgb, sqrt(in.strength) * params.opacity);
-  // return vec4<f32>(1.0, 1.0, 1.0, 0.0);
+//   return vec4<f32>(1.0, 1.0, 1.0, 0.0);
 }
