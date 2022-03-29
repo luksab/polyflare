@@ -193,7 +193,7 @@ impl GpuPolynomials {
         // for which_ghost in 1..2 {
         //     for dir_xy in 0..=0 {
         let polynomials = rayon::ThreadPoolBuilder::new()
-            .num_threads(10)
+            .num_threads(6)
             .build()
             .unwrap()
             .install(|| {
@@ -421,15 +421,38 @@ impl GpuPolynomials {
 
                     // return sparse_poly;
 
-                    (0..10).par_bridge().for_each(|_| {
-                        let sparse_poly = polynom.simulated_annealing(
+                    // println!("sa");
+                    // (0..10).par_bridge().for_each(|_| {
+                    //     let sparse_poly = polynom.simulated_annealing(
+                    //         &points,
+                    //         num_terms,
+                    //         usize::min(num_samples, points.len()), // make sure we don't sample more than we have
+                    //         num_iterations,
+                    //     );
+                    //     println!("{}", sparse_poly.error(&points_rand));
+                    // });
+
+                    println!("full omp");
+                    // (0..3).par_bridge().for_each(|_| {
+                        let sparse_poly = polynom.get_sparse(
                             &points,
                             num_terms,
-                            usize::min(num_samples, points.len()), // make sure we don't sample more than we have
-                            num_iterations,
+                            false,
+                            false,
                         );
                         println!("{}", sparse_poly.error(&points_rand));
-                    });
+                    // });
+
+                    // println!("cheap omp");
+                    // (0..10).par_bridge().for_each(|_| {
+                    //     let sparse_poly = polynom.get_sparse(
+                    //         &points,
+                    //         num_terms,
+                    //         true,
+                    //         false,
+                    //     );
+                    //     println!("{}", sparse_poly.error(&points_rand));
+                    // });
                     panic!("done");
                     let sparse_poly = polynom.simulated_annealing(
                         &points,

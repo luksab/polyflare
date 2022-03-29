@@ -662,7 +662,8 @@ impl<
         iproduct!(points.iter().enumerate(), self.terms.iter().enumerate())
             .zip(m.iter_mut())
             .into_iter()
-            .par_bridge()
+            //
+            // .par_bridge()
             .for_each(|(((i, point), (j, b)), m)| {
                 *m = b.eval_exp([point.0, point.1, point.2, point.3]);
             });
@@ -691,7 +692,8 @@ impl Polynomial<f64, 4> {
         offset: usize,
     ) -> f64 {
         (points[offset..offset + num_samples]
-            .par_iter()
+            // .par_iter()
+            .iter()
             .map(|p| (p.4 - self.eval([p.0, p.1, p.2, p.3])).powi(2))
             .sum::<f64>()
             / num_samples as f64)
@@ -700,7 +702,8 @@ impl Polynomial<f64, 4> {
 
     pub fn error(&self, points: &[(f64, f64, f64, f64, f64)]) -> f64 {
         (points
-            .par_iter()
+            // .par_iter()
+            .iter()
             .map(|p| (p.4 - self.eval([p.0, p.1, p.2, p.3])).powi(2))
             .sum::<f64>()
             / points.len() as f64)
