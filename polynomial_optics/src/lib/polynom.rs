@@ -738,12 +738,12 @@ impl Polynom4d<f64> {
                 .unwrap();
         }
 
-        let mut global_now = std::time::Instant::now();
+        // let mut global_now = std::time::Instant::now();
         for i in 0..num_iterations {
-            if global_now.elapsed().as_secs() > 1 {
-                println!("{} took {:?}", i, global_now.elapsed());
-                global_now = std::time::Instant::now();
-            }
+            // if global_now.elapsed().as_secs() > 1 {
+            //     println!("{} took {:?}", i, global_now.elapsed());
+            //     global_now = std::time::Instant::now();
+            // }
             let offset = if points.len() > num_samples {
                 rng.gen_range(0..points.len() - num_samples)
             } else {
