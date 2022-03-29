@@ -27,6 +27,9 @@ struct Opt {
 
     #[structopt(short = "v", long)]
     disable_vsync: bool,
+
+    #[structopt(short = "p", long)]
+    poly: bool,
 }
 
 fn main() {
@@ -69,11 +72,15 @@ fn main() {
         pollster::block_on(scenes::PolyRes::new(&state.device, &state.config, &lens_ui));
     let mut poly_tri =
         pollster::block_on(scenes::PolyTri::new(&state.device, &state.config, &lens_ui));
-    let mut poly_poly = pollster::block_on(scenes::PolyPoly::new(
-        &state.device,
-        &state.config,
-        &lens_ui,
-    ));
+    let mut poly_poly = if opt.poly {
+        Some(pollster::block_on(scenes::PolyPoly::new(
+            &state.device,
+            &state.config,
+            &lens_ui,
+        )))
+    } else {
+        None
+    };
     poly_optics.update_buffers(&state.device, true, &lens_ui);
 
     // Set up dear imgui
@@ -193,12 +200,15 @@ fn main() {
                             &state.device,
                             &state.config,
                         );
-                        poly_poly.resize(
-                            [state.size.width as _, state.size.height as _],
-                            *scale_factor * lens_ui.scale_fact,
-                            &state.device,
-                            &state.config,
-                        );
+                        poly_poly.as_mut().map(|poly_poly| {
+                            poly_poly.resize(
+                                [state.size.width as _, state.size.height as _],
+                                *scale_factor * lens_ui.scale_fact,
+                                &state.device,
+                                &state.config,
+                            );
+                            Some(poly_poly)
+                        });
                     }
                     _ => {}
                 }
@@ -236,7 +246,10 @@ fn main() {
                 ) = lens_ui.build_ui(&ui, &state.device, &state.queue);
 
                 if compute {
-                    poly_poly.update_poly(&state.device, &lens_ui);
+                    poly_poly.as_mut().map(|poly_poly| {
+                        poly_poly.update_poly(&state.device, &lens_ui);
+                        Some(poly_poly)
+                    });
                 }
 
                 // Render normally at background
@@ -245,7 +258,12 @@ fn main() {
                 match lens_ui.render_mode {
                     lens_state::DrawMode::Dense => poly_res.update(&state.device, &lens_ui),
                     lens_state::DrawMode::Sparse => poly_tri.update(&state.device, &lens_ui),
-                    lens_state::DrawMode::Poly => poly_poly.update(&state.device, &lens_ui),
+                    lens_state::DrawMode::Poly => {
+                        poly_poly.as_mut().map(|poly_poly| {
+                            poly_poly.update_poly(&state.device, &lens_ui);
+                            Some(poly_poly)
+                        });
+                    }
                 };
 
                 if update_res {
@@ -263,18 +281,24 @@ fn main() {
                         &state.config,
                     );
 
-                    poly_poly.resize(
-                        [state.size.width as _, state.size.height as _],
-                        state.scale_factor * lens_ui.scale_fact,
-                        &state.device,
-                        &state.config,
-                    );
+                    poly_poly.as_mut().map(|poly_poly| {
+                        poly_poly.resize(
+                            [state.size.width as _, state.size.height as _],
+                            state.scale_factor * lens_ui.scale_fact,
+                            &state.device,
+                            &state.config,
+                        );
+                        Some(poly_poly)
+                    });
                 }
 
                 if update_dot_num {
                     poly_res.num_dots = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
                     poly_tri.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
-                    poly_poly.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                    poly_poly.as_mut().map(|poly_poly| {
+                        poly_poly.dot_side_len = 10.0_f64.powf(lens_ui.dots_exponent) as u32;
+                        Some(poly_poly)
+                    });
                     lens_ui.sim_params[11] = poly_tri.dot_side_len as f32;
                     lens_ui.needs_update = true;
                 }
@@ -352,17 +376,20 @@ fn main() {
                             }
                         }
                         lens_state::DrawMode::Poly => {
-                            match poly_poly.render_color(
-                                &tex.create_view(&wgpu::TextureViewDescriptor::default()),
-                                &state.device,
-                                &state.queue,
-                                &mut lens_ui,
-                                update_dot_num | update_lens,
-                            ) {
-                                Ok(_) => {}
-                                // just ignore here
-                                Err(e) => eprintln!("{:?}", e),
-                            }
+                            poly_poly.as_mut().map(|poly_poly| {
+                                match poly_poly.render_color(
+                                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                    &state.device,
+                                    &state.queue,
+                                    &mut lens_ui,
+                                    update_dot_num | update_lens,
+                                ) {
+                                    Ok(_) => {}
+                                    // just ignore here
+                                    Err(e) => eprintln!("{:?}", e),
+                                }
+                                Some(poly_poly)
+                            });
                         }
                     }
 
@@ -410,7 +437,15 @@ fn main() {
                             poly_tri.resize([size[0], size[1]], 2.0, &state.device, &state.config)
                         }
                         lens_state::DrawMode::Poly => {
-                            poly_poly.resize([size[0], size[1]], 2.0, &state.device, &state.config)
+                            poly_poly.as_mut().map(|poly_poly| {
+                                poly_poly.resize(
+                                    [size[0], size[1]],
+                                    2.0,
+                                    &state.device,
+                                    &state.config,
+                                );
+                                Some(poly_poly)
+                            });
                         }
                     };
 
@@ -458,21 +493,24 @@ fn main() {
                             );
                         }
                         lens_state::DrawMode::Poly => {
-                            poly_poly
-                                .render_hires(
-                                    &tex.create_view(&wgpu::TextureViewDescriptor::default()),
-                                    &state.device,
-                                    &state.queue,
-                                    &mut lens_ui,
-                                )
-                                .unwrap();
+                            poly_poly.as_mut().map(|poly_poly| {
+                                poly_poly
+                                    .render_hires(
+                                        &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                                        &state.device,
+                                        &state.queue,
+                                        &mut lens_ui,
+                                    )
+                                    .unwrap();
 
-                            poly_poly.resize(
-                                [sim_params[9] as _, sim_params[10] as _],
-                                state.scale_factor,
-                                &state.device,
-                                &state.config,
-                            );
+                                poly_poly.resize(
+                                    [sim_params[9] as _, sim_params[10] as _],
+                                    state.scale_factor,
+                                    &state.device,
+                                    &state.config,
+                                );
+                                Some(poly_poly)
+                            });
                         }
                     };
 
@@ -485,7 +523,10 @@ fn main() {
                 }
                 // poly_res.num_dots = u32::MAX / 32;//10.0_f64.powf(lens_ui.dots_exponent) as u32;
                 if compute {
-                    poly_poly.update_poly(&state.device, &lens_ui);
+                    poly_poly.as_mut().map(|poly_poly| {
+                        poly_poly.update_poly(&state.device, &lens_ui);
+                        Some(poly_poly)
+                    });
                 }
 
                 if let lens_state::DrawMode::Dense = lens_ui.render_mode {
@@ -567,12 +608,15 @@ fn main() {
                                 &state.config,
                             );
 
-                            poly_poly.resize(
-                                [size[0] as _, size[1] as _],
-                                state.scale_factor * lens_ui.scale_fact,
-                                &state.device,
-                                &state.config,
-                            );
+                            poly_poly.as_mut().map(|poly_poly| {
+                                poly_poly.resize(
+                                    [size[0] as _, size[1] as _],
+                                    state.scale_factor * lens_ui.scale_fact,
+                                    &state.device,
+                                    &state.config,
+                                );
+                                Some(poly_poly)
+                            });
 
                             lens_ui.resize_window([size[0] as _, size[1] as _], state.scale_factor);
                         }
@@ -621,25 +665,32 @@ fn main() {
                                 }
                             }
                             lens_state::DrawMode::Poly => {
-                                match poly_poly.render_color(
-                                    renderer.textures.get(res_window_texture_id).unwrap().view(),
-                                    &state.device,
-                                    &state.queue,
-                                    &mut lens_ui,
-                                    update_dot_num | update_lens,
-                                ) {
-                                    Ok(_) => {}
-                                    // Reconfigure the surface if lost
-                                    Err(wgpu::SurfaceError::Lost) => {
-                                        state.resize(state.size, None);
+                                poly_poly.as_mut().map(|poly_poly| {
+                                    match poly_poly.render_color(
+                                        renderer
+                                            .textures
+                                            .get(res_window_texture_id)
+                                            .unwrap()
+                                            .view(),
+                                        &state.device,
+                                        &state.queue,
+                                        &mut lens_ui,
+                                        update_dot_num | update_lens,
+                                    ) {
+                                        Ok(_) => {}
+                                        // Reconfigure the surface if lost
+                                        Err(wgpu::SurfaceError::Lost) => {
+                                            state.resize(state.size, None);
+                                        }
+                                        // The system is out of memory, we should probably quit
+                                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                                            *control_flow = ControlFlow::Exit
+                                        }
+                                        // All other errors (Outdated, Timeout) should be resolved by the next frame
+                                        Err(e) => eprintln!("{:?}", e),
                                     }
-                                    // The system is out of memory, we should probably quit
-                                    Err(wgpu::SurfaceError::OutOfMemory) => {
-                                        *control_flow = ControlFlow::Exit
-                                    }
-                                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                                    Err(e) => eprintln!("{:?}", e),
-                                }
+                                    Some(poly_poly)
+                                });
                             }
                         }
                     }
