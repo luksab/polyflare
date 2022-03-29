@@ -173,55 +173,6 @@ pub struct LensState {
 }
 
 impl LensState {
-    pub fn get_lens_els() -> Vec<ElementState> {
-        vec![
-            ElementState::Lens(GlassElement {
-                d: 0.,
-                r: 3.,
-                entry: true,
-                spherical: true,
-                sellmeier: Sellmeier::bk7(),
-                sellmeier_index: 0,
-                coating_optimal: 0.5,
-                coating_enable: false,
-            }),
-            ElementState::Lens(GlassElement {
-                d: 1.5,
-                r: 3.,
-                entry: false,
-                spherical: true,
-                sellmeier: Sellmeier::bk7(),
-                sellmeier_index: 0,
-                coating_optimal: 0.5,
-                coating_enable: false,
-            }),
-            ElementState::Aperture(Aperture {
-                d: 1.5,
-                r: 1.,
-                num_blades: 6,
-            }),
-            ElementState::Lens(GlassElement {
-                d: 0.,
-                r: 3.,
-                entry: true,
-                spherical: true,
-                sellmeier: Sellmeier::bk7(),
-                sellmeier_index: 0,
-                coating_optimal: 0.5,
-                coating_enable: false,
-            }),
-            ElementState::Lens(GlassElement {
-                d: 1.5,
-                r: 3.,
-                entry: false,
-                spherical: true,
-                sellmeier: Sellmeier::bk7(),
-                sellmeier_index: 0,
-                coating_optimal: 0.5,
-                coating_enable: false,
-            }),
-        ]
-    }
     /// just some random (very bad) lens
     pub fn default(device: &Device) -> Self {
         let lens = vec![
@@ -393,7 +344,7 @@ impl LensState {
             7.,
             0.5,
             1.,
-            0., // Padding
+            0.,  // Padding
         ];
         let pos_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Simulation Parameter Buffer"),
@@ -539,7 +490,7 @@ impl LensState {
     }
 
     /// Convert from the GUI representation to the `polynomial_optics` representation
-    pub fn get_lens_arr(lenses: &[ElementState]) -> Vec<polynomial_optics::Element> {
+    fn get_lens_arr(lenses: &[ElementState]) -> Vec<polynomial_optics::Element> {
         let mut elements: Vec<Element> = vec![];
         let mut dst: f32 = -5.;
         // let mut cemented = false;
@@ -1036,7 +987,7 @@ impl LensState {
 
         let sample = (Instant::now() - self.last_frame_time).as_secs_f64();
         let alpha = 0.98;
-        self.fps = 1. / sample; //alpha * self.fps + (1.0 - alpha) * sample;
+        self.fps = 1. / sample;//alpha * self.fps + (1.0 - alpha) * sample;
         imgui::Window::new("Params")
             .size([400.0, 250.0], Condition::FirstUseEver)
             .position([600.0, 100.0], Condition::FirstUseEver)
@@ -1048,25 +999,14 @@ impl LensState {
                 if Slider::new("which ghost", 0, num_ghosts).build(ui, &mut self.which_ghost) {
                     update_lens = true;
                 }
-                ui.text(format!(
-                    "Framerate: {:.0}, ms: {:.0}",
-                    self.fps,
-                    sample * 1000.
-                ));
+                ui.text(format!("Framerate: {:.0}, ms: {:.0}", self.fps, sample * 1000.));
                 update_rays |=
                     Slider::new("rays_exponent", 0., 6.5).build(ui, &mut self.ray_exponent);
                 ui.text(format!("rays: {}", 10.0_f64.powf(self.ray_exponent) as u32));
 
-                update_dots |= Slider::new(
-                    "dots_exponent",
-                    0.,
-                    if let DrawMode::Dense = self.render_mode {
-                        7.3
-                    } else {
-                        3.
-                    },
-                )
-                .build(ui, &mut self.dots_exponent);
+                update_dots |=
+                    Slider::new("dots_exponent", 0., if let DrawMode::Dense = self.render_mode { 7.3 } else { 3. })
+                        .build(ui, &mut self.dots_exponent);
                 ui.text(format!(
                     "dots: {}",
                     10.0_f64.powf(self.dots_exponent) as u32

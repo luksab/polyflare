@@ -64,6 +64,7 @@ fn mainf(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   let s = in.strength * params.opacity;
   var rgb = lookup_rgb(in.wavelength);
   rgb.g = rgb.g * 0.6;
+  rgb = vec3<f32>(1., 1., 1.);
   return vec4<f32>(rgb, sqrt(in.strength) * params.opacity);
   // return vec4<f32>(1.0, 1.0, 1.0, 0.0);
 }
