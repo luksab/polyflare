@@ -405,7 +405,7 @@ async fn run() {
                 {
                     // Store the new size of Image() or None to indicate that the window is collapsed.
                     let mut new_window_size: Option<[f32; 2]> = None;
-                    // imgui::Window::new("Poly Res")
+                    // imgui::Window::new("Sensor")
                     //     .size([512.0, 512.0], Condition::FirstUseEver)
                     //     .position([700., 50.], Condition::FirstUseEver)
                     //     .build(&ui, || {

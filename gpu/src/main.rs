@@ -554,7 +554,7 @@ fn main() {
                             ]
                         );
                         println!("resize window to {:?}", size);
-                        imgui::Window::new("Poly Res")
+                        imgui::Window::new("Sensor")
                             .size(size, Condition::Always)
                             .position([700., 50.], Condition::FirstUseEver)
                             .build(&ui, || {
@@ -563,7 +563,7 @@ fn main() {
                                     .build(&ui);
                             });
                     } else {
-                        imgui::Window::new("Poly Res")
+                        imgui::Window::new("Sensor")
                             .size([512.0, 512.0], Condition::FirstUseEver)
                             .position([700., 50.], Condition::FirstUseEver)
                             .build(&ui, || {
