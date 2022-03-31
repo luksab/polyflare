@@ -197,14 +197,14 @@ impl GpuPolynomials {
             .build()
             .unwrap()
             .install(|| {
-                // iproduct!(
-                //     (1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len()).into_iter(),
-                //     0..=1
-                // )
-                // .par_bridge()
+                iproduct!(
+                    (1..lens_state.actual_lens.get_ghosts_indicies(1, 0).len()).into_iter(),
+                    0..=1
+                )
+                .par_bridge()
                 // uncomment for specific ghost
-                vec![(1usize, 0usize)]
-                    .into_iter()
+                // vec![(1usize, 0usize)]
+                //     .into_iter()
                 .map(|(which_ghost, dir_xy)| {
                     let mut stats = String::new();
                     stats += format!("{},{}", which_ghost, dir_xy).as_str();
