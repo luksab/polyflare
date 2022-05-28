@@ -374,19 +374,43 @@ fn reflect_ray(self: Ray, element: Element) -> Ray {
     );
 }
 
+fn rand_xorshift(rng_state: u32) -> u32 {
+    // Xorshift algorithm from George Marsaglia's paper
+    // var rng_out = rng_state;
+    // rng_out = rng_out ^ (rng_out << u32(13));
+    // rng_out = rng_out ^ (rng_out >> u32(17));
+    // rng_out = rng_out ^ (rng_out << u32(5));
+    // return rng_out;
+
+    // Wang hash
+    var seed = rng_state;
+    seed = (seed ^ u32(61)) ^ (seed >> u32(16));
+    seed = u32(9) * seed;
+    seed = seed ^ (seed >> u32(4));
+    seed = seed * u32(668265261);
+    seed = seed ^ (seed >> u32(15));
+    return seed;
+}
+
+// fn rand_0_to_1(rng_state: u32) -> f32 {
+//     f32(rng_state) * (1.0 / 4294967296.0);
+// }
+
 [[stage(compute), workgroup_size(64)]]
 fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
   let draw_mode = u32(params.draw_mode);//u32(1);
   let which_ghost = u32(params.which_ghost);//u32(1);
 
-  var num_segments = u32((draw_mode & u32(2)) > u32(0)) * arrayLength(&elements.el) * u32(2) + u32(2);// if normal drawing
+  var num_segments = u32((draw_mode & u32(2)) > u32(0)) // if normal drawing
+                    * arrayLength(&elements.el) * u32(2) + u32(2);
   if ((draw_mode & u32(1)) > u32(0)) {
     var ghost_num = u32(0);
     for (var i = u32(0); i < arrayLength(&elements.el) - u32(1); i = i + u32(1)) {
         for (var j = i + u32(1); j < arrayLength(&elements.el); j = j + u32(1)) {
             ghost_num = ghost_num + u32(1);
-            if ((ghost_num == which_ghost || which_ghost == u32(0)) && elements.el[i].entry < 1.5 && elements.el[j].entry < 1.5) {
-                num_segments = num_segments + (j - i) * u32(2) + u32(2) + arrayLength(&elements.el) * u32(2) + u32(2);
+            if ((ghost_num == which_ghost || which_ghost == u32(0))) {
+                num_segments = num_segments + (j - i) * u32(4)
+                               + arrayLength(&elements.el) * u32(2) + u32(2);
             }
         }
     }
@@ -398,14 +422,20 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
     return;
   }
 
+  var random = rand_xorshift(global_invocation_id.x);
+  // randomize 10 times
+  // for (var i = u32(0); i < u32(5); i = i + u32(1)) {
+  //   random = rand_xorshift(random);
+  // }
+
   let num_rays = total;
   let ray_num = index;
   let width = posParams.width;
 
   let center_pos = posParams.init.o;
 
-  let ray_num_x = f32(ray_num / u32(10));
-  let ray_num_y = f32(ray_num % u32(10));
+//   let ray_num_x = f32(ray_num / u32(10));
+//   let ray_num_y = f32(ray_num % u32(10));
 
   var counter = u32(0);
   if ((draw_mode & u32(1)) > u32(0)) {
@@ -420,11 +450,14 @@ fn main([[builtin(global_invocation_id)]] global_invocation_id: vec3<u32>) {
                 // pos.y = pos.y + (ray_num_y / f32(num_rays) * width - width / 2.);
                 var dir = posParams.init.d;
                 dir.y = dir.y + f32(ray_num) / f32(num_rays) * width - width / 2.;
-                let wave_num = u32(10);
-                let wavelen = f32(ray_num % wave_num);
+                // let wave_num = u32(10);
+                // let wavelen = f32(ray_num % wave_num);
                 let start_wavelen = 0.38;
                 let end_wavelen = 0.78;
-                let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
+                // let wavelength = start_wavelen + wavelen * ((end_wavelen - start_wavelen) / f32(wave_num));
+                random = rand_xorshift(random);
+                let rand = f32(random) * (1.0 / 1073741824.0);
+                let wavelength = start_wavelen + rand / 4. * (end_wavelen - start_wavelen);
                 var ray = Ray(center_pos, wavelength, dir, str_from_wavelen(wavelength));
 
                 for (var ele = u32(0); ele < arrayLength(&elements.el); ele = ele + u32(1)) {
