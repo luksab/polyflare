@@ -1,5 +1,8 @@
-# polyflare
-wgpu implentation of polynomial optics for physically based lens flare rendering.
+# Polyflare
+This is the wgpu implentation of my bachelor thesis about polynomial optics for physically based lens flare rendering.
+
+## Further work is going to happen in private.
+## Contact: [flares.science](https://flares.science) or [contact@flares.science](mailto:contact@flares.science)
 
 This uses the [polynomial_optics](https://github.com/luksab/polyflare/tree/master/polynomial_optics) library for the CPU implementation of dense and sparse polynomials.
 Polynomial_optics also contains the CPU code for raytracing though the lens system and fitting a dense polynomial to it and selecting a sparse one from that.
